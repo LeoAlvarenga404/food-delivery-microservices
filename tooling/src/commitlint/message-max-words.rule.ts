@@ -1,10 +1,15 @@
 import type { Rule } from '@commitlint/types';
 
 const defaultMaximumWordCount = 12;
+const scissorsLine = '# ------------------------ >8 ------------------------';
+
+function linesBeforeScissors(lines: string[]): string[] {
+  const scissorsIndex = lines.indexOf(scissorsLine);
+  return scissorsIndex === -1 ? lines : lines.slice(0, scissorsIndex);
+}
 
 export function countCommitMessageWords(message: string): number {
-  return message
-    .split('\n')
+  return linesBeforeScissors(message.split('\n'))
     .filter((line) => !line.startsWith('#'))
     .join(' ')
     .split(/\s+/)
