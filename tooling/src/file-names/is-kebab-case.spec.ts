@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isKebabCase } from './kebab-case.ts';
+import { isKebabCase } from './is-kebab-case.ts';
 
 describe('isKebabCase', () => {
   it.each(['order', 'place-order', 'command-handler', 'v1', '0001-create-orders-table'])(

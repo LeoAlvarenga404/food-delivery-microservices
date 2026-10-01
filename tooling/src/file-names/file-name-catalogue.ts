@@ -1,4 +1,4 @@
-export interface DirectoryRule {
+export interface CatalogueRule {
   readonly description: string;
   readonly pathPattern: RegExp;
   readonly allowedRoles: readonly string[];
@@ -40,7 +40,7 @@ const infrastructureRoles = [
 
 const testSupportRoles = ['repository', 'adapter', 'fake', 'builder', 'contract'];
 
-export const fileNameCatalogue: readonly DirectoryRule[] = [
+export const fileNameCatalogue: readonly CatalogueRule[] = [
   {
     description: 'service domain layer',
     pathPattern: /^services\/[^/]+\/src\/domain\//,

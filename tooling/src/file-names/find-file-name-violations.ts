@@ -1,5 +1,5 @@
-import type { DirectoryRule } from './file-name-catalogue.ts';
-import { isKebabCase } from './kebab-case.ts';
+import type { CatalogueRule } from './file-name-catalogue.ts';
+import { isKebabCase } from './is-kebab-case.ts';
 import {
   parseTypeScriptFileName,
   type ParsedTypeScriptFileName,
@@ -30,7 +30,7 @@ function findMigrationReasons(path: string, fileName: string): readonly string[]
   return isMigration ? [] : [`migration "${fileName}" must be named NNNN-kebab-name.sql`];
 }
 
-function isRolelessNameAllowed(parsedName: ParsedTypeScriptFileName, rule: DirectoryRule): boolean {
+function isRolelessNameAllowed(parsedName: ParsedTypeScriptFileName, rule: CatalogueRule): boolean {
   if (rule.allowedRolelessNames === 'any') return true;
   if (rule.allowedRolelessNames === 'test-files') return parsedName.testKind !== undefined;
   return rule.allowedRolelessNames.includes(parsedName.concept);
@@ -39,7 +39,7 @@ function isRolelessNameAllowed(parsedName: ParsedTypeScriptFileName, rule: Direc
 function findParsedNameReasons(
   fileName: string,
   parsedName: ParsedTypeScriptFileName,
-  rule: DirectoryRule,
+  rule: CatalogueRule,
 ): readonly string[] {
   if (!isKebabCase(parsedName.concept))
     return [`concept "${parsedName.concept}" is not kebab-case`];
@@ -54,7 +54,7 @@ function findParsedNameReasons(
 function findCatalogueReasons(
   path: string,
   fileName: string,
-  rule: DirectoryRule,
+  rule: CatalogueRule,
 ): readonly string[] {
   if (fileName.endsWith('.sql')) return findMigrationReasons(path, fileName);
   if (!fileName.endsWith('.ts')) return [`only .ts files are allowed in ${rule.description}`];
@@ -73,7 +73,7 @@ function findPackageEntryReasons(path: string): readonly string[] {
 function findFileReasons(
   path: string,
   fileName: string,
-  catalogue: readonly DirectoryRule[],
+  catalogue: readonly CatalogueRule[],
 ): readonly string[] {
   if (fileName.startsWith('.') || conventionalFileNames.includes(fileName)) return [];
   if (fileName === 'index.ts') return findPackageEntryReasons(path);
@@ -84,7 +84,7 @@ function findFileReasons(
 
 function findPathViolations(
   path: string,
-  catalogue: readonly DirectoryRule[],
+  catalogue: readonly CatalogueRule[],
 ): readonly FileNameViolation[] {
   const segments = path.split('/');
   const fileName = segments.at(-1) ?? '';
@@ -97,7 +97,7 @@ function findPathViolations(
 
 export function findFileNameViolations(
   paths: readonly string[],
-  catalogue: readonly DirectoryRule[],
+  catalogue: readonly CatalogueRule[],
 ): readonly FileNameViolation[] {
   return paths.flatMap((path) => findPathViolations(path, catalogue));
 }
