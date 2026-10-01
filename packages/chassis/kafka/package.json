@@ -10,10 +10,11 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration --passWithNoTests"
+    "test:integration": "vitest run --project integration"
   },
   "dependencies": {
-    "@confluentinc/kafka-javascript": "1.10.1"
+    "@confluentinc/kafka-javascript": "1.10.1",
+    "@fd/chassis-observability": "workspace:*"
   },
   "devDependencies": {
     "@fd/chassis-testing": "workspace:*",
