@@ -199,6 +199,7 @@ describe('startConsumerRunner', () => {
     expect(deadLetter.key?.toString()).toBe('order-1');
     expect(deadLetter.value?.toString()).toBe('broken');
     expect(headerOf(deadLetter, 'error-class')).toBe('permanent');
+    expect(headerOf(deadLetter, 'error-type')).toBe('PermanentMessageFailure');
     expect(headerOf(deadLetter, 'error-message')).toBe('missing required header message-type');
     expect(headerOf(deadLetter, 'original-topic')).toBe(scenario.topic);
     expect(headerOf(deadLetter, 'original-offset')).toBe('0');
@@ -224,5 +225,85 @@ describe('startConsumerRunner', () => {
     expect(headerOf(deadLetter, 'error-message')).toBe('unexpected bug');
     expect(headerOf(deadLetter, 'attempt-count')).toBe('5');
     expect(await committedOffset(scenario.groupId, scenario.topic)).toBe('1');
+  });
+
+  it('dead-letters a message without a value as a permanent failure', async () => {
+    const handled: string[] = [];
+    const scenario = await runScenario(
+      'tombstone',
+      (message) => {
+        handled.push(payloadText(message));
+        return Promise.resolve();
+      },
+      [
+        { key: 'order-1', value: null, headers: headersFor('Sample') },
+        { key: 'order-1', value: 'valid', headers: headersFor('Sample') },
+      ],
+    );
+
+    await waitUntil(() => handled.includes('valid'));
+    await scenario.runner.stop();
+    const deadLetter = await readFirstMessage(`${scenario.topic}.${scenario.groupId}.dlq`);
+
+    expect(handled).toEqual(['valid']);
+    expect(headerOf(deadLetter, 'error-message')).toBe('message has no value');
+  });
+
+  it('leaves a message that is still failing uncommitted so a restarted runner handles it again', async () => {
+    const firstRun: string[] = [];
+    const scenario = await runScenario(
+      'restart',
+      (message) => {
+        firstRun.push(payloadText(message));
+        if (payloadText(message) !== 'm1') return Promise.resolve();
+        return Promise.reject(Object.assign(new Error('database down'), { code: 'ECONNREFUSED' }));
+      },
+      ['m0', 'm1', 'm2'].map((text) => ({
+        key: 'order-1',
+        value: text,
+        headers: headersFor('Sample'),
+      })),
+    );
+    await waitUntil(() => firstRun.filter((text) => text === 'm1').length >= 3);
+    const offsetWhileFailing = await committedOffset(scenario.groupId, scenario.topic);
+    await scenario.runner.stop();
+
+    const secondRun: string[] = [];
+    const restarted = await startConsumerRunner({
+      kafka,
+      groupId: scenario.groupId,
+      topics: [scenario.topic],
+      handle: (message) => {
+        secondRun.push(payloadText(message));
+        return Promise.resolve();
+      },
+      logger: silentLogger,
+    });
+    await waitUntil(() => secondRun.includes('m2'));
+    await restarted.stop();
+
+    expect(offsetWhileFailing).toBe('1');
+    expect(secondRun).toEqual(['m1', 'm2']);
+    expect(await committedOffset(scenario.groupId, scenario.topic)).toBe('3');
+  });
+
+  it('stops cleanly while a handler is failing', async () => {
+    let attemptCount = 0;
+    const scenario = await runScenario(
+      'stopping',
+      async () => {
+        attemptCount += 1;
+        await setTimeout(300);
+        throw Object.assign(new Error('connection reset'), { code: 'ECONNRESET' });
+      },
+      [{ key: 'order-1', value: 'slow', headers: headersFor('Sample') }],
+    );
+    await waitUntil(() => attemptCount === 1);
+
+    await scenario.runner.stop();
+    await setTimeout(1_000);
+
+    expect(attemptCount).toBe(1);
+    expect(await committedOffset(scenario.groupId, scenario.topic)).not.toBe('1');
   });
 });

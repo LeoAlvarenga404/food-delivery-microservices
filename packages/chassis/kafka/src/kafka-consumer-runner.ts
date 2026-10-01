@@ -22,6 +22,7 @@ interface RunnerParts {
   readonly producer: KafkaJS.Producer;
   readonly attemptCounts: Map<string, number>;
   readonly resumeTimers: Set<NodeJS.Timeout>;
+  readonly lifecycle: { isStopRequested: boolean };
 }
 
 function deliveryKey(delivery: KafkaJS.EachMessagePayload): string {
@@ -44,12 +45,14 @@ function scheduleRetry(
   delivery: KafkaJS.EachMessagePayload,
   delayInMilliseconds: number,
 ): void {
-  const topicPartition = { topic: delivery.topic, partitions: [delivery.partition] };
-  parts.consumer.pause([topicPartition]);
-  parts.consumer.seek({ ...delivery, offset: delivery.message.offset });
+  if (parts.lifecycle.isStopRequested) return;
+  const { topic, partition } = delivery;
+  parts.consumer.pause([{ topic, partitions: [partition] }]);
+  parts.consumer.seek({ topic, partition, offset: delivery.message.offset });
   const timer = setTimeout(() => {
     parts.resumeTimers.delete(timer);
-    parts.consumer.resume([topicPartition]);
+    if (!parts.lifecycle.isStopRequested)
+      parts.consumer.resume([{ topic, partitions: [partition] }]);
   }, delayInMilliseconds);
   parts.resumeTimers.add(timer);
 }
@@ -106,32 +109,36 @@ async function ensureDeadLetterTopicsExist(settings: ConsumerRunnerSettings): Pr
   }
 }
 
+function createRunnerParts(settings: ConsumerRunnerSettings): RunnerParts {
+  return {
+    settings,
+    consumer: settings.kafka.consumer({
+      kafkaJS: { groupId: settings.groupId, fromBeginning: true, autoCommit: false },
+    }),
+    producer: settings.kafka.producer({ kafkaJS: { acks: -1, idempotent: true } }),
+    attemptCounts: new Map(),
+    resumeTimers: new Set(),
+    lifecycle: { isStopRequested: false },
+  };
+}
+
+async function stopRunner(parts: RunnerParts): Promise<void> {
+  parts.lifecycle.isStopRequested = true;
+  await parts.consumer.disconnect();
+  parts.resumeTimers.forEach((timer) => {
+    clearTimeout(timer);
+  });
+  await parts.producer.disconnect();
+}
+
 export async function startConsumerRunner(
   settings: ConsumerRunnerSettings,
 ): Promise<RunningConsumer> {
   await ensureDeadLetterTopicsExist(settings);
-  const consumer = settings.kafka.consumer({
-    kafkaJS: { groupId: settings.groupId, fromBeginning: true, autoCommit: false },
-  });
-  const producer = settings.kafka.producer({ kafkaJS: { acks: -1, idempotent: true } });
-  const parts: RunnerParts = {
-    settings,
-    consumer,
-    producer,
-    attemptCounts: new Map(),
-    resumeTimers: new Set(),
-  };
-  await producer.connect();
-  await consumer.connect();
-  await consumer.subscribe({ topics: [...settings.topics] });
-  await consumer.run({ eachMessage: (delivery) => processDelivery(parts, delivery) });
-  return {
-    stop: async () => {
-      parts.resumeTimers.forEach((timer) => {
-        clearTimeout(timer);
-      });
-      await consumer.disconnect();
-      await producer.disconnect();
-    },
-  };
+  const parts = createRunnerParts(settings);
+  await parts.producer.connect();
+  await parts.consumer.connect();
+  await parts.consumer.subscribe({ topics: [...settings.topics] });
+  await parts.consumer.run({ eachMessage: (delivery) => processDelivery(parts, delivery) });
+  return { stop: () => stopRunner(parts) };
 }

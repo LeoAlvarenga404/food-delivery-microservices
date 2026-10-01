@@ -13,12 +13,20 @@ describe('classifyFailure', () => {
     expect(classifyFailure(new PermanentMessageFailure('unknown message-type'))).toBe('permanent');
   });
 
-  it.each(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', '08006', '40001', '40P01', '57P01', '53300'])(
-    'classifies code %s as transient',
-    (code) => {
-      expect(classifyFailure(errorWithCode(code))).toBe('transient');
-    },
-  );
+  it.each([
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'EHOSTUNREACH',
+    '08006',
+    '40001',
+    '40P01',
+    '57P01',
+    '53300',
+  ])('classifies code %s as transient', (code) => {
+    expect(classifyFailure(errorWithCode(code))).toBe('transient');
+  });
 
   it.each([
     { description: 'an error without a code', error: new Error('bug') },
