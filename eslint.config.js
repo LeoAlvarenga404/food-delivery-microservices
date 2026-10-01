@@ -30,10 +30,26 @@ const forbiddenIdentifiers = [
 ];
 
 const genericTypeNames = '^I[A-Z]|(Impl|Manager|Helper|Helpers|Util|Utils)$';
+const forbiddenIdentifierPattern = `^(${forbiddenIdentifiers.join('|')})$`;
 
 const namingConventionOptions = [
   { selector: 'default', format: ['camelCase'] },
   { selector: 'import', format: ['camelCase', 'PascalCase'] },
+  {
+    selector: [
+      'variable',
+      'function',
+      'parameter',
+      'parameterProperty',
+      'classProperty',
+      'classMethod',
+      'typeProperty',
+      'typeMethod',
+      'accessor',
+    ],
+    format: ['camelCase'],
+    custom: { regex: forbiddenIdentifierPattern, match: false },
+  },
   { selector: 'typeLike', format: ['PascalCase'] },
   {
     selector: ['class', 'interface', 'typeAlias'],
@@ -46,6 +62,7 @@ const namingConventionOptions = [
     format: ['PascalCase'],
     prefix: ['is', 'has', 'can', 'should', 'was'],
   },
+  { selector: 'objectLiteralProperty', format: ['camelCase', 'UPPER_CASE'] },
   {
     selector: ['objectLiteralProperty', 'typeProperty'],
     modifiers: ['requiresQuotes'],
@@ -79,7 +96,6 @@ export default defineConfig(
     plugins: { fd: { rules: { 'no-comments': noCommentsRule } } },
     rules: {
       'fd/no-comments': 'error',
-      'id-denylist': ['error', ...forbiddenIdentifiers],
       'id-length': ['error', { min: 2, properties: 'never' }],
       'max-depth': ['error', 2],
       complexity: ['error', 8],
@@ -88,6 +104,7 @@ export default defineConfig(
       'no-restricted-syntax': [
         'error',
         { selector: 'ExportDefaultDeclaration', message: 'Use named exports.' },
+        { selector: "ExportSpecifier[exported.name='default']", message: 'Use named exports.' },
       ],
       '@typescript-eslint/max-params': ['error', { max: 3 }],
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
