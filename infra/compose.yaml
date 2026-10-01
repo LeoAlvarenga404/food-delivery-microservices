@@ -1,0 +1,166 @@
+name: food-delivery
+
+x-kafka-node: &kafka-node
+  image: apache/kafka:4.3.1
+  profiles: [core]
+  restart: unless-stopped
+  healthcheck:
+    test: ['CMD', 'nc', '-z', 'localhost', '29092']
+    interval: 5s
+    timeout: 5s
+    retries: 24
+
+x-kafka-environment: &kafka-environment
+  CLUSTER_ID: DC3rsUb6S-SqkihC0jfwfg
+  KAFKA_PROCESS_ROLES: broker,controller
+  KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:29093,2@kafka-2:29093,3@kafka-3:29093
+  KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+  KAFKA_LOG_DIRS: /var/lib/kafka/data
+  KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+  KAFKA_MIN_INSYNC_REPLICAS: 2
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+  KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: 'false'
+  KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+
+x-postgres: &postgres
+  image: postgres:18.6-alpine
+  profiles: [core]
+  restart: unless-stopped
+  command: ['postgres', '-c', 'wal_level=logical', '-c', 'max_slot_wal_keep_size=1GB']
+
+services:
+  kafka-1:
+    <<: *kafka-node
+    hostname: kafka-1
+    ports: ['9092:9092']
+    volumes: ['kafka-1-data:/var/lib/kafka/data']
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: CONTROLLER://:29093,INTERNAL://:29092,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:29092,EXTERNAL://localhost:9092
+
+  kafka-2:
+    <<: *kafka-node
+    hostname: kafka-2
+    ports: ['9093:9093']
+    volumes: ['kafka-2-data:/var/lib/kafka/data']
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: CONTROLLER://:29093,INTERNAL://:29092,EXTERNAL://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:29092,EXTERNAL://localhost:9093
+
+  kafka-3:
+    <<: *kafka-node
+    hostname: kafka-3
+    ports: ['9094:9094']
+    volumes: ['kafka-3-data:/var/lib/kafka/data']
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: CONTROLLER://:29093,INTERNAL://:29092,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-3:29092,EXTERNAL://localhost:9094
+
+  kafka-connect:
+    image: quay.io/debezium/connect:3.7.0.Final
+    profiles: [core]
+    restart: unless-stopped
+    depends_on:
+      kafka-1: { condition: service_healthy }
+      kafka-2: { condition: service_healthy }
+      kafka-3: { condition: service_healthy }
+    ports: ['8083:8083']
+    healthcheck:
+      test: ['CMD', 'curl', '-fs', 'http://localhost:8083/connectors']
+      interval: 5s
+      timeout: 5s
+      retries: 36
+    environment:
+      BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      GROUP_ID: kafka-connect
+      CONFIG_STORAGE_TOPIC: kafka-connect.configs
+      OFFSET_STORAGE_TOPIC: kafka-connect.offsets
+      STATUS_STORAGE_TOPIC: kafka-connect.status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_PRODUCER_ACKS: all
+      CONNECT_PRODUCER_ENABLE_IDEMPOTENCE: 'true'
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      HEAP_OPTS: -Xms256m -Xmx512m
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+      CONSUMER_DB_PASSWORD: ${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+      KITCHEN_DB_PASSWORD: ${KITCHEN_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+      ACCOUNTING_DB_PASSWORD: ${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
+  order-db:
+    <<: *postgres
+    ports: ['5432:5432']
+    volumes: ['order-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: order_service
+      POSTGRES_DB: order_service
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'order_service', '-d', 'order_service']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  consumer-db:
+    <<: *postgres
+    ports: ['5433:5432']
+    volumes: ['consumer-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: consumer_service
+      POSTGRES_DB: consumer_service
+      POSTGRES_PASSWORD: ${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'consumer_service', '-d', 'consumer_service']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  kitchen-db:
+    <<: *postgres
+    ports: ['5434:5432']
+    volumes: ['kitchen-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: kitchen_service
+      POSTGRES_DB: kitchen_service
+      POSTGRES_PASSWORD: ${KITCHEN_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'kitchen_service', '-d', 'kitchen_service']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  accounting-db:
+    <<: *postgres
+    ports: ['5435:5432']
+    volumes: ['accounting-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: accounting_service
+      POSTGRES_DB: accounting_service
+      POSTGRES_PASSWORD: ${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'accounting_service', '-d', 'accounting_service']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:
+  order-db-data:
+  consumer-db-data:
+  kitchen-db-data:
+  accounting-db-data:
