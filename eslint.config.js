@@ -105,6 +105,14 @@ export default defineConfig(
         'error',
         { selector: 'ExportDefaultDeclaration', message: 'Use named exports.' },
         { selector: "ExportSpecifier[exported.name='default']", message: 'Use named exports.' },
+        {
+          selector: `CatchClause > Identifier.param[name=/${forbiddenIdentifierPattern}/]`,
+          message: 'Use a descriptive catch binding.',
+        },
+        {
+          selector: `:matches(ImportSpecifier, ImportDefaultSpecifier, ImportNamespaceSpecifier) > Identifier.local[name=/${forbiddenIdentifierPattern}/]`,
+          message: 'Use a descriptive import alias.',
+        },
       ],
       '@typescript-eslint/max-params': ['error', { max: 3 }],
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
