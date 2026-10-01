@@ -2,9 +2,10 @@
   "$schema": "https://turborepo.com/schema.json",
   "globalDependencies": ["tsconfig.base.json", "eslint.config.js", "tooling/src/eslint/**"],
   "tasks": {
-    "lint": {},
-    "typecheck": {},
-    "test:unit": {},
+    "transit": { "dependsOn": ["^transit"] },
+    "lint": { "dependsOn": ["transit"] },
+    "typecheck": { "dependsOn": ["transit"] },
+    "test:unit": { "dependsOn": ["transit"] },
     "dev": {
       "cache": false,
       "persistent": true
