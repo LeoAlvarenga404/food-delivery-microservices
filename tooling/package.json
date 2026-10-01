@@ -13,6 +13,7 @@
     "test:unit": "vitest run"
   },
   "devDependencies": {
+    "@commitlint/parse": "21.2.3",
     "@commitlint/types": "21.2.3",
     "eslint": "10.11.0",
     "typescript-eslint": "8.71.0",

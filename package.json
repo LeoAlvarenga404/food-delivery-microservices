@@ -13,16 +13,23 @@
     "lint:files": "node tooling/src/file-names/check-file-names.cli.ts",
     "lint:architecture": "depcruise packages tooling --config .dependency-cruiser.cjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@commitlint/cli": "21.2.3",
+    "@commitlint/config-conventional": "21.2.3",
     "@eslint/js": "10.0.1",
     "@fd/tooling": "workspace:*",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.6",
     "@types/node": "24.19.0",
     "dependency-cruiser": "18.5.0",
     "eslint": "10.11.0",
     "eslint-config-prettier": "10.1.8",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
     "prettier": "3.9.9",
+    "secretlint": "13.0.6",
     "turbo": "2.11.5",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0"
