@@ -1,0 +1,17 @@
+{
+  "name": "@fd/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "1.10.1"
+  },
+  "devDependencies": {
+    "vitest": "5.0.3"
+  }
+}

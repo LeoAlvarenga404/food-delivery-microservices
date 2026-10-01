@@ -5,3 +5,7 @@ packages:
   - bffs/*
   - tooling
   - e2e
+  - infra
+
+onlyBuiltDependencies:
+  - '@confluentinc/kafka-javascript'
