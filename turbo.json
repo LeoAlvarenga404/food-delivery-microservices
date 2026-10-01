@@ -6,7 +6,7 @@
     "lint": { "dependsOn": ["transit"] },
     "typecheck": { "dependsOn": ["transit"] },
     "test:unit": { "dependsOn": ["transit"] },
-    "test:integration": { "dependsOn": ["transit"] },
+    "test:integration": { "dependsOn": ["transit"], "passThroughEnv": ["TESTCONTAINERS_*"] },
     "dev": {
       "cache": false,
       "persistent": true
