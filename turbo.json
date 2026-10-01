@@ -6,6 +6,7 @@
     "lint": { "dependsOn": ["transit"] },
     "typecheck": { "dependsOn": ["transit"] },
     "test:unit": { "dependsOn": ["transit"] },
+    "test:integration": { "dependsOn": ["transit"] },
     "dev": {
       "cache": false,
       "persistent": true

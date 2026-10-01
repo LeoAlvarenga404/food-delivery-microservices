@@ -1,0 +1,23 @@
+{
+  "name": "@fd/chassis-postgres",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "kysely": "0.29.6",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "@types/pg": "8.23.1",
+    "vitest": "5.0.3"
+  }
+}
