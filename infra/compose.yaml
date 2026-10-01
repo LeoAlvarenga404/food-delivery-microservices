@@ -113,6 +113,7 @@ services:
       POSTGRES_USER: order_service
       POSTGRES_DB: order_service
       POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
   consumer-db:
     <<: *postgres
     ports: ['127.0.0.1:5433:5432']
@@ -121,6 +122,7 @@ services:
       POSTGRES_USER: consumer_service
       POSTGRES_DB: consumer_service
       POSTGRES_PASSWORD: ${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
   kitchen-db:
     <<: *postgres
     ports: ['127.0.0.1:5434:5432']
@@ -129,6 +131,7 @@ services:
       POSTGRES_USER: kitchen_service
       POSTGRES_DB: kitchen_service
       POSTGRES_PASSWORD: ${KITCHEN_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
   accounting-db:
     <<: *postgres
     ports: ['127.0.0.1:5435:5432']
@@ -137,6 +140,7 @@ services:
       POSTGRES_USER: accounting_service
       POSTGRES_DB: accounting_service
       POSTGRES_PASSWORD: ${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
 volumes:
   kafka-1-data:
   kafka-2-data:
