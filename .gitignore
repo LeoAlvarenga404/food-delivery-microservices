@@ -15,6 +15,7 @@ Thumbs.db
 .vscode/
 
 .claude/
+.superpowers/
 CLAUDE.md
 CLAUDE.local.md
 docs/
