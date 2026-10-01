@@ -1,5 +1,4 @@
 export default {
-  '*.ts': ['prettier --write', 'eslint --max-warnings=0'],
-  '*.{js,cjs,json,yml,yaml}': ['prettier --write'],
-  '*': ['secretlint'],
+  '*.ts': ['prettier --write', 'eslint --max-warnings=0', 'secretlint'],
+  '!(*.ts)': ['prettier --write --ignore-unknown', 'secretlint'],
 };

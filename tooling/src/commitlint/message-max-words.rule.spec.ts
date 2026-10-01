@@ -13,6 +13,10 @@ describe('countCommitMessageWords', () => {
       'feat(order): add order aggregate\n# Please enter the commit message\n# ------------------------ >8 ------------------------\n# Do not modify or remove the line above.\ndiff --git a/order.ts b/order.ts\n+export const order = 1;\n',
       4,
     ],
+    [
+      'feat(order): add order aggregate\r\n# Please enter the commit message\r\n# ------------------------ >8 ------------------------\r\n# Do not modify or remove the line above.\r\ndiff --git a/order.ts b/order.ts\r\n+export const order = 1;\r\n',
+      4,
+    ],
     ['', 0],
   ])('counts words in %j', (message, expectedWordCount) => {
     expect(countCommitMessageWords(message)).toBe(expectedWordCount);
