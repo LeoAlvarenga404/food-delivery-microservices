@@ -1,8 +1,8 @@
 export interface DirectoryRule {
   readonly description: string;
-  readonly directoryPattern: RegExp;
+  readonly pathPattern: RegExp;
   readonly allowedRoles: readonly string[];
-  readonly allowedRolelessNames: readonly string[] | 'any';
+  readonly allowedRolelessNames: readonly string[] | 'any' | 'test-files';
 }
 
 const domainRoles = [
@@ -43,44 +43,50 @@ const testSupportRoles = ['repository', 'adapter', 'fake', 'builder', 'contract'
 export const fileNameCatalogue: readonly DirectoryRule[] = [
   {
     description: 'service domain layer',
-    directoryPattern: /^services\/[^/]+\/src\/domain\//,
+    pathPattern: /^services\/[^/]+\/src\/domain\//,
     allowedRoles: domainRoles,
     allowedRolelessNames: [],
   },
   {
     description: 'service application layer',
-    directoryPattern: /^services\/[^/]+\/src\/application\//,
+    pathPattern: /^services\/[^/]+\/src\/application\//,
     allowedRoles: applicationRoles,
     allowedRolelessNames: [],
   },
   {
     description: 'service infrastructure layer',
-    directoryPattern: /^services\/[^/]+\/src\/infrastructure\//,
+    pathPattern: /^services\/[^/]+\/src\/infrastructure\//,
     allowedRoles: infrastructureRoles,
     allowedRolelessNames: [],
   },
   {
-    description: 'service source root',
-    directoryPattern: /^services\/[^/]+\/src\/[^/]+$/,
+    description: 'service source outside layers',
+    pathPattern: /^services\/[^/]+\/src\//,
     allowedRoles: [],
     allowedRolelessNames: ['main'],
   },
   {
     description: 'service test support',
-    directoryPattern: /^services\/[^/]+\/test\//,
+    pathPattern: /^services\/[^/]+\/test\//,
     allowedRoles: testSupportRoles,
-    allowedRolelessNames: 'any',
+    allowedRolelessNames: 'test-files',
   },
   {
     description: 'shared package source',
-    directoryPattern: /^packages\/(?:chassis\/)?[^/]+\/src\//,
+    pathPattern: /^packages\/(?:chassis\/)?[^/]+\/src\//,
     allowedRoles: [],
     allowedRolelessNames: 'any',
   },
   {
     description: 'tooling source',
-    directoryPattern: /^tooling\/src\//,
+    pathPattern: /^tooling\/src\//,
     allowedRoles: ['rule', 'cli'],
+    allowedRolelessNames: 'any',
+  },
+  {
+    description: 'TypeScript outside catalogued folders',
+    pathPattern: /\.ts$/,
+    allowedRoles: ['config'],
     allowedRolelessNames: 'any',
   },
 ];

@@ -11,6 +11,7 @@ export interface FileNameViolation {
 }
 
 const conventionalFileNames = ['Dockerfile'];
+const packageEntryPathPattern = /^packages\/(?:chassis\/)?[^/]+\/src\/index\.ts$/;
 const migrationFileNamePattern = /^\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.sql$/;
 
 function findDirectoryReasons(directorySegments: readonly string[]): readonly string[] {
@@ -29,8 +30,10 @@ function findMigrationReasons(path: string, fileName: string): readonly string[]
   return isMigration ? [] : [`migration "${fileName}" must be named NNNN-kebab-name.sql`];
 }
 
-function isRolelessNameAllowed(concept: string, rule: DirectoryRule): boolean {
-  return rule.allowedRolelessNames === 'any' || rule.allowedRolelessNames.includes(concept);
+function isRolelessNameAllowed(parsedName: ParsedTypeScriptFileName, rule: DirectoryRule): boolean {
+  if (rule.allowedRolelessNames === 'any') return true;
+  if (rule.allowedRolelessNames === 'test-files') return parsedName.testKind !== undefined;
+  return rule.allowedRolelessNames.includes(parsedName.concept);
 }
 
 function findParsedNameReasons(
@@ -41,7 +44,7 @@ function findParsedNameReasons(
   if (!isKebabCase(parsedName.concept))
     return [`concept "${parsedName.concept}" is not kebab-case`];
   if (parsedName.role === undefined) {
-    const isAllowed = isRolelessNameAllowed(parsedName.concept, rule);
+    const isAllowed = isRolelessNameAllowed(parsedName, rule);
     return isAllowed ? [] : [`file "${fileName}" needs a role suffix in ${rule.description}`];
   }
   const isAllowedRole = rule.allowedRoles.includes(parsedName.role);
@@ -61,13 +64,20 @@ function findCatalogueReasons(
   return findParsedNameReasons(fileName, parsedName, rule);
 }
 
+function findPackageEntryReasons(path: string): readonly string[] {
+  return packageEntryPathPattern.test(path)
+    ? []
+    : ['file "index.ts" is allowed only as package entry'];
+}
+
 function findFileReasons(
   path: string,
   fileName: string,
   catalogue: readonly DirectoryRule[],
 ): readonly string[] {
   if (fileName.startsWith('.') || conventionalFileNames.includes(fileName)) return [];
-  const rule = catalogue.find((candidate) => candidate.directoryPattern.test(path));
+  if (fileName === 'index.ts') return findPackageEntryReasons(path);
+  const rule = catalogue.find((candidate) => candidate.pathPattern.test(path));
   if (rule === undefined) return findGenericFileReasons(fileName);
   return findCatalogueReasons(path, fileName, rule);
 }

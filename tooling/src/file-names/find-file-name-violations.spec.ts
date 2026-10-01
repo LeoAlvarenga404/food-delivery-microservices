@@ -25,12 +25,15 @@ describe('findFileNameViolations', () => {
     'packages/chassis/kafka/src/consumer-runner.ts',
     'tooling/src/eslint/no-comments.rule.ts',
     'tooling/src/file-names/check-file-names.cli.ts',
+    'packages/domain/src/index.ts',
+    'packages/domain/vitest.config.ts',
+    'tooling/vitest.config.ts',
   ])('accepts %s', (path) => {
     expect(reasonsFor(path)).toEqual([]);
   });
 
   it.each([
-    ['services/order/src/Domain/order/order.aggregate.ts', 'directory "Domain" is not kebab-case'],
+    ['services/order/src/domain/Order/order.aggregate.ts', 'directory "Order" is not kebab-case'],
     [
       'services/order/src/domain/order/OrderAggregate.ts',
       'concept "OrderAggregate" is not kebab-case',
@@ -49,7 +52,7 @@ describe('findFileNameViolations', () => {
     ],
     [
       'services/order/src/main-entry.ts',
-      'file "main-entry.ts" needs a role suffix in service source root',
+      'file "main-entry.ts" needs a role suffix in service source outside layers',
     ],
     [
       'services/order/src/domain/order/order.json',
@@ -64,6 +67,29 @@ describe('findFileNameViolations', () => {
       'role ".helper" is not allowed in shared package source',
     ],
     ['tooling/src/Readme.ts', 'concept "Readme" is not kebab-case'],
+    [
+      'services/order/src/shared/order.weird.ts',
+      'role ".weird" is not allowed in service source outside layers',
+    ],
+    [
+      'packages/domain/order.weird.ts',
+      'role ".weird" is not allowed in TypeScript outside catalogued folders',
+    ],
+    ['e2e/order.weird.ts', 'role ".weird" is not allowed in TypeScript outside catalogued folders'],
+    ['packages/domain/src/nested/index.ts', 'file "index.ts" is allowed only as package entry'],
+    ['services/order/test/support/index.ts', 'file "index.ts" is allowed only as package entry'],
+    [
+      'services/order/test/support/helpers.ts',
+      'file "helpers.ts" needs a role suffix in service test support',
+    ],
+    [
+      'services/order/src/domain/order/order.consumer.spec.ts',
+      'role ".consumer" is not allowed in service domain layer',
+    ],
+    [
+      'services/order/src/domain/order/order.aggregate.extra.ts',
+      'file "order.aggregate.extra.ts" does not follow <concept>.<role>.ts',
+    ],
     ['infra/Envoy.yaml', 'file name "Envoy.yaml" is not kebab-case'],
   ])('rejects %s', (path, expectedReason) => {
     expect(reasonsFor(path)).toEqual([expectedReason]);
