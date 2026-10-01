@@ -1,0 +1,22 @@
+{
+  "name": "food-delivery-microservices",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=24.19.0"
+  },
+  "scripts": {
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test:unit": "turbo run test:unit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "prettier": "3.9.9",
+    "turbo": "2.11.5",
+    "typescript": "6.0.3"
+  }
+}

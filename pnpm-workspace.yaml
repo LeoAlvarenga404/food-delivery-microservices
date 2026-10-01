@@ -1,0 +1,7 @@
+packages:
+  - packages/*
+  - packages/chassis/*
+  - services/*
+  - bffs/*
+  - tooling
+  - e2e
