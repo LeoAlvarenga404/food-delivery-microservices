@@ -109,6 +109,25 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
 
+  packages/chassis/outbox:
+    dependencies:
+      '@fd/chassis-postgres':
+        specifier: workspace:*
+        version: link:../postgres
+      '@fd/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      kysely:
+        specifier: 0.29.6
+        version: 0.29.6
+    devDependencies:
+      '@fd/chassis-testing':
+        specifier: workspace:*
+        version: link:../testing
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
+
   packages/chassis/postgres:
     dependencies:
       kysely:

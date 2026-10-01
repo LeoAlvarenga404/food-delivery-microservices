@@ -1,0 +1,23 @@
+{
+  "name": "@fd/chassis-outbox",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@fd/chassis-postgres": "workspace:*",
+    "@fd/domain": "workspace:*",
+    "kysely": "0.29.6"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "vitest": "5.0.3"
+  }
+}
