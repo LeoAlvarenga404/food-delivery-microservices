@@ -2,14 +2,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
-import {
-  putConnectorConfiguration,
-  removeConnector,
-  waitForConnectorRunning,
-} from '../debezium/kafka-connect-client.ts';
+import { KafkaConnectClient } from '../debezium/kafka-connect-client.ts';
 import { outboxConnectorConfiguration } from '../debezium/outbox-connector-configuration.ts';
 import { createHostKafka } from '../kafka/create-host-kafka.ts';
-import { runOrderDatabaseSql } from './order-database.ts';
+import { runOrderDatabaseSql } from './run-order-database-sql.ts';
 import { receiveSmokeMessage } from './receive-smoke-message.ts';
 
 interface SmokeRow {
@@ -21,10 +17,13 @@ interface SmokeRow {
 
 const smokeDatabase = 'outbox_smoke';
 const smokeConnector = 'outbox-smoke';
+const smokeSlotName = 'outbox_smoke';
 const smokeTopic = 'smoke.outbox.events';
 const payloadHex = '0a0300ff7f80';
 const messageType = 'fooddelivery.smoke.v1.SmokeHappened';
 const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01';
+
+const kafkaConnect = new KafkaConnectClient('http://localhost:8083');
 
 function newSmokeRow(): SmokeRow {
   return {
@@ -40,7 +39,7 @@ function dropSmokeDatabase(): void {
     'order_service',
     [
       'set client_min_messages = warning;',
-      `select pg_drop_replication_slot(slot_name) from pg_replication_slots where slot_name = '${smokeDatabase}';`,
+      `select pg_drop_replication_slot(slot_name) from pg_replication_slots where slot_name = '${smokeSlotName}';`,
       `drop database if exists ${smokeDatabase} with (force);`,
     ].join('\n'),
   );
@@ -74,18 +73,18 @@ async function ensureSmokeTopic(admin: KafkaJS.Admin): Promise<void> {
 }
 
 async function registerSmokeConnector(): Promise<void> {
-  await putConnectorConfiguration(
+  await kafkaConnect.putConnectorConfiguration(
     smokeConnector,
     outboxConnectorConfiguration({
       databaseHost: 'order-db',
       databaseName: smokeDatabase,
       databaseUser: 'order_service',
       passwordEnvironmentVariable: 'ORDER_DB_PASSWORD',
-      slotName: smokeDatabase,
+      slotName: smokeSlotName,
       topicPrefix: smokeConnector,
     }),
   );
-  await waitForConnectorRunning(smokeConnector);
+  await kafkaConnect.waitForConnectorRunning(smokeConnector);
 }
 
 async function expectRelayed(kafka: KafkaJS.Kafka, row: SmokeRow): Promise<void> {
@@ -117,7 +116,7 @@ async function relaySmokeRows(kafka: KafkaJS.Kafka, admin: KafkaJS.Admin): Promi
 }
 
 async function cleanUp(admin: KafkaJS.Admin): Promise<void> {
-  await removeConnector(smokeConnector);
+  await kafkaConnect.removeConnector(smokeConnector);
   dropSmokeDatabase();
   const existingTopicNames = await admin.listTopics();
   if (existingTopicNames.includes(smokeTopic)) await admin.deleteTopics({ topics: [smokeTopic] });
