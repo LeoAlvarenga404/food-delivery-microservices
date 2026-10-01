@@ -9,7 +9,7 @@ export class Left<Failure> {
     return true;
   }
 
-  isRight(): this is Right<never> {
+  isRight(): this is never {
     return false;
   }
 }
@@ -21,7 +21,7 @@ export class Right<Success> {
     this.success = success;
   }
 
-  isLeft(): this is Left<never> {
+  isLeft(): this is never {
     return false;
   }
 

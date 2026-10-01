@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { left, matchEither, right, type Either } from './either.ts';
+import { left, matchEither, right, type Either, type Left, type Right } from './either.ts';
 
 interface OrderNotFound {
   readonly type: 'OrderNotFound';
@@ -35,22 +35,22 @@ function approveOrder(
 
 describe('Either', () => {
   it('exposes the failure of a left', () => {
-    const failure = left({ type: 'OrderNotFound', orderId: 'order-1' });
+    const notFound = left({ type: 'OrderNotFound', orderId: 'order-1' });
 
-    expect(failure.isLeft()).toBe(true);
-    expect(failure.isRight()).toBe(false);
-    expect(failure.failure).toEqual({ type: 'OrderNotFound', orderId: 'order-1' });
+    expect(notFound.isLeft()).toBe(true);
+    expect(notFound.isRight()).toBe(false);
+    expect(notFound.failure).toEqual({ type: 'OrderNotFound', orderId: 'order-1' });
   });
 
   it('exposes the success of a right', () => {
-    const success = right(1500);
+    const amount = right(1500);
 
-    expect(success.isRight()).toBe(true);
-    expect(success.isLeft()).toBe(false);
-    expect(success.success).toBe(1500);
+    expect(amount.isRight()).toBe(true);
+    expect(amount.isLeft()).toBe(false);
+    expect(amount.success).toBe(1500);
   });
 
-  it('propagates the same left instance through early return', () => {
+  it('propagates the left through early return', () => {
     const outcome = approveOrder('missing');
 
     expect(outcome.isLeft()).toBe(true);
@@ -79,5 +79,12 @@ describe('Either', () => {
     expectTypeOf(outcome).not.toHaveProperty('success');
     expectTypeOf(outcome).not.toHaveProperty('failure');
     if (outcome.isRight()) expectTypeOf(outcome).toHaveProperty('success');
+  });
+
+  it('narrows each guard to exactly one side', () => {
+    const outcome = findOrder('order-1');
+
+    if (outcome.isLeft()) expectTypeOf(outcome).toEqualTypeOf<Left<OrderNotFound>>();
+    if (outcome.isRight()) expectTypeOf(outcome).toEqualTypeOf<Right<SampleOrder>>();
   });
 });
