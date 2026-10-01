@@ -17,7 +17,8 @@
     "prepare": "husky",
     "infra:up": "docker compose -f infra/compose.yaml --profile core up -d --wait",
     "infra:down": "docker compose -f infra/compose.yaml --profile core down",
-    "infra:topics": "node infra/kafka/create-topics.ts"
+    "infra:topics": "node infra/kafka/create-topics.ts",
+    "infra:smoke": "node infra/smoke/outbox-relay-smoke.ts"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",
