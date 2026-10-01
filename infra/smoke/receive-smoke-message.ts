@@ -43,6 +43,16 @@ function waitForMessage(consumer: KafkaJS.Consumer, messageId: string): Promise<
   });
 }
 
+async function deleteConsumerGroup(kafka: KafkaJS.Kafka, groupId: string): Promise<void> {
+  const admin = kafka.admin();
+  await admin.connect();
+  try {
+    await admin.deleteGroups([groupId]);
+  } finally {
+    await admin.disconnect();
+  }
+}
+
 export async function receiveSmokeMessage(
   kafka: KafkaJS.Kafka,
   topic: string,
@@ -56,5 +66,6 @@ export async function receiveSmokeMessage(
     return await waitForMessage(consumer, messageId);
   } finally {
     await consumer.disconnect();
+    await deleteConsumerGroup(kafka, groupId);
   }
 }
