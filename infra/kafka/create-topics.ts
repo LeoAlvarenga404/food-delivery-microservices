@@ -1,5 +1,5 @@
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
-import { createHostKafka } from './host-kafka.ts';
+import { createHostKafka } from './create-host-kafka.ts';
 import { topicCatalogue, type TopicDefinition } from './topic-catalogue.ts';
 
 const partitionCount = 6;

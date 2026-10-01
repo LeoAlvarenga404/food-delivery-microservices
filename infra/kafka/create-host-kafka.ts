@@ -4,6 +4,7 @@ const hostBootstrapServers = ['localhost:9092', 'localhost:9093', 'localhost:909
 
 export function createHostKafka(): KafkaJS.Kafka {
   return new KafkaJS.Kafka({
+    'broker.address.family': 'v4',
     kafkaJS: { brokers: hostBootstrapServers, logLevel: KafkaJS.logLevel.ERROR },
   });
 }
