@@ -2,12 +2,12 @@ export interface OutboxConnectorTarget {
   readonly databaseHost: string;
   readonly databaseName: string;
   readonly databaseUser: string;
-  readonly passwordVariable: string;
+  readonly passwordEnvironmentVariable: string;
   readonly slotName: string;
   readonly topicPrefix: string;
 }
 
-export type ConnectorConfig = Readonly<Record<string, string>>;
+export type ConnectorConfiguration = Readonly<Record<string, string>>;
 
 const outboxHeaderPlacement = [
   'id:header:message-id',
@@ -20,7 +20,7 @@ const outboxHeaderPlacement = [
   'actor_type:header:actor-type',
 ].join(',');
 
-const outboxRelaySettings: ConnectorConfig = {
+const outboxRelaySettings: ConnectorConfiguration = {
   'connector.class': 'io.debezium.connector.postgresql.PostgresConnector',
   'tasks.max': '1',
   'database.port': '5432',
@@ -28,11 +28,14 @@ const outboxRelaySettings: ConnectorConfig = {
   'publication.name': 'outbox_publication',
   'publication.autocreate.mode': 'disabled',
   'table.include.list': 'public.outbox',
-  'snapshot.mode': 'no_data',
+  'snapshot.mode': 'initial',
+  'snapshot.select.statement.overrides': 'public.outbox',
+  'snapshot.select.statement.overrides.public.outbox': 'select * from public.outbox order by id',
   'tombstones.on.delete': 'false',
   'extended.headers.enabled': 'false',
   'key.converter': 'org.apache.kafka.connect.storage.StringConverter',
   'value.converter': 'org.apache.kafka.connect.converters.ByteArrayConverter',
+  'header.converter': 'org.apache.kafka.connect.storage.SimpleHeaderConverter',
   transforms: 'outbox,dropEventIdHeader',
   'transforms.outbox.type': 'io.debezium.transforms.outbox.EventRouter',
   'transforms.outbox.route.by.field': 'topic',
@@ -45,13 +48,15 @@ const outboxRelaySettings: ConnectorConfig = {
   'transforms.dropEventIdHeader.headers': 'id',
 };
 
-export function outboxConnectorConfig(target: OutboxConnectorTarget): ConnectorConfig {
+export function outboxConnectorConfiguration(
+  target: OutboxConnectorTarget,
+): ConnectorConfiguration {
   return {
     ...outboxRelaySettings,
     'database.hostname': target.databaseHost,
     'database.dbname': target.databaseName,
     'database.user': target.databaseUser,
-    'database.password': `\${env:${target.passwordVariable}}`,
+    'database.password': `\${env:${target.passwordEnvironmentVariable}}`,
     'slot.name': target.slotName,
     'topic.prefix': target.topicPrefix,
   };
