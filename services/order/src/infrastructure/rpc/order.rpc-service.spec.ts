@@ -1,6 +1,12 @@
 import { Writable } from 'node:stream';
 import { create, type MessageInitShape } from '@bufbuild/protobuf';
-import { Code, createClient, createRouterTransport, type Client } from '@connectrpc/connect';
+import {
+  Code,
+  ConnectError,
+  createClient,
+  createRouterTransport,
+  type Client,
+} from '@connectrpc/connect';
 import {
   OrderService,
   OrderStatus,
@@ -16,7 +22,7 @@ import { guaranaId, margheritaId, pizzeriaMenu } from '../../../test/support/ord
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
 import { createOrderRpcService } from './order.rpc-service.ts';
-import { createRpcFailureLogging } from './rpc-failure-logging.adapter.ts';
+import { createRpcCorrelation } from './rpc-correlation.adapter.ts';
 
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
 
@@ -64,7 +70,7 @@ beforeEach(() => {
   unitOfWork = new InMemoryUnitOfWork();
   logEntries = [];
   const interceptors = [
-    createRpcFailureLogging({
+    createRpcCorrelation({
       logger: captureLogger(),
       generateCorrelationId: () => generatedCorrelationId,
     }),
@@ -137,6 +143,39 @@ describe('OrderService.PlaceOrder', () => {
       procedure: 'fooddelivery.order.v1.OrderService/PlaceOrder',
       err: { message: 'relation "orders" does not exist' },
     });
+  });
+
+  it('echoes the correlation id on an unexpected failure', async () => {
+    vi.spyOn(unitOfWork, 'execute').mockRejectedValue(new Error('connection lost'));
+
+    const failure = await client.placeOrder(placeOrderRequest()).catch((error: unknown) => error);
+
+    expect(ConnectError.from(failure).metadata.get('x-correlation-id')).toBe(
+      generatedCorrelationId,
+    );
+  });
+
+  it('echoes the correlation id on a failure the client is meant to see', async () => {
+    const correlationId = '0199a5d0-0000-7000-8000-0000000000e2';
+
+    const failure = await client
+      .placeOrder(placeOrderRequest({ consumerId: 'consumer-1' }), {
+        headers: { 'x-correlation-id': correlationId },
+      })
+      .catch((error: unknown) => error);
+
+    expect(ConnectError.from(failure)).toMatchObject({ code: Code.InvalidArgument });
+    expect(ConnectError.from(failure).metadata.get('x-correlation-id')).toBe(correlationId);
+  });
+
+  it('canonicalises an uppercase correlation id from the caller', async () => {
+    const correlationId = '0199A5D0-0000-7000-8000-0000000000E2';
+
+    await client.placeOrder(placeOrderRequest(), {
+      headers: { 'x-correlation-id': correlationId },
+    });
+
+    expect(unitOfWork.executedMetadata[0]?.correlationId).toBe(correlationId.toLowerCase());
   });
 
   it('does not log failures the client is meant to see', async () => {

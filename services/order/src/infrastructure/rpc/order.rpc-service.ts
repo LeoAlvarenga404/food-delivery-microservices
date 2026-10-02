@@ -7,7 +7,7 @@ import type { GetOrderQueryHandler } from '#application/queries/get-order/get-or
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { toGetOrderResponse } from './get-order-response.message-mapper.ts';
 import { toPlaceOrderCommand } from './place-order-request.message-mapper.ts';
-import { correlationIdKey } from './rpc-failure-logging.adapter.ts';
+import { correlationIdKey } from './rpc-correlation.adapter.ts';
 
 export interface OrderRpcServiceSettings {
   readonly placeOrder: PlaceOrderCommandHandler;
