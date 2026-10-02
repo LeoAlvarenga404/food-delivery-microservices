@@ -209,6 +209,15 @@ describe('UnitOfWork.execute', () => {
     expect(await countRows('outbox')).toBe(0);
   });
 
+  it('commits a right that wrote nothing', async () => {
+    const outcome = await unitOfWork().execute(metadata, () =>
+      Promise.resolve(right('nothing to do')),
+    );
+
+    expect(outcome).toEqual(right('nothing to do'));
+    expect(await countRows('outbox')).toBe(0);
+  });
+
   it('rolls everything back and rethrows when the work throws', async () => {
     const failing = unitOfWork().execute(metadata, async (tabs) => {
       await renameTab(tabs, 'Friday dinner');
@@ -249,5 +258,20 @@ describe('UnitOfWork.executeWithin', () => {
     expect(outboxRowsSeenFromOutside).toBe(0);
     expect(await countRows('tabs')).toBe(1);
     expect(await countRows('outbox')).toBe(1);
+  });
+
+  it('keeps an enclosing left free of writes when a nested unit of work also returned a left', async () => {
+    const outcome = await runInTransaction(database, (transaction) =>
+      unitOfWork().executeWithin(transaction, metadata, async () => {
+        await transaction.insertInto('markers').values({ markerId: 'outer' }).execute();
+        await unitOfWork().executeWithin(transaction, metadata, () =>
+          Promise.resolve(left({ type: 'InnerRejected' })),
+        );
+        return left({ type: 'OuterRejected' });
+      }),
+    );
+
+    expect(outcome).toEqual(left({ type: 'OuterRejected' }));
+    expect(await countRows('markers')).toBe(0);
   });
 });

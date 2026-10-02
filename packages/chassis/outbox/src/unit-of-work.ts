@@ -56,6 +56,7 @@ export class UnitOfWork<Schema, Repositories, RecordedEvent extends DomainEvent>
     const outcome = await work(this.#createRepositories(transaction, collector));
     if (outcome.isLeft()) {
       await sql`rollback to savepoint unit_of_work`.execute(transaction);
+      await sql`release savepoint unit_of_work`.execute(transaction);
       return outcome;
     }
     await writeOutboxMessages(transaction, this.#outgoingMessages(collector), {
