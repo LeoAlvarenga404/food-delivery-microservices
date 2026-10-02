@@ -3,7 +3,7 @@ import { setTimeout } from 'node:timers/promises';
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
 import { createLogger } from '@fd/chassis-observability';
 import { startKafkaContainer, type StartedKafka } from '@fd/chassis-testing';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { createKafka } from './create-kafka.ts';
 import type { InboundMessage, MessageHandler } from './inbound-message.ts';
 import { startConsumerRunner, type RunningConsumer } from './kafka-consumer-runner.ts';
@@ -90,6 +90,7 @@ async function runScenario(
     handle,
     logger: silentLogger,
   });
+  onTestFinished(() => runner.stop());
   return { topic, groupId, runner };
 }
 
@@ -192,7 +193,6 @@ describe('startConsumerRunner', () => {
     );
 
     await waitUntil(() => handled.includes('valid'));
-    await scenario.runner.stop();
     const deadLetter = await readFirstMessage(`${scenario.topic}.${scenario.groupId}.dlq`);
 
     expect(handled).toEqual(['valid']);
@@ -242,7 +242,6 @@ describe('startConsumerRunner', () => {
     );
 
     await waitUntil(() => handled.includes('valid'));
-    await scenario.runner.stop();
     const deadLetter = await readFirstMessage(`${scenario.topic}.${scenario.groupId}.dlq`);
 
     expect(handled).toEqual(['valid']);
@@ -279,6 +278,7 @@ describe('startConsumerRunner', () => {
       },
       logger: silentLogger,
     });
+    onTestFinished(() => restarted.stop());
     await waitUntil(() => secondRun.includes('m2'));
     await restarted.stop();
 
