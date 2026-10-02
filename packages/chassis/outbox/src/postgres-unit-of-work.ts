@@ -49,16 +49,24 @@ export class PostgresUnitOfWork<Schema, Repositories, RecordedEvent extends Doma
     work: Work<Repositories, Failure, Success>,
   ): Promise<Either<Failure, Success>> {
     await sql`savepoint unit_of_work`.execute(transaction);
+    try {
+      return await this.#runInsideSavepoint(transaction, metadata, work);
+    } catch (error) {
+      await this.#rollBackToSavepoint(transaction);
+      throw error;
+    }
+  }
+
+  async #runInsideSavepoint<Failure, Success>(
+    transaction: Transaction<Schema>,
+    metadata: MessageMetadata,
+    work: Work<Repositories, Failure, Success>,
+  ): Promise<Either<Failure, Success>> {
     const collector: OutgoingMessageCollector<RecordedEvent> = {
       trackedAggregates: [],
       enqueuedMessages: [],
     };
-    const outcome = await work(this.#createRepositories(transaction, collector)).catch(
-      async (error: unknown) => {
-        await this.#rollBackToSavepoint(transaction);
-        throw error;
-      },
-    );
+    const outcome = await work(this.#createRepositories(transaction, collector));
     if (outcome.isLeft()) {
       await this.#rollBackToSavepoint(transaction);
       return outcome;

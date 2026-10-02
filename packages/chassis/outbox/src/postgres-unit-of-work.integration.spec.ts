@@ -118,12 +118,14 @@ function generateMessageId(): string {
   return `0192a1b2-0000-7000-8000-${String(messageSequence).padStart(12, '0')}`;
 }
 
-const postgresUnitOfWork = (): PostgresUnitOfWork<TabSchema, TabRepository, TabRenamed> =>
+const postgresUnitOfWork = (
+  messageIdGenerator: () => string = generateMessageId,
+): PostgresUnitOfWork<TabSchema, TabRepository, TabRenamed> =>
   new PostgresUnitOfWork({
     database,
     createRepositories: (context) => new TabRepository(context),
     toOutboxMessages,
-    generateMessageId,
+    generateMessageId: messageIdGenerator,
     now: () => occurredAt,
   });
 
@@ -297,6 +299,41 @@ describe('PostgresUnitOfWork.executeWithin', () => {
         await postgresUnitOfWork().executeWithin(transaction, metadata, () =>
           Promise.resolve(right('nothing to do')),
         );
+        return left({ type: 'OuterRejected' });
+      }),
+    );
+
+    expect(outcome).toEqual(left({ type: 'OuterRejected' }));
+    expect(await countRows('markers')).toBe(0);
+  });
+
+  it('keeps an enclosing left free of writes when a nested unit of work failed writing its outbox', async () => {
+    const outcome = await runInTransaction(database, (transaction) =>
+      postgresUnitOfWork().executeWithin(transaction, metadata, async () => {
+        await transaction.insertInto('markers').values({ markerId: 'outer' }).execute();
+        await postgresUnitOfWork(() => 'not-a-uuid')
+          .executeWithin(transaction, metadata, (tabs) => {
+            tabs.enqueueReminder('tab-1');
+            return Promise.resolve(right('enqueued'));
+          })
+          .catch(() => undefined);
+        return left({ type: 'OuterRejected' });
+      }),
+    );
+
+    expect(outcome).toEqual(left({ type: 'OuterRejected' }));
+    expect(await countRows('markers')).toBe(0);
+  });
+
+  it('keeps an enclosing left free of writes when a nested unit of work threw synchronously', async () => {
+    const outcome = await runInTransaction(database, (transaction) =>
+      postgresUnitOfWork().executeWithin(transaction, metadata, async () => {
+        await transaction.insertInto('markers').values({ markerId: 'outer' }).execute();
+        await postgresUnitOfWork()
+          .executeWithin(transaction, metadata, () => {
+            throw new Error('inner failed synchronously');
+          })
+          .catch(() => undefined);
         return left({ type: 'OuterRejected' });
       }),
     );
