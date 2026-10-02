@@ -21,6 +21,7 @@ describe('findFileNameViolations', () => {
     'services/order/src/infrastructure/persistence/migrations/0001-create-orders-table.sql',
     'services/order/test/support/in-memory-order.repository.ts',
     'services/order/test/place-order.component.spec.ts',
+    'services/order/src/infrastructure/persistence/generated/database.ts',
     'packages/domain/src/either.ts',
     'packages/chassis/kafka/src/consumer-runner.ts',
     'tooling/src/eslint/no-comments.rule.ts',
@@ -95,6 +96,14 @@ describe('findFileNameViolations', () => {
       'file "order.aggregate.extra.ts" does not follow <concept>.<role>.ts',
     ],
     ['infra/Envoy.yaml', 'file name "Envoy.yaml" is not kebab-case'],
+    [
+      'services/order/src/infrastructure/persistence/generated/orders.ts',
+      'file "orders.ts" needs a role suffix in generated database types',
+    ],
+    [
+      'services/order/src/infrastructure/persistence/generated/database.repository.ts',
+      'role ".repository" is not allowed in generated database types',
+    ],
     [
       'packages/contracts/samples/Order.Events/OrderPlaced.json',
       'topic directory "Order.Events" is not a topic name',

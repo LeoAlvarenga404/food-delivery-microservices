@@ -42,6 +42,12 @@ const testSupportRoles = ['repository', 'adapter', 'fake', 'builder', 'contract'
 
 export const fileNameCatalogue: readonly CatalogueRule[] = [
   {
+    description: 'generated database types',
+    pathPattern: /^services\/[^/]+\/src\/infrastructure\/persistence\/generated\//,
+    allowedRoles: [],
+    allowedRolelessNames: ['database'],
+  },
+  {
     description: 'service domain layer',
     pathPattern: /^services\/[^/]+\/src\/domain\//,
     allowedRoles: domainRoles,
