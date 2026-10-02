@@ -1,4 +1,4 @@
-import { withInbox } from '@fd/chassis-inbox';
+import { withInbox, type InboxSettings, type TransactionalMessageHandler } from '@fd/chassis-inbox';
 import { PermanentMessageFailure, type MessageHandler } from '@fd/chassis-kafka';
 import { createLogger } from '@fd/chassis-observability';
 import { PaymentAuthorizedSchema } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
@@ -18,6 +18,7 @@ import {
 import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../../test/support/place-order-command.builder.ts';
 import { buildReplyMessage } from '../../../../test/support/reply-message.builder.ts';
+import type { DB as OrderDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { createOrderUnitOfWork } from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
@@ -26,6 +27,7 @@ import { placeOrderSagaReplyConsumer } from './place-order-saga-reply.consumer.t
 interface OutboxRow {
   readonly messageType: string;
   readonly causationId: string | null;
+  readonly correlationId: string;
 }
 
 const orderId = '0199a5d0-0000-7000-8000-0000000000a1';
@@ -33,13 +35,22 @@ const approvedAt = new Date('2026-10-02T12:00:30.000Z');
 
 let testDatabase: OrderTestDatabase;
 let handleReply: MessageHandler;
+let consumeReply: TransactionalMessageHandler<OrderDatabase>;
+let inboxSettings: InboxSettings<OrderDatabase>;
 let messageCount = 0;
 
 async function readOutbox(): Promise<readonly OutboxRow[]> {
   const result = await sql<OutboxRow>`
-    select message_type, causation_id from outbox order by id
+    select message_type, causation_id, correlation_id from outbox order by id
   `.execute(testDatabase.database);
   return result.rows;
+}
+
+async function countInboxRows(messageId: string): Promise<number> {
+  const result = await sql`select 1 from inbox where message_id = ${messageId}`.execute(
+    testDatabase.database,
+  );
+  return result.rows.length;
 }
 
 beforeAll(async () => {
@@ -62,18 +73,17 @@ beforeEach(async () => {
     new FakeIdGenerator(),
   );
   unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
-  handleReply = withInbox(
-    {
-      database: testDatabase.database,
-      handlerName: 'place-order-saga-reply',
-      now: () => approvedAt,
-    },
-    placeOrderSagaReplyConsumer({
-      unitOfWork,
-      clock: new FakeClock(approvedAt),
-      logger: createLogger({ serviceName: 'order-service', level: 'silent' }),
-    }),
-  );
+  inboxSettings = {
+    database: testDatabase.database,
+    handlerName: 'place-order-saga-reply',
+    now: () => approvedAt,
+  };
+  consumeReply = placeOrderSagaReplyConsumer({
+    unitOfWork,
+    clock: new FakeClock(approvedAt),
+    logger: createLogger({ serviceName: 'order-service', level: 'silent' }),
+  });
+  handleReply = withInbox(inboxSettings, consumeReply);
 });
 
 afterAll(async () => {
@@ -99,6 +109,9 @@ describe('placeOrderSagaReplyConsumer', () => {
       'fooddelivery.order.v1.OrderApproved',
     ]);
     expect(outbox[2]?.causationId).toBe(consumerVerified.headers.messageId);
+    expect(outbox.slice(2).map((row) => row.correlationId)).toEqual(
+      Array(4).fill(consumerVerified.headers.correlationId),
+    );
     const orders = new PostgresOrderRepository(testDatabase.database);
     const order = await orders.findById(buildOrder().toSnapshot().orderId);
     expect(order?.toSnapshot().state).toEqual({ status: 'APPROVED', approvedAt });
@@ -107,11 +120,32 @@ describe('placeOrderSagaReplyConsumer', () => {
   it('applies a redelivered reply only once', async () => {
     const consumerVerified = buildReplyMessage(ConsumerVerifiedSchema, { orderId });
 
-    await handleReply(consumerVerified);
-    await handleReply(consumerVerified);
+    let handlerCallCount = 0;
+    const countingHandleReply = withInbox(inboxSettings, async (message, transaction) => {
+      handlerCallCount += 1;
+      await consumeReply(message, transaction);
+    });
+
+    await countingHandleReply(consumerVerified);
+    await countingHandleReply(consumerVerified);
 
     const commandTypes = (await readOutbox()).map((row) => row.messageType);
     expect(commandTypes.filter((type) => type.endsWith('CreateTicket'))).toHaveLength(1);
+    expect(handlerCallCount).toBe(1);
+    expect(await countInboxRows(consumerVerified.headers.messageId)).toBe(1);
+  });
+
+  it('rolls back the saga step, its command and the inbox row when the inbox transaction fails', async () => {
+    const consumerVerified = buildReplyMessage(ConsumerVerifiedSchema, { orderId });
+    const failingHandleReply = withInbox(inboxSettings, async (message, transaction) => {
+      await consumeReply(message, transaction);
+      throw new Error('inbox transaction failed');
+    });
+
+    await expect(failingHandleReply(consumerVerified)).rejects.toThrow('inbox transaction failed');
+
+    expect(await readOutbox()).toHaveLength(2);
+    expect(await countInboxRows(consumerVerified.headers.messageId)).toBe(0);
   });
 
   it('acknowledges a reply the saga is not waiting for without changing anything', async () => {
