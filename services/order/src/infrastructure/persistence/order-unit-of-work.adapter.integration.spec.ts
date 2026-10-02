@@ -1,6 +1,7 @@
 import { fromBinary } from '@bufbuild/protobuf';
 import { runInTransaction } from '@fd/chassis-postgres';
 import { VerifyConsumerSchema } from '@fd/contracts/fooddelivery/consumer/v1/commands_pb.js';
+import { left } from '@fd/domain';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
@@ -102,18 +103,23 @@ describe('order unit of work', () => {
   });
 
   it('writes nothing when the order is rejected', async () => {
-    await placeOrderWith(unitOfWork).execute(buildPlaceOrderCommand({ requestedLineItems: [] }));
+    const placement = await placeOrderWith(unitOfWork).execute(
+      buildPlaceOrderCommand({ requestedLineItems: [] }),
+    );
 
+    expect(placement).toEqual(left({ type: 'EmptyOrder' }));
     expect(await readOutbox()).toEqual([]);
     expect(await countRows('orders')).toBe(0);
+    expect(await countRows('saga_instances')).toBe(0);
     expect(await countRows('idempotency_keys')).toBe(0);
   });
 
   it('commits or rolls back with the transaction it joined', async () => {
     const rollback = runInTransaction(testDatabase.database, async (transaction) => {
-      await placeOrderWith(joinTransaction(unitOfWork, transaction)).execute(
+      const placement = await placeOrderWith(joinTransaction(unitOfWork, transaction)).execute(
         buildPlaceOrderCommand(),
       );
+      expect(placement.isRight()).toBe(true);
       throw new Error('the enclosing message handler failed');
     });
 

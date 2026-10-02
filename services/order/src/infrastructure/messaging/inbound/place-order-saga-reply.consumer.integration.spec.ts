@@ -110,7 +110,7 @@ describe('placeOrderSagaReplyConsumer', () => {
     ]);
     expect(outbox[2]?.causationId).toBe(consumerVerified.headers.messageId);
     expect(outbox.slice(2).map((row) => row.correlationId)).toEqual(
-      Array(4).fill(consumerVerified.headers.correlationId),
+      Array.from({ length: 4 }, () => consumerVerified.headers.correlationId),
     );
     const orders = new PostgresOrderRepository(testDatabase.database);
     const order = await orders.findById(buildOrder().toSnapshot().orderId);
