@@ -77,7 +77,7 @@ export default defineConfig(
       '**/coverage/**',
       '**/.turbo/**',
       'packages/contracts/src/generated/**',
-      'services/*/src/infrastructure/persistence/generated/**',
+      'services/*/src/infrastructure/persistence/generated/database.ts',
       '**/*.js',
       '**/*.cjs',
       '**/*.mjs',

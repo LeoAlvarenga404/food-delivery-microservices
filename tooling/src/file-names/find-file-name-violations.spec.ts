@@ -105,6 +105,14 @@ describe('findFileNameViolations', () => {
       'role ".repository" is not allowed in generated database types',
     ],
     [
+      'services/order/src/infrastructure/persistence/generated/nested/database.ts',
+      'file "database.ts" needs a role suffix in generated database types',
+    ],
+    [
+      'services/order/src/infrastructure/persistence/generated/database.spec.ts',
+      'file "database.spec.ts" needs a role suffix in generated database types',
+    ],
+    [
       'packages/contracts/samples/Order.Events/OrderPlaced.json',
       'topic directory "Order.Events" is not a topic name',
     ],

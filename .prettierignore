@@ -3,4 +3,4 @@ coverage
 .turbo
 docs
 .claude
-services/*/src/infrastructure/persistence/generated/
+services/*/src/infrastructure/persistence/generated/database.ts

@@ -22,7 +22,8 @@
     "test:integration": {
       "dependsOn": ["transit", "generate", "^generate"],
       "passThroughEnv": ["TESTCONTAINERS_*"],
-      "env": ["UPDATE_GOLDEN"]
+      "env": ["UPDATE_GOLDEN"],
+      "outputs": ["src/infrastructure/persistence/generated/**"]
     },
     "test:golden": {
       "cache": false,

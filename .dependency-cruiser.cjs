@@ -62,7 +62,7 @@ module.exports = {
         path: '^(services|packages)/',
         pathNot: [...testCode, '^packages/chassis/testing/', 'vitest\\.config\\.ts$'],
       },
-      to: { path: ['^packages/chassis/testing/', 'node_modules/(\\.pnpm/)?vitest'] },
+      to: { path: ['^packages/chassis/testing/', 'node_modules/(\\.pnpm/)?@?vitest'] },
     },
   ],
   options: {
