@@ -9,9 +9,11 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration"
   },
   "dependencies": {
+    "@fd/chassis-kafka": "workspace:*",
     "@fd/chassis-postgres": "workspace:*",
     "@fd/domain": "workspace:*",
     "kysely": "0.29.6"

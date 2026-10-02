@@ -130,6 +130,9 @@ importers:
 
   packages/chassis/outbox:
     dependencies:
+      '@fd/chassis-kafka':
+        specifier: workspace:*
+        version: link:../kafka
       '@fd/chassis-postgres':
         specifier: workspace:*
         version: link:../postgres
