@@ -162,6 +162,27 @@ describe('OrderService.PlaceOrder', () => {
       invalidPart: 'a menu item id that is not a uuid',
       overrides: { lineItems: [{ menuItemId: 'margherita', quantity: 1 }] },
     },
+    { invalidPart: 'a restaurant id that is not a uuid', overrides: { restaurantId: 'pizzeria' } },
+    {
+      invalidPart: 'the same menu item on two lines',
+      overrides: {
+        lineItems: [
+          { menuItemId: margheritaId, quantity: 1 },
+          { menuItemId: margheritaId, quantity: 2 },
+        ],
+      },
+    },
+    {
+      invalidPart: 'a blank street',
+      overrides: {
+        deliveryAddress: {
+          street: ' ',
+          number: '1500',
+          city: 'Sao Paulo',
+          postalCode: '01304-001',
+        },
+      },
+    },
     { invalidPart: 'an empty order', overrides: { lineItems: [] } },
     {
       invalidPart: 'a quantity of zero',
@@ -185,6 +206,16 @@ describe('OrderService.PlaceOrder', () => {
 
   it('rejects a restaurant without a menu replica as a failed precondition', async () => {
     const request = placeOrderRequest({ restaurantId: '0199a5d0-0000-7000-8000-0000000000ff' });
+
+    await expect(client.placeOrder(request)).rejects.toMatchObject({
+      code: Code.FailedPrecondition,
+    });
+  });
+
+  it('rejects a menu item that is not on the menu as a failed precondition', async () => {
+    const request = placeOrderRequest({
+      lineItems: [{ menuItemId: '0199a5d0-0000-7000-8000-0000000000ff', quantity: 1 }],
+    });
 
     await expect(client.placeOrder(request)).rejects.toMatchObject({
       code: Code.FailedPrecondition,

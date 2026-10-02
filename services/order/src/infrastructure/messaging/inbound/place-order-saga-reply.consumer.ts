@@ -35,11 +35,10 @@ function toMessageMetadata(message: InboundMessage): MessageMetadata {
   };
 }
 
-function reportRejectedReply(failure: ApplyPlaceOrderSagaReplyError, logger: Logger): void {
+function throwWhenSagaIsUnknown(failure: ApplyPlaceOrderSagaReplyError): void {
   if (failure.type === 'SagaNotFound') {
     throw new PermanentMessageFailure(`no place order saga ${failure.sagaId}`);
   }
-  logger.warn({ failure }, 'place order saga reply ignored');
 }
 
 export function placeOrderSagaReplyConsumer(
@@ -59,7 +58,8 @@ export function placeOrderSagaReplyConsumer(
     const handler = new ApplyPlaceOrderSagaReplyCommandHandler(unitOfWork, settings.clock);
     const outcome = await handler.execute({ sagaId, reply, metadata: toMessageMetadata(message) });
     if (outcome.isLeft()) {
-      reportRejectedReply(outcome.failure, logger);
+      throwWhenSagaIsUnknown(outcome.failure);
+      logger.warn({ failure: outcome.failure }, 'place order saga reply ignored');
       return;
     }
     logger.info({ replyType: reply.type }, 'place order saga reply applied');

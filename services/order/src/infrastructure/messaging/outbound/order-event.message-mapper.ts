@@ -19,7 +19,12 @@ export function toOrderPlacedContract(event: OrderPlaced): OrderPlacedContract {
     orderId: event.orderId,
     consumerId: event.consumerId,
     restaurantId: event.restaurantId,
-    lineItems: event.lineItems.map((lineItem) => ({ ...lineItem })),
+    lineItems: event.lineItems.map(({ menuItemId, name, unitPriceInCents, quantity }) => ({
+      menuItemId,
+      name,
+      unitPriceInCents,
+      quantity,
+    })),
     totalInCents: event.totalInCents,
     currency: event.currency,
     placedAt: timestampFromDate(event.occurredAt),

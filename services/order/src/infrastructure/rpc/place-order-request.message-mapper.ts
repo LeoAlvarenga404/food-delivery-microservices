@@ -35,7 +35,11 @@ function parseLineItems(
 }
 
 export function hashPlaceOrderRequest(request: PlaceOrderRequest): string {
-  const payloadWithoutKey = toBinary(PlaceOrderRequestSchema, { ...request, idempotencyKey: '' });
+  const payloadWithoutKey = toBinary(
+    PlaceOrderRequestSchema,
+    { ...request, idempotencyKey: '' },
+    { writeUnknownFields: false },
+  );
   return createHash('sha256').update(payloadWithoutKey).digest('hex');
 }
 

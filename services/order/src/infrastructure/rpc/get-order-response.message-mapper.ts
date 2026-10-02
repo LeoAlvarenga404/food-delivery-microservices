@@ -16,7 +16,12 @@ export function toGetOrderResponse(snapshot: OrderSnapshot): GetOrderResponse {
   return create(GetOrderResponseSchema, {
     orderId: snapshot.orderId,
     status: contractStatusByDomainStatus[snapshot.state.status],
-    lineItems: snapshot.lineItems.map((lineItem) => ({ ...lineItem })),
+    lineItems: snapshot.lineItems.map(({ menuItemId, name, unitPriceInCents, quantity }) => ({
+      menuItemId,
+      name,
+      unitPriceInCents,
+      quantity,
+    })),
     totalInCents: snapshot.totalInCents,
     currency: snapshot.currency,
   });
