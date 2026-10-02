@@ -27,7 +27,7 @@ interface OutgoingMessageCollector<RecordedEvent extends DomainEvent> {
   readonly enqueuedMessages: OutboxMessage[];
 }
 
-export class UnitOfWork<Schema, Repositories, RecordedEvent extends DomainEvent> {
+export class PostgresUnitOfWork<Schema, Repositories, RecordedEvent extends DomainEvent> {
   readonly #settings: UnitOfWorkSettings<Schema, Repositories, RecordedEvent>;
 
   constructor(settings: UnitOfWorkSettings<Schema, Repositories, RecordedEvent>) {

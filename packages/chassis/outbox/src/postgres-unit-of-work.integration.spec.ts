@@ -5,7 +5,7 @@ import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { outboxMigrations } from './outbox-migrations.ts';
 import type { MessageMetadata, OutboxMessage } from './outbox-message.ts';
-import { UnitOfWork, type UnitOfWorkContext } from './unit-of-work.ts';
+import { PostgresUnitOfWork, type UnitOfWorkContext } from './postgres-unit-of-work.ts';
 
 interface TabRenamed extends DomainEvent {
   readonly eventType: 'TabRenamed';
@@ -118,8 +118,8 @@ function generateMessageId(): string {
   return `0192a1b2-0000-7000-8000-${String(messageSequence).padStart(12, '0')}`;
 }
 
-const unitOfWork = (): UnitOfWork<TabSchema, TabRepository, TabRenamed> =>
-  new UnitOfWork({
+const postgresUnitOfWork = (): PostgresUnitOfWork<TabSchema, TabRepository, TabRenamed> =>
+  new PostgresUnitOfWork({
     database,
     createRepositories: (context) => new TabRepository(context),
     toOutboxMessages,
@@ -160,9 +160,9 @@ afterAll(async () => {
   await postgres.stop();
 });
 
-describe('UnitOfWork.execute', () => {
+describe('PostgresUnitOfWork.execute', () => {
   it('commits the aggregate with one outbox row per mapped event and per enqueued message', async () => {
-    const outcome = await unitOfWork().execute(metadata, async (tabs) => {
+    const outcome = await postgresUnitOfWork().execute(metadata, async (tabs) => {
       await renameTab(tabs, 'Friday dinner');
       tabs.enqueueReminder('tab-1');
       return right('renamed');
@@ -198,7 +198,7 @@ describe('UnitOfWork.execute', () => {
   });
 
   it('rolls everything back and returns the left when the work fails as expected', async () => {
-    const outcome = await unitOfWork().execute(metadata, async (tabs) => {
+    const outcome = await postgresUnitOfWork().execute(metadata, async (tabs) => {
       await renameTab(tabs, 'Friday dinner');
       tabs.enqueueReminder('tab-1');
       return left({ type: 'TabLocked' });
@@ -210,7 +210,7 @@ describe('UnitOfWork.execute', () => {
   });
 
   it('commits a right that wrote nothing', async () => {
-    const outcome = await unitOfWork().execute(metadata, () =>
+    const outcome = await postgresUnitOfWork().execute(metadata, () =>
       Promise.resolve(right('nothing to do')),
     );
 
@@ -219,7 +219,7 @@ describe('UnitOfWork.execute', () => {
   });
 
   it('rolls everything back and rethrows when the work throws', async () => {
-    const failing = unitOfWork().execute(metadata, async (tabs) => {
+    const failing = postgresUnitOfWork().execute(metadata, async (tabs) => {
       await renameTab(tabs, 'Friday dinner');
       throw new Error('database went away');
     });
@@ -230,11 +230,11 @@ describe('UnitOfWork.execute', () => {
   });
 });
 
-describe('UnitOfWork.executeWithin', () => {
+describe('PostgresUnitOfWork.executeWithin', () => {
   it('discards only its own writes on a left and keeps the outer transaction usable', async () => {
     const outcome = await runInTransaction(database, async (transaction) => {
       await transaction.insertInto('markers').values({ markerId: 'marker-1' }).execute();
-      return unitOfWork().executeWithin(transaction, metadata, async (tabs) => {
+      return postgresUnitOfWork().executeWithin(transaction, metadata, async (tabs) => {
         await renameTab(tabs, 'Friday dinner');
         return left({ type: 'TabLocked' });
       });
@@ -248,7 +248,7 @@ describe('UnitOfWork.executeWithin', () => {
 
   it('writes the aggregate and its outbox rows inside the outer transaction on a right', async () => {
     const outboxRowsSeenFromOutside = await runInTransaction(database, async (transaction) => {
-      await unitOfWork().executeWithin(transaction, metadata, async (tabs) => {
+      await postgresUnitOfWork().executeWithin(transaction, metadata, async (tabs) => {
         await renameTab(tabs, 'Friday dinner');
         return right(undefined);
       });
@@ -262,9 +262,9 @@ describe('UnitOfWork.executeWithin', () => {
 
   it('keeps an enclosing left free of writes when a nested unit of work also returned a left', async () => {
     const outcome = await runInTransaction(database, (transaction) =>
-      unitOfWork().executeWithin(transaction, metadata, async () => {
+      postgresUnitOfWork().executeWithin(transaction, metadata, async () => {
         await transaction.insertInto('markers').values({ markerId: 'outer' }).execute();
-        await unitOfWork().executeWithin(transaction, metadata, () =>
+        await postgresUnitOfWork().executeWithin(transaction, metadata, () =>
           Promise.resolve(left({ type: 'InnerRejected' })),
         );
         return left({ type: 'OuterRejected' });
