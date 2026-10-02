@@ -9,5 +9,5 @@ export interface InvalidConsumerId {
 
 export function parseConsumerId(rawConsumerId: string): Either<InvalidConsumerId, ConsumerId> {
   if (!isUuid(rawConsumerId)) return left({ type: 'InvalidConsumerId', rawConsumerId });
-  return right(rawConsumerId as ConsumerId);
+  return right(rawConsumerId.toLowerCase() as ConsumerId);
 }

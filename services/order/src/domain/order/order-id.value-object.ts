@@ -9,5 +9,5 @@ export interface InvalidOrderId {
 
 export function parseOrderId(rawOrderId: string): Either<InvalidOrderId, OrderId> {
   if (!isUuid(rawOrderId)) return left({ type: 'InvalidOrderId', rawOrderId });
-  return right(rawOrderId as OrderId);
+  return right(rawOrderId.toLowerCase() as OrderId);
 }

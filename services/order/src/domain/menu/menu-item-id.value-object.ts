@@ -9,5 +9,5 @@ export interface InvalidMenuItemId {
 
 export function parseMenuItemId(rawMenuItemId: string): Either<InvalidMenuItemId, MenuItemId> {
   if (!isUuid(rawMenuItemId)) return left({ type: 'InvalidMenuItemId', rawMenuItemId });
-  return right(rawMenuItemId as MenuItemId);
+  return right(rawMenuItemId.toLowerCase() as MenuItemId);
 }

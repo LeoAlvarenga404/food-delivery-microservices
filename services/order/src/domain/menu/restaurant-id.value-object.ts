@@ -11,5 +11,5 @@ export function parseRestaurantId(
   rawRestaurantId: string,
 ): Either<InvalidRestaurantId, RestaurantId> {
   if (!isUuid(rawRestaurantId)) return left({ type: 'InvalidRestaurantId', rawRestaurantId });
-  return right(rawRestaurantId as RestaurantId);
+  return right(rawRestaurantId.toLowerCase() as RestaurantId);
 }
