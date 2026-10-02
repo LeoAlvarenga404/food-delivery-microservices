@@ -1,8 +1,10 @@
-import { pino, type DestinationStream, type Logger } from 'pino';
+import { pino, type DestinationStream, type Logger, type LevelWithSilent } from 'pino';
+
+export type LogLevel = LevelWithSilent;
 
 export interface LoggerSettings {
   readonly serviceName: string;
-  readonly level: string;
+  readonly level: LogLevel;
 }
 
 export interface CorrelationFields {
