@@ -1,5 +1,4 @@
 import { Code, ConnectError, type HandlerContext, type ServiceImpl } from '@connectrpc/connect';
-import { isUuid } from '@fd/domain';
 import type { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import type { PlaceOrderError } from '#application/commands/place-order/place-order.command.ts';
 import type { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
@@ -8,14 +7,12 @@ import type { GetOrderQueryHandler } from '#application/queries/get-order/get-or
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { toGetOrderResponse } from './get-order-response.message-mapper.ts';
 import { toPlaceOrderCommand } from './place-order-request.message-mapper.ts';
+import { correlationIdKey } from './rpc-failure-logging.adapter.ts';
 
 export interface OrderRpcServiceSettings {
   readonly placeOrder: PlaceOrderCommandHandler;
   readonly getOrder: GetOrderQueryHandler;
-  readonly generateCorrelationId: () => string;
 }
-
-const correlationIdHeader = 'x-correlation-id';
 
 function toConnectCode(error: PlaceOrderError): Code {
   switch (error.type) {
@@ -32,14 +29,9 @@ function toConnectCode(error: PlaceOrderError): Code {
   }
 }
 
-function toRequestMetadata(
-  context: HandlerContext,
-  generateCorrelationId: () => string,
-): MessageMetadata {
-  const incomingCorrelationId = context.requestHeader.get(correlationIdHeader);
-  const hasUsableCorrelationId = incomingCorrelationId !== null && isUuid(incomingCorrelationId);
+function toRequestMetadata(context: HandlerContext): MessageMetadata {
   return {
-    correlationId: hasUsableCorrelationId ? incomingCorrelationId : generateCorrelationId(),
+    correlationId: context.values.get(correlationIdKey),
     causationId: undefined,
     traceparent: undefined,
     actorId: undefined,
@@ -52,7 +44,7 @@ export function createOrderRpcService(
 ): ServiceImpl<typeof OrderService> {
   return {
     async placeOrder(request, context) {
-      const metadata = toRequestMetadata(context, settings.generateCorrelationId);
+      const metadata = toRequestMetadata(context);
       const command = toPlaceOrderCommand(request, metadata);
       if (command.isLeft()) throw new ConnectError(command.failure.field, Code.InvalidArgument);
       const outcome = await settings.placeOrder.execute(command.success);

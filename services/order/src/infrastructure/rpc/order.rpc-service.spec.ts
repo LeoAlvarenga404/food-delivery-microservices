@@ -1,3 +1,4 @@
+import { Writable } from 'node:stream';
 import { create, type MessageInitShape } from '@bufbuild/protobuf';
 import { Code, createClient, createRouterTransport, type Client } from '@connectrpc/connect';
 import {
@@ -6,7 +7,8 @@ import {
   PlaceOrderRequestSchema,
   type PlaceOrderRequest,
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { createLogger } from '@fd/chassis-observability';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../test/support/in-memory-unit-of-work.adapter.ts';
@@ -14,6 +16,7 @@ import { guaranaId, margheritaId, pizzeriaMenu } from '../../../test/support/ord
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
 import { createOrderRpcService } from './order.rpc-service.ts';
+import { createRpcFailureLogging } from './rpc-failure-logging.adapter.ts';
 
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
 
@@ -24,6 +27,18 @@ type PlaceOrderRequestInit = Exclude<
 
 let unitOfWork: InMemoryUnitOfWork;
 let client: Client<typeof OrderService>;
+let logEntries: Record<string, unknown>[];
+
+function captureLogger(): ReturnType<typeof createLogger> {
+  const destination = new Writable({
+    write(chunk: Buffer, encoding, callback) {
+      const parsed: unknown = JSON.parse(chunk.toString());
+      logEntries.push(typeof parsed === 'object' && parsed !== null ? { ...parsed } : {});
+      callback();
+    },
+  });
+  return createLogger({ serviceName: 'order-service', level: 'info' }, destination);
+}
 
 function placeOrderRequest(overrides: PlaceOrderRequestInit = {}): PlaceOrderRequest {
   return create(PlaceOrderRequestSchema, {
@@ -47,20 +62,29 @@ function placeOrderRequest(overrides: PlaceOrderRequestInit = {}): PlaceOrderReq
 
 beforeEach(() => {
   unitOfWork = new InMemoryUnitOfWork();
-  const transport = createRouterTransport(({ service }) => {
-    service(
-      OrderService,
-      createOrderRpcService({
-        placeOrder: new PlaceOrderCommandHandler(
-          unitOfWork,
-          new FakeClock(),
-          new FakeIdGenerator(),
-        ),
-        getOrder: new GetOrderQueryHandler(unitOfWork.orders),
-        generateCorrelationId: () => generatedCorrelationId,
-      }),
-    );
-  });
+  logEntries = [];
+  const interceptors = [
+    createRpcFailureLogging({
+      logger: captureLogger(),
+      generateCorrelationId: () => generatedCorrelationId,
+    }),
+  ];
+  const transport = createRouterTransport(
+    ({ service }) => {
+      service(
+        OrderService,
+        createOrderRpcService({
+          placeOrder: new PlaceOrderCommandHandler(
+            unitOfWork,
+            new FakeClock(),
+            new FakeIdGenerator(),
+          ),
+          getOrder: new GetOrderQueryHandler(unitOfWork.orders),
+        }),
+      );
+    },
+    { router: { interceptors } },
+  );
   client = createClient(OrderService, transport);
 });
 
@@ -80,6 +104,47 @@ describe('OrderService.PlaceOrder', () => {
     });
 
     expect(unitOfWork.executedMetadata[0]?.correlationId).toBe(correlationId);
+  });
+
+  it('replaces a correlation id that is not a uuid with a generated one and echoes it', async () => {
+    let echoedCorrelationId: string | null = null;
+
+    await client.placeOrder(placeOrderRequest(), {
+      headers: { 'x-correlation-id': 'not-a-uuid' },
+      onHeader: (headers) => {
+        echoedCorrelationId = headers.get('x-correlation-id');
+      },
+    });
+
+    expect(unitOfWork.executedMetadata[0]?.correlationId).toBe(generatedCorrelationId);
+    expect(echoedCorrelationId).toBe(generatedCorrelationId);
+  });
+
+  it('hides an unexpected failure from the client and logs it with the correlation id', async () => {
+    const correlationId = '0199a5d0-0000-7000-8000-0000000000e2';
+    vi.spyOn(unitOfWork, 'execute').mockRejectedValue(
+      new Error('relation "orders" does not exist'),
+    );
+
+    await expect(
+      client.placeOrder(placeOrderRequest(), { headers: { 'x-correlation-id': correlationId } }),
+    ).rejects.toMatchObject({ code: Code.Internal, rawMessage: 'internal error' });
+
+    expect(logEntries).toHaveLength(1);
+    expect(logEntries[0]).toMatchObject({
+      level: 50,
+      correlationId,
+      procedure: 'fooddelivery.order.v1.OrderService/PlaceOrder',
+      err: { message: 'relation "orders" does not exist' },
+    });
+  });
+
+  it('does not log failures the client is meant to see', async () => {
+    await expect(client.getOrder({ orderId: 'order-1' })).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+
+    expect(logEntries).toHaveLength(0);
   });
 
   it('answers a retried request with the same order', async () => {

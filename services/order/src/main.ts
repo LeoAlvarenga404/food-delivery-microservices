@@ -22,6 +22,7 @@ import {
 } from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
 import { createOrderRpcService } from '#infrastructure/rpc/order.rpc-service.ts';
+import { createRpcFailureLogging } from '#infrastructure/rpc/rpc-failure-logging.adapter.ts';
 import { SystemClock } from '#infrastructure/system/system-clock.adapter.ts';
 import { UuidV7IdGenerator } from '#infrastructure/system/uuid-v7-id-generator.adapter.ts';
 
@@ -46,15 +47,15 @@ interface RunningHttpServer {
 const placeOrderSagaRepliesTopic = 'order.place-order-saga.replies';
 
 async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpServer> {
-  const { configuration, database, unitOfWork, clock } = parts;
+  const { configuration, logger, database, unitOfWork, clock } = parts;
   const rpcService = createOrderRpcService({
     placeOrder: new PlaceOrderCommandHandler(unitOfWork, clock, new UuidV7IdGenerator()),
     getOrder: new GetOrderQueryHandler(new PostgresOrderRepository(database)),
-    generateCorrelationId: generateUuidV7,
   });
   const server = fastify();
   await server.register(fastifyConnectPlugin, {
     routes: (router) => router.service(OrderService, rpcService),
+    interceptors: [createRpcFailureLogging({ logger, generateCorrelationId: generateUuidV7 })],
   });
   server.get('/health', () => ({ status: 'ok' }));
   const url = await server.listen({ host: configuration.host, port: configuration.port });
