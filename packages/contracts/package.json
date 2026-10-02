@@ -9,7 +9,7 @@
   },
   "scripts": {
     "generate": "buf generate",
-    "lint": "buf lint && eslint .",
+    "lint": "buf lint && buf format -d --exit-code && eslint .",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

@@ -6,6 +6,7 @@
       "dependsOn": ["^transit"]
     },
     "generate": {
+      "dependsOn": ["^generate"],
       "inputs": ["proto/**", "buf.yaml", "buf.gen.yaml"],
       "outputs": ["src/generated/**"]
     },
