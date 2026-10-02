@@ -24,6 +24,7 @@
       "passThroughEnv": ["TESTCONTAINERS_*"]
     },
     "test:golden": {
+      "cache": false,
       "dependsOn": ["transit", "generate", "^generate"],
       "env": ["UPDATE_GOLDEN"]
     },
