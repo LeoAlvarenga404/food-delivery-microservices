@@ -18,6 +18,12 @@ export const testProjects: ViteUserConfig = defineConfig({
           hookTimeout: 120_000,
         },
       },
+      {
+        test: {
+          name: 'golden',
+          include: ['src/**/*.golden.spec.ts'],
+        },
+      },
     ],
   },
 });

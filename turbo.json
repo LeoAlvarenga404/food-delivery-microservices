@@ -22,6 +22,10 @@
       "dependsOn": ["transit", "generate", "^generate"],
       "passThroughEnv": ["TESTCONTAINERS_*"]
     },
+    "test:golden": {
+      "dependsOn": ["transit", "generate", "^generate"],
+      "env": ["UPDATE_GOLDEN"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
