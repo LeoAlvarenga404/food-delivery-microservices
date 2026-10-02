@@ -11,7 +11,8 @@ create table orders (
   delivery_postal_code text not null,
   placed_at timestamptz not null,
   approved_at timestamptz,
-  version integer not null check (version > 0)
+  version integer not null check (version > 0),
+  check ((status = 'APPROVED') = (approved_at is not null))
 );
 
 create table order_line_items (

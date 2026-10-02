@@ -4,7 +4,7 @@ import type { RestaurantMenuRepository } from '#domain/menu/restaurant-menu.repo
 import type { RestaurantMenu } from '#domain/menu/restaurant-menu.value-object.ts';
 import { pizzeriaMenu, unwrap } from './order.builder.ts';
 
-function describeItems(menu: RestaurantMenu | undefined): readonly object[] | undefined {
+function toComparableItems(menu: RestaurantMenu | undefined): readonly object[] | undefined {
   return menu?.items.map((item) => ({
     menuItemId: item.menuItemId,
     name: item.name,
@@ -21,7 +21,7 @@ export function describeRestaurantMenuRepositoryContract(
       const menu = await createRepository().findByRestaurantId(pizzeriaMenu.restaurantId);
 
       expect(menu?.restaurantId).toBe(pizzeriaMenu.restaurantId);
-      expect(describeItems(menu)).toEqual(describeItems(pizzeriaMenu));
+      expect(toComparableItems(menu)).toEqual(toComparableItems(pizzeriaMenu));
     });
 
     it('returns undefined for a restaurant without a menu replica', async () => {

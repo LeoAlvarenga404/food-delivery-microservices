@@ -48,10 +48,10 @@ export class PostgresOrderRepository implements OrderRepository {
   }
 
   async #update(rows: OrderRows, expectedVersion: number): Promise<void> {
-    const { orderId, status, approvedAt } = rows.order;
+    const { orderId } = rows.order;
     const result = await this.#database
       .updateTable('orders')
-      .set({ status, approvedAt, version: expectedVersion + 1 })
+      .set({ ...rows.order, version: expectedVersion + 1 })
       .where('orderId', '=', orderId)
       .where('version', '=', expectedVersion)
       .executeTakeFirst();

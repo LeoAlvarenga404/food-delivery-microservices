@@ -26,9 +26,29 @@ export function describePlaceOrderSagaRepositoryContract(
     });
 
     it('finds a saved saga with its step and the order it carries, amounts included', async () => {
-      await sagas.save(started);
+      const amountBeyondSafeInteger = 9007199254740993n;
+      const [firstLineItem] = started.state.order.lineItems;
+      if (firstLineItem === undefined) throw new Error('the builder saga has no line items');
+      const carryingLargeAmounts = {
+        ...started,
+        state: {
+          ...started.state,
+          order: {
+            ...started.state.order,
+            lineItems: [
+              { ...firstLineItem, unitPriceInCents: amountBeyondSafeInteger, quantity: 1 },
+            ],
+            totalInCents: amountBeyondSafeInteger,
+          },
+        },
+      };
 
-      expect(await findStoredSaga(sagas, started.sagaId)).toEqual({ ...started, version: 1 });
+      await sagas.save(carryingLargeAmounts);
+
+      expect(await findStoredSaga(sagas, started.sagaId)).toEqual({
+        ...carryingLargeAmounts,
+        version: 1,
+      });
     });
 
     it('returns undefined for a saga that was never saved', async () => {
