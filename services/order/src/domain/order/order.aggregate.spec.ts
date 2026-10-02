@@ -126,16 +126,19 @@ describe('Order.approve', () => {
     unwrap(order.approve(approvedAt));
     order.pullRecordedEvents();
 
-    expect(order.approve(approvedAt)).toEqual(
+    expect(order.approve(new Date('2026-10-02T12:10:00.000Z'))).toEqual(
       left({ type: 'InvalidOrderTransition', from: 'APPROVED', to: 'APPROVED' }),
     );
+    expect(order.toSnapshot().state).toEqual({ status: 'APPROVED', approvedAt });
     expect(order.pullRecordedEvents()).toEqual([]);
   });
 });
 
 describe('Order.restore', () => {
-  it('rehydrates a snapshot without recording events', () => {
-    const snapshot = { ...buildOrder().toSnapshot(), version: 3 };
+  it('rehydrates an approved snapshot without recording events', () => {
+    const order = buildOrder();
+    unwrap(order.approve(approvedAt));
+    const snapshot = { ...order.toSnapshot(), version: 3 };
 
     const restored = Order.restore(snapshot);
 

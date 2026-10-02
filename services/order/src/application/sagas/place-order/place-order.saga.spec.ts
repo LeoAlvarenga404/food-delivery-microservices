@@ -19,38 +19,64 @@ describe('placeOrderSaga.start', () => {
   });
 });
 
+interface HappyPathTransition {
+  readonly step: PlaceOrderSagaStep;
+  readonly replyType: PlaceOrderSagaReplyType;
+  readonly nextStep: PlaceOrderSagaStep;
+  readonly commandType: PlaceOrderSagaCommandType;
+}
+
+const happyPath: readonly HappyPathTransition[] = [
+  {
+    step: 'VERIFYING_CONSUMER',
+    replyType: 'ConsumerVerified',
+    nextStep: 'CREATING_TICKET',
+    commandType: 'CreateTicket',
+  },
+  {
+    step: 'CREATING_TICKET',
+    replyType: 'TicketCreated',
+    nextStep: 'AUTHORIZING_PAYMENT',
+    commandType: 'AuthorizePayment',
+  },
+  {
+    step: 'AUTHORIZING_PAYMENT',
+    replyType: 'PaymentAuthorized',
+    nextStep: 'APPROVING_TICKET',
+    commandType: 'ApproveTicket',
+  },
+  {
+    step: 'APPROVING_TICKET',
+    replyType: 'TicketApproved',
+    nextStep: 'COMPLETED',
+    commandType: 'ApproveOrder',
+  },
+];
+
+const steps: readonly PlaceOrderSagaStep[] = [
+  'VERIFYING_CONSUMER',
+  'CREATING_TICKET',
+  'AUTHORIZING_PAYMENT',
+  'APPROVING_TICKET',
+  'COMPLETED',
+];
+const replyTypes: readonly PlaceOrderSagaReplyType[] = [
+  'ConsumerVerified',
+  'TicketCreated',
+  'PaymentAuthorized',
+  'TicketApproved',
+];
+const unexpectedPairs = steps.flatMap((step) =>
+  replyTypes
+    .filter(
+      (replyType) =>
+        !happyPath.some((entry) => entry.step === step && entry.replyType === replyType),
+    )
+    .map((replyType): [PlaceOrderSagaStep, PlaceOrderSagaReplyType] => [step, replyType]),
+);
+
 describe('placeOrderSaga happy path', () => {
-  it.each<{
-    readonly step: PlaceOrderSagaStep;
-    readonly replyType: PlaceOrderSagaReplyType;
-    readonly nextStep: PlaceOrderSagaStep;
-    readonly commandType: PlaceOrderSagaCommandType;
-  }>([
-    {
-      step: 'VERIFYING_CONSUMER',
-      replyType: 'ConsumerVerified',
-      nextStep: 'CREATING_TICKET',
-      commandType: 'CreateTicket',
-    },
-    {
-      step: 'CREATING_TICKET',
-      replyType: 'TicketCreated',
-      nextStep: 'AUTHORIZING_PAYMENT',
-      commandType: 'AuthorizePayment',
-    },
-    {
-      step: 'AUTHORIZING_PAYMENT',
-      replyType: 'PaymentAuthorized',
-      nextStep: 'APPROVING_TICKET',
-      commandType: 'ApproveTicket',
-    },
-    {
-      step: 'APPROVING_TICKET',
-      replyType: 'TicketApproved',
-      nextStep: 'COMPLETED',
-      commandType: 'ApproveOrder',
-    },
-  ])(
+  it.each(happyPath)(
     'in $step, $replyType moves to $nextStep and asks for $commandType',
     ({ step, replyType, nextStep, commandType }) => {
       const state = { step, order };
@@ -63,12 +89,11 @@ describe('placeOrderSaga happy path', () => {
 });
 
 describe('placeOrderSaga with a reply it is not waiting for', () => {
-  it.each<[PlaceOrderSagaStep, PlaceOrderSagaReplyType]>([
-    ['VERIFYING_CONSUMER', 'TicketCreated'],
-    ['CREATING_TICKET', 'ConsumerVerified'],
-    ['APPROVING_TICKET', 'PaymentAuthorized'],
-    ['COMPLETED', 'TicketApproved'],
-  ])('in %s, rejects %s and keeps its state', (step, replyType) => {
+  it('covers every pair outside the happy path', () => {
+    expect(unexpectedPairs).toHaveLength(16);
+  });
+
+  it.each(unexpectedPairs)('in %s, rejects %s and keeps its state', (step, replyType) => {
     const state = { step, order };
     const reply = { type: replyType };
 

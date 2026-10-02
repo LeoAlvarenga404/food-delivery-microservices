@@ -98,4 +98,25 @@ describe('ApplyPlaceOrderSagaReplyCommandHandler', () => {
     expect((await unitOfWork.sagas.findById(sagaId))?.state.step).toBe('VERIFYING_CONSUMER');
     expect(unitOfWork.commands.sentCommands).toEqual([]);
   });
+
+  it('leaves the saga waiting when the order was approved elsewhere', async () => {
+    unwrap(await deliver('ConsumerVerified'));
+    unwrap(await deliver('TicketCreated'));
+    unwrap(await deliver('PaymentAuthorized'));
+    const order = await unitOfWork.orders.findById(orderId);
+    if (order === undefined) throw new Error('placed order is missing');
+    unwrap(order.approve(approvedAt));
+    await unitOfWork.orders.save(order);
+    const versionBefore = (await unitOfWork.orders.findById(orderId))?.toSnapshot().version;
+    const sentCommandCount = unitOfWork.commands.sentCommands.length;
+
+    const outcome = await deliver('TicketApproved');
+
+    expect(outcome).toEqual(
+      left({ type: 'InvalidOrderTransition', from: 'APPROVED', to: 'APPROVED' }),
+    );
+    expect((await unitOfWork.sagas.findById(sagaId))?.state.step).toBe('APPROVING_TICKET');
+    expect((await unitOfWork.orders.findById(orderId))?.toSnapshot().version).toBe(versionBefore);
+    expect(unitOfWork.commands.sentCommands).toHaveLength(sentCommandCount);
+  });
 });
