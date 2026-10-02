@@ -14,7 +14,7 @@
     "test:integration": "turbo run test:integration",
     "test:golden": "turbo run test:golden",
     "lint:files": "node tooling/src/file-names/check-file-names.cli.ts",
-    "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra --config .dependency-cruiser.cjs",
+    "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra services --config .dependency-cruiser.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
