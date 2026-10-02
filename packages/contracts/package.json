@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    ".": "./src/index.ts",
     "./fooddelivery/*": "./src/generated/fooddelivery/*"
   },
   "scripts": {
     "generate": "buf generate",
-    "lint": "buf lint",
+    "lint": "buf lint && eslint .",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

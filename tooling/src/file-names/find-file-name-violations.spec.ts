@@ -28,6 +28,10 @@ describe('findFileNameViolations', () => {
     'packages/domain/src/index.ts',
     'packages/domain/vitest.config.ts',
     'tooling/vitest.config.ts',
+    'packages/contracts/buf.gen.yaml',
+    'packages/contracts/proto/fooddelivery/order/v1/events.proto',
+    'packages/contracts/samples/order.order.events/OrderPlaced.json',
+    'packages/contracts/samples/order.place-order-saga.replies/TicketCreated.json',
   ])('accepts %s', (path) => {
     expect(reasonsFor(path)).toEqual([]);
   });
@@ -91,6 +95,18 @@ describe('findFileNameViolations', () => {
       'file "order.aggregate.extra.ts" does not follow <concept>.<role>.ts',
     ],
     ['infra/Envoy.yaml', 'file name "Envoy.yaml" is not kebab-case'],
+    [
+      'packages/contracts/samples/Order.Events/OrderPlaced.json',
+      'topic directory "Order.Events" is not a topic name',
+    ],
+    [
+      'packages/contracts/samples/order.order.events/order-placed.json',
+      'golden sample "order-placed.json" must be <MessageType>.json',
+    ],
+    [
+      'packages/contracts/samples/OrderPlaced.json',
+      'golden sample must be samples/<topic>/<MessageType>.json',
+    ],
   ])('rejects %s', (path, expectedReason) => {
     expect(reasonsFor(path)).toEqual([expectedReason]);
   });

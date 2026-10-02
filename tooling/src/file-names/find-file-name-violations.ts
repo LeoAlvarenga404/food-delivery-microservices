@@ -1,4 +1,5 @@
 import type { CatalogueRule } from './file-name-catalogue.ts';
+import { findGoldenSampleReasons, isGoldenSamplePath } from './golden-sample-path.ts';
 import { isKebabCase } from './is-kebab-case.ts';
 import {
   parseTypeScriptFileName,
@@ -86,6 +87,9 @@ function findPathViolations(
   path: string,
   catalogue: readonly CatalogueRule[],
 ): readonly FileNameViolation[] {
+  if (isGoldenSamplePath(path)) {
+    return findGoldenSampleReasons(path).map((reason) => ({ path, reason }));
+  }
   const segments = path.split('/');
   const fileName = segments.at(-1) ?? '';
   const reasons = [
