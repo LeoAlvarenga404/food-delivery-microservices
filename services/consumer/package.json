@@ -11,13 +11,19 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
-    "test:unit": "vitest run --project unit"
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
   },
   "dependencies": {
-    "@fd/domain": "workspace:*"
+    "@fd/chassis-inbox": "workspace:*",
+    "@fd/chassis-outbox": "workspace:*",
+    "@fd/chassis-postgres": "workspace:*",
+    "@fd/domain": "workspace:*",
+    "kysely": "0.29.6"
   },
   "devDependencies": {
     "@fd/chassis-testing": "workspace:*",
+    "kysely-codegen": "0.20.0",
     "vitest": "5.0.3"
   }
 }
