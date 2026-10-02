@@ -46,4 +46,26 @@ describe('parseMessageHeaders', () => {
       );
     },
   );
+
+  it.each(['message-id', 'correlation-id', 'causation-id', 'saga-id'])(
+    'rejects a non uuid %s as a permanent failure without echoing it',
+    (identifierHeader) => {
+      const headers = { ...relayedHeaders, [identifierHeader]: Buffer.from('order-17') };
+
+      expect(() => parseMessageHeaders(headers)).toThrow(PermanentMessageFailure);
+      expect(() => parseMessageHeaders(headers)).toThrow(
+        `header ${identifierHeader} is not a uuid`,
+      );
+      expect(() => parseMessageHeaders(headers)).not.toThrow(/order-17/);
+    },
+  );
+
+  it('accepts uppercase uuids', () => {
+    const headers = {
+      ...relayedHeaders,
+      'message-id': Buffer.from('0192A1B2-0000-7000-8000-00000000000A'),
+    };
+
+    expect(parseMessageHeaders(headers).messageId).toBe('0192A1B2-0000-7000-8000-00000000000A');
+  });
 });
