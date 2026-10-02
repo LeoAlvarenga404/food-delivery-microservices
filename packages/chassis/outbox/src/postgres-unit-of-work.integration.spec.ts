@@ -209,7 +209,7 @@ describe('PostgresUnitOfWork.execute', () => {
     expect(await countRows('outbox')).toBe(0);
   });
 
-  it('commits a right that wrote nothing', async () => {
+  it('returns a right that wrote nothing without outbox rows', async () => {
     const outcome = await postgresUnitOfWork().execute(metadata, () =>
       Promise.resolve(right('nothing to do')),
     );
@@ -266,6 +266,36 @@ describe('PostgresUnitOfWork.executeWithin', () => {
         await transaction.insertInto('markers').values({ markerId: 'outer' }).execute();
         await postgresUnitOfWork().executeWithin(transaction, metadata, () =>
           Promise.resolve(left({ type: 'InnerRejected' })),
+        );
+        return left({ type: 'OuterRejected' });
+      }),
+    );
+
+    expect(outcome).toEqual(left({ type: 'OuterRejected' }));
+    expect(await countRows('markers')).toBe(0);
+  });
+
+  it('keeps an enclosing left free of writes when a nested unit of work threw', async () => {
+    const outcome = await runInTransaction(database, (transaction) =>
+      postgresUnitOfWork().executeWithin(transaction, metadata, async () => {
+        await transaction.insertInto('markers').values({ markerId: 'outer' }).execute();
+        await postgresUnitOfWork()
+          .executeWithin(transaction, metadata, () => Promise.reject(new Error('inner failed')))
+          .catch(() => undefined);
+        return left({ type: 'OuterRejected' });
+      }),
+    );
+
+    expect(outcome).toEqual(left({ type: 'OuterRejected' }));
+    expect(await countRows('markers')).toBe(0);
+  });
+
+  it('keeps an enclosing left free of writes when a nested unit of work returned a right', async () => {
+    const outcome = await runInTransaction(database, (transaction) =>
+      postgresUnitOfWork().executeWithin(transaction, metadata, async () => {
+        await transaction.insertInto('markers').values({ markerId: 'outer' }).execute();
+        await postgresUnitOfWork().executeWithin(transaction, metadata, () =>
+          Promise.resolve(right('nothing to do')),
         );
         return left({ type: 'OuterRejected' });
       }),

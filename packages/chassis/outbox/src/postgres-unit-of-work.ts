@@ -53,10 +53,14 @@ export class PostgresUnitOfWork<Schema, Repositories, RecordedEvent extends Doma
       trackedAggregates: [],
       enqueuedMessages: [],
     };
-    const outcome = await work(this.#createRepositories(transaction, collector));
+    const outcome = await work(this.#createRepositories(transaction, collector)).catch(
+      async (error: unknown) => {
+        await this.#rollBackToSavepoint(transaction);
+        throw error;
+      },
+    );
     if (outcome.isLeft()) {
-      await sql`rollback to savepoint unit_of_work`.execute(transaction);
-      await sql`release savepoint unit_of_work`.execute(transaction);
+      await this.#rollBackToSavepoint(transaction);
       return outcome;
     }
     await writeOutboxMessages(transaction, this.#outgoingMessages(collector), {
@@ -66,6 +70,11 @@ export class PostgresUnitOfWork<Schema, Repositories, RecordedEvent extends Doma
     });
     await sql`release savepoint unit_of_work`.execute(transaction);
     return outcome;
+  }
+
+  async #rollBackToSavepoint(transaction: Transaction<Schema>): Promise<void> {
+    await sql`rollback to savepoint unit_of_work`.execute(transaction);
+    await sql`release savepoint unit_of_work`.execute(transaction);
   }
 
   #createRepositories(
