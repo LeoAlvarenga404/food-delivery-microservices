@@ -12,12 +12,15 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "test:unit": "vitest run --project unit",
-    "test:integration": "vitest run --project integration"
+    "test:integration": "vitest run --project integration",
+    "test:golden": "vitest run --project golden"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
     "@fd/chassis-inbox": "workspace:*",
     "@fd/chassis-outbox": "workspace:*",
     "@fd/chassis-postgres": "workspace:*",
+    "@fd/contracts": "workspace:*",
     "@fd/domain": "workspace:*",
     "kysely": "0.29.6"
   },

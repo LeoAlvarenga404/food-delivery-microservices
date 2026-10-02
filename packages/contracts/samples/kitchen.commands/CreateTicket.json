@@ -1,0 +1,16 @@
+{
+  "orderId": "0199a5d0-0000-7000-8000-0000000000a1",
+  "restaurantId": "0199a5d0-0000-7000-8000-000000000001",
+  "lineItems": [
+    {
+      "menuItemId": "0199a5d0-0000-7000-8000-000000000101",
+      "name": "Margherita",
+      "quantity": 2
+    },
+    {
+      "menuItemId": "0199a5d0-0000-7000-8000-000000000103",
+      "name": "Guarana",
+      "quantity": 1
+    }
+  ]
+}
