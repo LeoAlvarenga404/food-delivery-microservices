@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package fooddelivery.kitchen.v1;
+
+message TicketLineItem {
+  string menu_item_id = 1;
+  string name = 2;
+  int32 quantity = 3;
+}
+
+message CreateTicket {
+  string order_id = 1;
+  string restaurant_id = 2;
+  repeated TicketLineItem line_items = 3;
+}
+
+message ApproveTicket {
+  string order_id = 1;
+}

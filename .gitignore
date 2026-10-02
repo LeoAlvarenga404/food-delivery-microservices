@@ -3,6 +3,7 @@ dist/
 coverage/
 .turbo/
 *.tsbuildinfo
+packages/contracts/src/generated/
 
 .env
 .env.*

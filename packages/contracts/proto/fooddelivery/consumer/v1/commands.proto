@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package fooddelivery.consumer.v1;
+
+message VerifyConsumer {
+  string consumer_id = 1;
+  string order_id = 2;
+}

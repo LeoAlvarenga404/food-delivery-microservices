@@ -1,0 +1,8 @@
+syntax = "proto3";
+
+package fooddelivery.accounting.v1;
+
+message PaymentAuthorized {
+  string order_id = 1;
+  string payment_id = 2;
+}

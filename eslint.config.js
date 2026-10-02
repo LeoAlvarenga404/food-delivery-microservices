@@ -76,6 +76,7 @@ export default defineConfig(
       '**/node_modules/**',
       '**/coverage/**',
       '**/.turbo/**',
+      'packages/contracts/src/generated/**',
       '**/*.js',
       '**/*.cjs',
       '**/*.mjs',

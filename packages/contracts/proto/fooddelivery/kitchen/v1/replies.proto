@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package fooddelivery.kitchen.v1;
+
+message TicketCreated {
+  string order_id = 1;
+  string ticket_id = 2;
+}
+
+message TicketApproved {
+  string order_id = 1;
+  string ticket_id = 2;
+}
