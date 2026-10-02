@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { create, toBinary, type DescMessage, type MessageInitShape } from '@bufbuild/protobuf';
-import { createClient, type Client } from '@connectrpc/connect';
+import { Code, createClient, type Client } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
@@ -20,6 +20,7 @@ import {
   OrderService,
   OrderStatus,
   PlaceOrderRequestSchema,
+  type PlaceOrderRequest,
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { sql, type Kysely } from 'kysely';
 import { v7 as generateUuidV7 } from 'uuid';
@@ -40,9 +41,13 @@ let kafka: StartedKafka;
 let orderService: RunningOrderService;
 let client: Client<typeof OrderService>;
 let outboxReader: Kysely<unknown>;
+const stoppers: (() => Promise<void>)[] = [];
 
-async function waitFor<Result>(probe: () => Promise<Result | undefined>): Promise<Result> {
-  const deadline = Date.now() + waitLimitInMilliseconds;
+async function waitFor<Result>(
+  probe: () => Promise<Result | undefined>,
+  limitInMilliseconds = waitLimitInMilliseconds,
+): Promise<Result> {
+  const deadline = Date.now() + limitInMilliseconds;
   while (Date.now() < deadline) {
     const result = await probe();
     if (result !== undefined) return result;
@@ -104,25 +109,43 @@ async function reply<Schema extends DescMessage>(
   await producer.disconnect();
 }
 
-const placeOrderRequest = create(PlaceOrderRequestSchema, {
-  idempotencyKey: 'checkout-component-test',
-  consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
-  restaurantId: pizzeriaMenu.restaurantId,
-  lineItems: [
-    { menuItemId: margheritaId, quantity: 2 },
-    { menuItemId: guaranaId, quantity: 1 },
-  ],
-  deliveryAddress: {
-    street: 'Rua Augusta',
-    number: '1500',
-    city: 'Sao Paulo',
-    postalCode: '01304-001',
-  },
-  paymentToken: 'tok_visa_4242',
-});
+function buildPlaceOrderRequest(idempotencyKey: string, paymentToken: string): PlaceOrderRequest {
+  return create(PlaceOrderRequestSchema, {
+    idempotencyKey,
+    paymentToken,
+    consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
+    restaurantId: pizzeriaMenu.restaurantId,
+    lineItems: [
+      { menuItemId: margheritaId, quantity: 2 },
+      { menuItemId: guaranaId, quantity: 1 },
+    ],
+    deliveryAddress: {
+      street: 'Rua Augusta',
+      number: '1500',
+      city: 'Sao Paulo',
+      postalCode: '01304-001',
+    },
+  });
+}
+
+async function countConnectionsTo(databaseName: string): Promise<number> {
+  const result = await sql<{ readonly connectionCount: bigint }>`
+    select count(*) as connection_count from pg_stat_activity where datname = ${databaseName}
+  `.execute(outboxReader);
+  return Number(result.rows[0]?.connectionCount);
+}
 
 beforeAll(async () => {
-  [postgres, kafka] = await Promise.all([startPostgresContainer(), startKafkaContainer()]);
+  [postgres, kafka] = await Promise.all([
+    startPostgresContainer().then((started) => {
+      stoppers.push(() => started.stop());
+      return started;
+    }),
+    startKafkaContainer().then((started) => {
+      stoppers.push(() => started.stop());
+      return started;
+    }),
+  ]);
   await createReplyTopics();
   orderService = await startOrderService({
     databaseUrl: postgres.connectionUri,
@@ -131,6 +154,7 @@ beforeAll(async () => {
     port: 0,
     logLevel: 'silent',
   });
+  stoppers.push(() => orderService.stop());
   client = createClient(
     OrderService,
     createConnectTransport({ baseUrl: orderService.url, httpVersion: '1.1' }),
@@ -140,17 +164,26 @@ beforeAll(async () => {
     maximumConnectionCount: 1,
     onConnectionError: () => undefined,
   });
+  stoppers.push(() => outboxReader.destroy());
 });
 
 afterAll(async () => {
-  await outboxReader.destroy();
-  await orderService.stop();
-  await Promise.all([kafka.stop(), postgres.stop()]);
+  const failures: unknown[] = [];
+  for (const stop of stoppers.reverse()) {
+    try {
+      await stop();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, 'stopping the component test failed');
 });
 
 describe('order service', () => {
   it('approves a placed order once every participant replied through Kafka', async () => {
-    const { orderId } = await client.placeOrder(placeOrderRequest);
+    const { orderId } = await client.placeOrder(
+      buildPlaceOrderRequest('checkout-component-test', 'tok_visa_4242'),
+    );
 
     await reply(
       await waitForCommand('fooddelivery.consumer.v1.VerifyConsumer'),
@@ -185,9 +218,43 @@ describe('order service', () => {
   });
 
   it('answers a repeated placement with the same Idempotency-Key with the same order', async () => {
-    const first = await client.placeOrder(placeOrderRequest);
-    const repeated = await client.placeOrder(placeOrderRequest);
+    const request = buildPlaceOrderRequest('checkout-replay-test', 'tok_visa_4242');
+    const different = buildPlaceOrderRequest('checkout-replay-test', 'tok_mastercard_4444');
+
+    const first = await client.placeOrder(request);
+    const repeated = await client.placeOrder(request);
 
     expect(repeated.orderId).toBe(first.orderId);
+    await expect(client.placeOrder(different)).rejects.toMatchObject({
+      code: Code.AlreadyExists,
+    });
+  });
+
+  it('answers its health endpoint', async () => {
+    const response = await fetch(`${orderService.url}/health`);
+
+    expect(response.status).toBe(200);
+  });
+
+  it('releases its database connections when it fails to start', async () => {
+    const databaseName = 'order_start_failure';
+    await sql`create database order_start_failure`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = `/${databaseName}`;
+
+    const failedStart = startOrderService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: Number(new URL(orderService.url).port),
+      logLevel: 'silent',
+    });
+
+    await expect(failedStart).rejects.toThrow();
+    const openConnections = await waitFor(async () => {
+      const count = await countConnectionsTo(databaseName);
+      return count === 0 ? count : undefined;
+    }, 5_000);
+    expect(openConnections).toBe(0);
   });
 });

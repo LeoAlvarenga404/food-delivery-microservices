@@ -7,6 +7,7 @@ import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js'
 import { fastify, type FastifyInstance } from 'fastify';
 import type { Kysely } from 'kysely';
 import { v7 as generateUuidV7 } from 'uuid';
+import type { Clock } from '#application/ports/clock.port.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
 import { placeOrderSagaReplyConsumer } from '#infrastructure/messaging/inbound/place-order-saga-reply.consumer.ts';
@@ -36,7 +37,7 @@ interface OrderServiceParts {
   readonly logger: Logger;
   readonly database: Kysely<OrderDatabase>;
   readonly unitOfWork: OrderUnitOfWork;
-  readonly clock: SystemClock;
+  readonly clock: Clock;
 }
 
 interface RunningHttpServer {
@@ -58,8 +59,13 @@ async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpSer
     interceptors: [createRpcFailureLogging({ logger, generateCorrelationId: generateUuidV7 })],
   });
   server.get('/health', () => ({ status: 'ok' }));
-  const url = await server.listen({ host: configuration.host, port: configuration.port });
-  return { server, url };
+  try {
+    const url = await server.listen({ host: configuration.host, port: configuration.port });
+    return { server, url };
+  } catch (error) {
+    await server.close();
+    throw error;
+  }
 }
 
 async function startReplyConsumer(parts: OrderServiceParts): Promise<RunningConsumer> {
@@ -88,7 +94,12 @@ async function prepareParts(configuration: OrderServiceConfiguration): Promise<O
       logger.error({ err: error }, 'database connection lost');
     },
   });
-  await migrateToLatest(database, orderMigrationSources);
+  try {
+    await migrateToLatest(database, orderMigrationSources);
+  } catch (error) {
+    await database.destroy();
+    throw error;
+  }
   const clock = new SystemClock();
   const unitOfWork = createOrderUnitOfWork({
     database,
@@ -98,21 +109,35 @@ async function prepareParts(configuration: OrderServiceConfiguration): Promise<O
   return { configuration, logger, database, unitOfWork, clock };
 }
 
+type Stopper = () => Promise<void>;
+
+async function stopInOrder(stoppers: readonly Stopper[]): Promise<void> {
+  for (const stop of stoppers) await stop();
+}
+
+async function startResources(parts: OrderServiceParts, stoppers: Stopper[]): Promise<string> {
+  const replyConsumer = await startReplyConsumer(parts);
+  stoppers.unshift(() => replyConsumer.stop());
+  const http = await startHttpServer(parts);
+  stoppers.unshift(() => http.server.close());
+  return http.url;
+}
+
 export async function startOrderService(
   configuration: OrderServiceConfiguration,
 ): Promise<RunningOrderService> {
   const parts = await prepareParts(configuration);
-  const replyConsumer = await startReplyConsumer(parts);
-  const http = await startHttpServer(parts);
-  parts.logger.info({ url: http.url }, 'order service started');
-  return {
-    url: http.url,
-    stop: async () => {
-      await http.server.close();
-      await replyConsumer.stop();
-      await parts.database.destroy();
-    },
-  };
+  const stoppers: Stopper[] = [() => parts.database.destroy()];
+  try {
+    const url = await startResources(parts, stoppers);
+    parts.logger.info({ url }, 'order service started');
+    return { url, stop: () => stopInOrder(stoppers) };
+  } catch (error) {
+    await stopInOrder(stoppers).catch((stopError: unknown) => {
+      parts.logger.error({ err: stopError }, 'releasing resources after a failed start failed');
+    });
+    throw error;
+  }
 }
 
 if (import.meta.main) {
