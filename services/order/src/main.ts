@@ -24,6 +24,7 @@ import {
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
 import { createOrderRpcService } from '#infrastructure/rpc/order.rpc-service.ts';
 import { createRpcCorrelation } from '#infrastructure/rpc/rpc-correlation.adapter.ts';
+import { stopInOrder, type Stopper } from '#infrastructure/system/service-shutdown.adapter.ts';
 import { SystemClock } from '#infrastructure/system/system-clock.adapter.ts';
 import { UuidV7IdGenerator } from '#infrastructure/system/uuid-v7-id-generator.adapter.ts';
 
@@ -107,12 +108,6 @@ async function prepareParts(configuration: OrderServiceConfiguration): Promise<O
     now: () => clock.now(),
   });
   return { configuration, logger, database, unitOfWork, clock };
-}
-
-type Stopper = () => Promise<void>;
-
-async function stopInOrder(stoppers: readonly Stopper[]): Promise<void> {
-  for (const stop of stoppers) await stop();
 }
 
 async function startResources(parts: OrderServiceParts, stoppers: Stopper[]): Promise<string> {
