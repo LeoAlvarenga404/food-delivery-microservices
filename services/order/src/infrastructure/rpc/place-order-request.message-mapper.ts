@@ -37,7 +37,16 @@ function parseLineItems(
 export function hashPlaceOrderRequest(request: PlaceOrderRequest): string {
   const payloadWithoutKey = toBinary(
     PlaceOrderRequestSchema,
-    { ...request, idempotencyKey: '' },
+    {
+      ...request,
+      idempotencyKey: '',
+      consumerId: request.consumerId.toLowerCase(),
+      restaurantId: request.restaurantId.toLowerCase(),
+      lineItems: request.lineItems.map((lineItem) => ({
+        ...lineItem,
+        menuItemId: lineItem.menuItemId.toLowerCase(),
+      })),
+    },
     { writeUnknownFields: false },
   );
   return createHash('sha256').update(payloadWithoutKey).digest('hex');

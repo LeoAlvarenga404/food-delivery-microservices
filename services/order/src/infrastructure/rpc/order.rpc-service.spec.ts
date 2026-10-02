@@ -194,6 +194,23 @@ describe('OrderService.PlaceOrder', () => {
     expect(unitOfWork.orders.rows.size).toBe(1);
   });
 
+  it('answers a lowercase retry of an uppercase placement with the same order', async () => {
+    const lowercase = placeOrderRequest();
+    const uppercase = placeOrderRequest({
+      consumerId: lowercase.consumerId.toUpperCase(),
+      restaurantId: lowercase.restaurantId.toUpperCase(),
+      lineItems: lowercase.lineItems.map((lineItem) => ({
+        menuItemId: lineItem.menuItemId.toUpperCase(),
+        quantity: lineItem.quantity,
+      })),
+    });
+
+    const first = await client.placeOrder(uppercase);
+    const retried = await client.placeOrder(lowercase);
+
+    expect(retried.orderId).toBe(first.orderId);
+  });
+
   it.each<{ readonly invalidPart: string; readonly overrides: PlaceOrderRequestInit }>([
     { invalidPart: 'a blank idempotency key', overrides: { idempotencyKey: ' ' } },
     { invalidPart: 'a consumer id that is not a uuid', overrides: { consumerId: 'consumer-1' } },
