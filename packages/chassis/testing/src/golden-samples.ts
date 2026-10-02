@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import {
   fromJsonString,
   toJsonString,
@@ -35,9 +36,10 @@ export async function expectGoldenSample<Schema extends DescMessage>(
   const expectedJson = await readFile(file, 'utf8');
   const actual: unknown = JSON.parse(actualJson);
   const expected: unknown = JSON.parse(expectedJson);
-  expect(actual, `golden sample ${file.pathname} (run with UPDATE_GOLDEN=1 to rewrite)`).toEqual(
-    expected,
-  );
+  expect(
+    actual,
+    `golden sample ${fileURLToPath(file)} (run with UPDATE_GOLDEN=1 to rewrite)`,
+  ).toEqual(expected);
 }
 
 export async function readGoldenSample<Schema extends DescMessage>(
