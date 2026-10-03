@@ -4,19 +4,19 @@ import { KafkaConnectClient } from './kafka-connect-client.ts';
 
 let kafkaConnectDouble: Server | undefined;
 let restartRequests: string[];
-let statusReads: number;
+let statusReadCount: number;
 
 async function serveStatuses(statuses: readonly object[]): Promise<KafkaConnectClient> {
   const remaining = [...statuses];
   restartRequests = [];
-  statusReads = 0;
+  statusReadCount = 0;
   kafkaConnectDouble = createServer((request, response) => {
     if (request.method === 'POST') {
       restartRequests.push(request.url ?? '');
       response.writeHead(202, { 'content-type': 'application/json' }).end('{}');
       return;
     }
-    statusReads += 1;
+    statusReadCount += 1;
     const status = remaining.length > 1 ? remaining.shift() : remaining[0];
     response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(status));
   });
@@ -68,7 +68,7 @@ describe('KafkaConnectClient.waitForConnectorRunning', () => {
     ]);
 
     await expect(kafkaConnect.waitForConnectorRunning('order-outbox')).resolves.toBeUndefined();
-    expect(statusReads).toBe(2);
+    expect(statusReadCount).toBe(2);
   });
 
   it('fails only on consecutive failed reads', async () => {

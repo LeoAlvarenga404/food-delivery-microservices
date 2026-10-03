@@ -84,11 +84,7 @@ export class KafkaConnectClient {
         return connector?.state === 'RUNNING' && isEveryTaskRunning;
       },
       () => {
-        const lastFailure =
-          previousFailure === undefined
-            ? ''
-            : `
-${previousFailure.message}`;
+        const lastFailure = previousFailure === undefined ? '' : `\n${previousFailure.message}`;
         return `connector ${name} is not RUNNING; see ${this.#baseUrl}/connectors/${name}/status${lastFailure}`;
       },
     );
