@@ -1,3 +1,6 @@
+import { readFile } from 'node:fs/promises';
+import { sql } from 'kysely';
+import type { PlaceOrderSagaState } from '#application/sagas/place-order/place-order.saga-state.ts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildSagaInstance,
@@ -8,6 +11,7 @@ import {
   type OrderTestDatabase,
 } from '../../../test/support/order-database.builder.ts';
 import { describePlaceOrderSagaRepositoryContract } from '../../../test/support/place-order-saga-repository.contract.ts';
+import { placeOrderSagaPersistenceMapper } from './place-order-saga.persistence-mapper.ts';
 import { PostgresPlaceOrderSagaRepository } from './postgres-place-order-saga.repository.ts';
 
 let testDatabase: OrderTestDatabase;
@@ -87,5 +91,48 @@ describe('postgres place order saga repository rows', () => {
     await sagas.save({ ...stored, state: { step: 'APPROVING_TICKET', order: buildSagaOrder() } });
 
     expect(await readStoredState()).not.toContain('tok_visa_4242');
+  });
+
+  it('moves the payment token of slice 1 rows out of the stored order', async () => {
+    const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
+    const insertSlice1Row = async (sagaId: string, state: PlaceOrderSagaState) => {
+      const row = placeOrderSagaPersistenceMapper.toPersistence({ sagaId, state, version: 1 });
+      await testDatabase.database
+        .insertInto('sagaInstances')
+        .values({ ...row, orderId: crypto.randomUUID() })
+        .execute();
+      await sql`update saga_instances
+        set state = jsonb_set(state #- '{paymentToken}', '{order,paymentToken}', '"tok_visa_4242"')
+        where saga_id = ${sagaId}`.execute(testDatabase.database);
+    };
+    const completedId = '0199a5d0-0000-7000-8000-0000000000c1';
+    const creatingTicketId = '0199a5d0-0000-7000-8000-0000000000c2';
+    await insertSlice1Row(completedId, {
+      step: 'COMPLETED',
+      order: buildSagaOrder(),
+    });
+    await insertSlice1Row(creatingTicketId, {
+      step: 'CREATING_TICKET',
+      order: buildSagaOrder(),
+      paymentToken: 'tok_visa_4242',
+    });
+    const migrationSql = await readFile(
+      new URL('./migrations/0008-move-payment-token-out-of-saga-order.sql', import.meta.url),
+      'utf8',
+    );
+
+    await sql.raw(migrationSql).execute(testDatabase.database);
+
+    const completedRow = await testDatabase.database
+      .selectFrom('sagaInstances')
+      .select('state')
+      .where('sagaId', '=', completedId)
+      .executeTakeFirstOrThrow();
+    expect(JSON.stringify(completedRow.state)).not.toContain('tok_visa_4242');
+    const creatingTicket = await sagas.findById(creatingTicketId);
+    expect(creatingTicket?.state).toMatchObject({
+      step: 'CREATING_TICKET',
+      paymentToken: 'tok_visa_4242',
+    });
   });
 });
