@@ -44,6 +44,15 @@ describe('consumer bff server', () => {
     expect(response.json()).toMatchObject({ title: 'Bad Request', status: 400 });
   });
 
+  it('answers a malformed percent-encoded path with a bad request problem and a correlation id', async () => {
+    const response = await server.inject({ method: 'GET', url: '/v1/orders/%E0%A4%A' });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toBe('application/problem+json; charset=utf-8');
+    expect(response.headers['x-correlation-id']).toBe(generatedCorrelationId);
+    expect(response.json()).toMatchObject({ title: 'Bad Request', status: 400 });
+  });
+
   it('echoes the correlation id of the caller in canonical lowercase', async () => {
     const response = await server.inject({
       method: 'GET',

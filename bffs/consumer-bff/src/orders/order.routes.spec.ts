@@ -17,6 +17,7 @@ const idempotencyKey = '0199a5d0-0000-4000-8000-0000000000f1';
 const restaurantId = '0199a5d0-0000-7000-8000-0000000000b1';
 const margheritaId = '0199a5d0-0000-7000-8000-0000000000d1';
 const callerCorrelationId = '0199a5d0-0000-7000-8000-0000000000e2';
+const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
 const placementHeaders = { 'idempotency-key': idempotencyKey, 'x-consumer-id': consumerId };
 
 let orderService: FakeOrderService;
@@ -62,7 +63,7 @@ beforeEach(async () => {
   server = await createConsumerBffServer({
     orderService: orderService.client(),
     logger: captureLogger(),
-    generateCorrelationId: () => '0199a5d0-0000-7000-8000-0000000000e9',
+    generateCorrelationId: () => generatedCorrelationId,
   });
 });
 
@@ -92,10 +93,38 @@ describe('POST /v1/orders', () => {
     ]);
   });
 
-  it('forwards the correlation id of the caller to the order service', async () => {
-    await placeOrder({ ...placementHeaders, 'x-correlation-id': callerCorrelationId });
+  it.each([
+    { scenario: 'the caller sent', sent: callerCorrelationId, expected: callerCorrelationId },
+    {
+      scenario: 'the caller sent in uppercase, in lowercase',
+      sent: callerCorrelationId.toUpperCase(),
+      expected: callerCorrelationId,
+    },
+    { scenario: 'the bff generated', sent: undefined, expected: generatedCorrelationId },
+  ])(
+    'forwards the correlation id $scenario to the order service on placement',
+    async ({ sent, expected }) => {
+      const response = await placeOrder(
+        sent === undefined ? placementHeaders : { ...placementHeaders, 'x-correlation-id': sent },
+      );
 
-    expect(orderService.receivedCorrelationIds).toEqual([callerCorrelationId]);
+      expect(response.headers['x-correlation-id']).toBe(expected);
+      expect(orderService.receivedCorrelationIds).toEqual([expected]);
+    },
+  );
+
+  it('answers a placement with an order id that is not a uuid as an internal error without echoing it', async () => {
+    orderService.answeredOrderId = 'postgres://order:pw@db/order';
+
+    const response = await placeOrder(placementHeaders);
+
+    expect(response.statusCode).toBe(500);
+    expect(response.headers['content-type']).toBe('application/problem+json; charset=utf-8');
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+    });
   });
 
   it.each([
@@ -231,33 +260,40 @@ describe('POST /v1/orders', () => {
 });
 
 describe('GET /v1/orders/:orderId', () => {
-  it('answers an order with its status, frozen line items and amounts in cents as strings', async () => {
-    orderService.orders.set(
-      placedOrderId,
-      create(GetOrderResponseSchema, {
+  it.each([
+    { status: OrderStatus.APPROVAL_PENDING, publicStatus: 'APPROVAL_PENDING' },
+    { status: OrderStatus.APPROVED, publicStatus: 'APPROVED' },
+    { status: OrderStatus.REJECTED, publicStatus: 'REJECTED' },
+  ])(
+    'answers a $publicStatus order with its frozen line items and amounts in cents as strings',
+    async ({ status, publicStatus }) => {
+      orderService.orders.set(
+        placedOrderId,
+        create(GetOrderResponseSchema, {
+          orderId: placedOrderId,
+          status,
+          lineItems: [
+            { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: 4500n, quantity: 2 },
+          ],
+          totalInCents: 9000n,
+          currency: 'BRL',
+        }),
+      );
+
+      const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
         orderId: placedOrderId,
-        status: OrderStatus.APPROVED,
+        status: publicStatus,
         lineItems: [
-          { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: 4500n, quantity: 2 },
+          { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: '4500', quantity: 2 },
         ],
-        totalInCents: 9000n,
+        totalInCents: '9000',
         currency: 'BRL',
-      }),
-    );
-
-    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      orderId: placedOrderId,
-      status: 'APPROVED',
-      lineItems: [
-        { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: '4500', quantity: 2 },
-      ],
-      totalInCents: '9000',
-      currency: 'BRL',
-    });
-  });
+      });
+    },
+  );
 
   it('keeps an amount beyond 2^53 cents exact', async () => {
     orderService.orders.set(
@@ -285,10 +321,34 @@ describe('GET /v1/orders/:orderId', () => {
     expect(response.json()).toEqual({ type: 'about:blank', title: 'Not Found', status: 404 });
   });
 
+  it.each([
+    { scenario: 'the caller sent', sent: callerCorrelationId, expected: callerCorrelationId },
+    { scenario: 'the bff generated', sent: undefined, expected: generatedCorrelationId },
+  ])('forwards the correlation id $scenario to the order service on lookup', async (row) => {
+    orderService.orders.set(
+      placedOrderId,
+      create(GetOrderResponseSchema, {
+        orderId: placedOrderId,
+        status: OrderStatus.APPROVED,
+        currency: 'BRL',
+      }),
+    );
+
+    await server.inject({
+      method: 'GET',
+      url: `/v1/orders/${placedOrderId}`,
+      headers: row.sent === undefined ? {} : { 'x-correlation-id': row.sent },
+    });
+
+    expect(orderService.receivedCorrelationIds).toEqual([row.expected]);
+  });
+
   it('answers an order id that is not a uuid with a bad request problem', async () => {
     const response = await server.inject({ method: 'GET', url: '/v1/orders/order-1' });
 
     expect(response.statusCode).toBe(400);
+    expect(response.headers['content-type']).toBe('application/problem+json; charset=utf-8');
+    expect(response.json()).toMatchObject({ title: 'Bad Request', status: 400 });
     expect(orderService.receivedCorrelationIds).toHaveLength(0);
   });
 

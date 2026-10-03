@@ -59,6 +59,9 @@ function createHttpServer(settings: ConsumerBffSettings): ConsumerBffServer {
     }),
     genReqId: (request) =>
       resolveCorrelationId(request.headers[correlationIdHeader], settings.generateCorrelationId),
+    frameworkErrors: (error, request, reply) => {
+      void sendProblemDetails(error, request, reply.header(correlationIdHeader, request.id));
+    },
   }).withTypeProvider<ZodTypeProvider>();
   server.setValidatorCompiler(validatorCompiler);
   server.setSerializerCompiler(serializerCompiler);

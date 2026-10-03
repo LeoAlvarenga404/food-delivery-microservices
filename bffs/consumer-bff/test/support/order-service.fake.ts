@@ -20,6 +20,7 @@ export class FakeOrderService {
   readonly placeOrderRequests: PlaceOrderRequest[] = [];
   readonly receivedCorrelationIds: string[] = [];
   readonly orders = new Map<string, GetOrderResponse>();
+  answeredOrderId = placedOrderId;
   failure: ConnectError | undefined = undefined;
   responseDelayInMilliseconds = 0;
 
@@ -28,7 +29,7 @@ export class FakeOrderService {
       placeOrder: async (request, context) => {
         await this.#receive(context);
         this.placeOrderRequests.push(request);
-        return { orderId: placedOrderId };
+        return { orderId: this.answeredOrderId };
       },
       getOrder: async (request, context) => {
         await this.#receive(context);
