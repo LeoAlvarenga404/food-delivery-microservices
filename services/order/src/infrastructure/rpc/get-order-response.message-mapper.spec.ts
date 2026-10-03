@@ -20,4 +20,11 @@ describe('toGetOrderResponse', () => {
       ],
     });
   });
+
+  it('maps a rejected order to the REJECTED status', () => {
+    const order = buildOrder();
+    unwrap(order.reject('PAYMENT_DECLINED', new Date('2026-10-02T12:00:07.000Z')));
+
+    expect(toGetOrderResponse(order.toSnapshot()).status).toBe(OrderStatus.REJECTED);
+  });
 });

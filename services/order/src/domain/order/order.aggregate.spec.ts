@@ -1,4 +1,4 @@
-import { left } from '@fd/domain';
+import { left, right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import {
   buildOrder,
@@ -13,6 +13,7 @@ import { Order } from './order.aggregate.ts';
 
 const placedAt = new Date('2026-10-02T12:00:00.000Z');
 const approvedAt = new Date('2026-10-02T12:00:05.000Z');
+const rejectedAt = new Date('2026-10-02T12:00:07.000Z');
 const frozenLineItems = [
   { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: 4500n, quantity: 2 },
   { menuItemId: guaranaId, name: 'Guarana', unitPriceInCents: 800n, quantity: 1 },
@@ -134,6 +135,66 @@ describe('Order.approve', () => {
   });
 });
 
+describe('Order.reject', () => {
+  it('rejects a pending order with its reason and records OrderRejected', () => {
+    const order = buildOrder();
+    order.pullRecordedEvents();
+
+    expect(order.reject('PAYMENT_DECLINED', rejectedAt)).toEqual(right(undefined));
+    expect(order.toSnapshot().state).toEqual({
+      status: 'REJECTED',
+      rejectionReason: 'PAYMENT_DECLINED',
+      rejectedAt,
+    });
+    expect(order.pullRecordedEvents()).toEqual([
+      {
+        eventType: 'OrderRejected',
+        occurredAt: rejectedAt,
+        orderId: '0199a5d0-0000-7000-8000-0000000000a1',
+        rejectionReason: 'PAYMENT_DECLINED',
+      },
+    ]);
+  });
+
+  it('refuses to reject an approved order and records nothing', () => {
+    const order = buildOrder();
+    unwrap(order.approve(approvedAt));
+    order.pullRecordedEvents();
+
+    expect(order.reject('PAYMENT_DECLINED', rejectedAt)).toEqual(
+      left({ type: 'InvalidOrderTransition', from: 'APPROVED', to: 'REJECTED' }),
+    );
+    expect(order.toSnapshot().state).toEqual({ status: 'APPROVED', approvedAt });
+    expect(order.pullRecordedEvents()).toEqual([]);
+  });
+
+  it('refuses to reject an order twice and keeps the first reason', () => {
+    const order = buildOrder();
+    unwrap(order.reject('CONSUMER_BLOCKED', rejectedAt));
+    order.pullRecordedEvents();
+
+    expect(order.reject('PAYMENT_DECLINED', new Date('2026-10-02T12:10:00.000Z'))).toEqual(
+      left({ type: 'InvalidOrderTransition', from: 'REJECTED', to: 'REJECTED' }),
+    );
+    expect(order.toSnapshot().state).toEqual({
+      status: 'REJECTED',
+      rejectionReason: 'CONSUMER_BLOCKED',
+      rejectedAt,
+    });
+    expect(order.pullRecordedEvents()).toEqual([]);
+  });
+
+  it('refuses to approve a rejected order', () => {
+    const order = buildOrder();
+    unwrap(order.reject('CONSUMER_NOT_FOUND', rejectedAt));
+
+    expect(order.approve(approvedAt)).toEqual(
+      left({ type: 'InvalidOrderTransition', from: 'REJECTED', to: 'APPROVED' }),
+    );
+    expect(order.toSnapshot().state.status).toBe('REJECTED');
+  });
+});
+
 describe('Order.restore', () => {
   it('rehydrates an approved snapshot without recording events', () => {
     const order = buildOrder();
@@ -144,5 +205,16 @@ describe('Order.restore', () => {
 
     expect(restored.toSnapshot()).toEqual(snapshot);
     expect(restored.pullRecordedEvents()).toEqual([]);
+  });
+
+  it('rehydrates a rejected snapshot that can no longer be approved', () => {
+    const order = buildOrder();
+    unwrap(order.reject('TICKET_REFUSED', rejectedAt));
+    const snapshot = { ...order.toSnapshot(), version: 2 };
+
+    const restored = Order.restore(snapshot);
+
+    expect(restored.toSnapshot()).toEqual(snapshot);
+    expect(restored.approve(approvedAt).isLeft()).toBe(true);
   });
 });

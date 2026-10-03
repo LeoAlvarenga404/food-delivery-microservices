@@ -10,6 +10,7 @@ import type { OrderStatus as DomainOrderStatus } from '#domain/order/order.state
 const contractStatusByDomainStatus: Readonly<Record<DomainOrderStatus, OrderStatus>> = {
   APPROVAL_PENDING: OrderStatus.APPROVAL_PENDING,
   APPROVED: OrderStatus.APPROVED,
+  REJECTED: OrderStatus.REJECTED,
 };
 
 export function toGetOrderResponse(snapshot: OrderSnapshot): GetOrderResponse {
