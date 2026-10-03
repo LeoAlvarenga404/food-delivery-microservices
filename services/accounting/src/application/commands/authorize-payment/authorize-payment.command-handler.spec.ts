@@ -4,6 +4,7 @@ import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-w
 import { FakePaymentGateway } from '../../../../test/support/payment-gateway.fake.ts';
 import {
   authorizePaymentInput,
+  buildPayment,
   orderId,
   paymentId,
 } from '../../../../test/support/payment.builder.ts';
@@ -76,6 +77,20 @@ describe('AuthorizePaymentCommandHandler', () => {
 
     expect(outcome).toEqual(right(reply));
     expect(unitOfWork.payments.rows.size).toBe(0);
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
+  });
+
+  it('answers a repeated AuthorizePayment with the payment it already recorded, without charging again', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    await unitOfWork.payments.save(buildPayment());
+    const paymentGateway = new FakePaymentGateway();
+    const reply: AccountingReply = { type: 'PaymentAuthorized', orderId, paymentId };
+
+    const outcome = await authorizePayment(unitOfWork, paymentGateway).execute(command);
+
+    expect(outcome).toEqual(right(reply));
+    expect(paymentGateway.requests).toEqual([]);
+    expect(unitOfWork.payments.rows.size).toBe(1);
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 });

@@ -1,6 +1,10 @@
 import { fromBinary } from '@bufbuild/protobuf';
 import { withInbox, type InboxSettings, type TransactionalMessageHandler } from '@fd/chassis-inbox';
-import { PermanentMessageFailure, type MessageHandler } from '@fd/chassis-kafka';
+import {
+  ExternalDependencyFailure,
+  PermanentMessageFailure,
+  type MessageHandler,
+} from '@fd/chassis-kafka';
 import { createLogger } from '@fd/chassis-observability';
 import { AuthorizePaymentSchema } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
 import {
@@ -147,6 +151,40 @@ describe('accountingCommandConsumer', () => {
     expect(await readOutbox()).toHaveLength(1);
   });
 
+  it('answers a repeated AuthorizePayment again with the payment it recorded', async () => {
+    const first = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
+    const repeated = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
+
+    await handleCommand(first);
+    await handleCommand(repeated);
+
+    const replies = await readOutbox();
+    expect(replies).toHaveLength(2);
+    expect(replies[1]).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      messageType: 'fooddelivery.accounting.v1.PaymentAuthorized',
+      sagaId,
+      correlationId: repeated.headers.correlationId,
+      causationId: repeated.headers.messageId,
+    });
+    expect(
+      fromBinary(PaymentAuthorizedSchema, replies[1]?.payload ?? new Uint8Array()),
+    ).toMatchObject({ orderId, paymentId });
+    expect(await countRows('payments')).toBe(1);
+    expect(await countRows('inbox')).toBe(2);
+  });
+
+  it('rolls back a repeated reply and its inbox row when the inbox transaction fails', async () => {
+    await handleCommand(buildCommandMessage(AuthorizePaymentSchema, authorizePayment));
+    const repeated = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
+
+    await expect(failingInboxTransaction()(repeated)).rejects.toThrow('inbox transaction failed');
+
+    expect(await readOutbox()).toHaveLength(1);
+    expect(await countRows('inbox')).toBe(1);
+  });
+
   it('rolls back the payment, the reply and the inbox row when the inbox transaction fails', async () => {
     const command = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
 
@@ -194,13 +232,13 @@ describe('accountingCommandConsumer', () => {
     expect(await countRows('inbox')).toBe(0);
   });
 
-  it('leaves a gateway timeout to the retries of the consumer runner', async () => {
+  it('leaves a gateway timeout to the bounded retries of the consumer runner', async () => {
     const command = buildCommandMessage(AuthorizePaymentSchema, {
       ...authorizePayment,
       paymentToken: 'tok_visa_0005',
     });
 
-    await expect(handleCommand(command)).rejects.toMatchObject({ code: 'ETIMEDOUT' });
+    await expect(handleCommand(command)).rejects.toThrow(ExternalDependencyFailure);
     expect(await readOutbox()).toEqual([]);
     expect(await countRows('inbox')).toBe(0);
     expect(await countRows('payments')).toBe(0);

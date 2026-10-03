@@ -45,6 +45,11 @@ export class AuthorizePaymentCommandHandler {
     command: AuthorizePaymentCommand,
   ): Promise<Either<never, AccountingReply>> {
     const { orderId, amountInCents, currency, paymentToken, sagaId } = command;
+    const recorded = await scope.payments.findByOrderId(orderId);
+    if (recorded !== undefined) {
+      const { paymentId } = recorded.toSnapshot();
+      return answerSaga(scope, { type: 'PaymentAuthorized', orderId, paymentId }, sagaId);
+    }
     const authorization = await this.#dependencies.paymentGateway.authorize({
       idempotencyKey: `${sagaId}:AuthorizePayment`,
       amountInCents,

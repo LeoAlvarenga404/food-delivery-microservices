@@ -19,6 +19,9 @@ export class InMemoryPaymentRepository implements PaymentRepository {
     if (this.rows.has(row.orderId)) {
       return Promise.reject(new Error(`order ${row.orderId} already has a payment`));
     }
+    if ([...this.rows.values()].some((stored) => stored.paymentId === row.paymentId)) {
+      return Promise.reject(new Error(`payment ${row.paymentId} already exists`));
+    }
     this.rows.set(row.orderId, { ...row, version: row.version + 1 });
     return Promise.resolve();
   }
