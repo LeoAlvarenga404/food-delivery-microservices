@@ -25,7 +25,6 @@ export function buildCommandMessage<Schema extends DescMessage>(
       correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
       causationId: '0199a5d0-0000-7000-8000-0000000000b0',
       sagaId: '0199a5d0-0000-7000-8000-0000000000b1',
-      traceparent: undefined,
       actorId: undefined,
       actorType: undefined,
       ...headers,

@@ -7,7 +7,6 @@ export interface MessageHeaders {
   readonly correlationId: string;
   readonly causationId: string | undefined;
   readonly sagaId: string | undefined;
-  readonly traceparent: string | undefined;
   readonly actorId: string | undefined;
   readonly actorType: string | undefined;
 }
@@ -52,7 +51,6 @@ export function parseMessageHeaders(rawHeaders: KafkaJS.IHeaders): MessageHeader
     correlationId: readRequiredIdentifierHeader(rawHeaders, 'correlation-id'),
     causationId: readIdentifierHeader(rawHeaders, 'causation-id'),
     sagaId: readIdentifierHeader(rawHeaders, 'saga-id'),
-    traceparent: readHeader(rawHeaders, 'traceparent'),
     actorId: readHeader(rawHeaders, 'actor-id'),
     actorType: readHeader(rawHeaders, 'actor-type'),
   };

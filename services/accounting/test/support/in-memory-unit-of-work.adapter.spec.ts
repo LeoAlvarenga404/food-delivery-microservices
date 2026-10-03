@@ -7,7 +7,6 @@ import { buildPayment, orderId, paymentId } from './payment.builder.ts';
 const metadata: MessageMetadata = {
   correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
   causationId: undefined,
-  traceparent: undefined,
   actorId: undefined,
   actorType: undefined,
 };

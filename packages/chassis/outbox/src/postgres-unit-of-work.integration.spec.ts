@@ -1,5 +1,11 @@
+import { runInRootSpan } from '@fd/chassis-observability';
 import { createDatabase, migrateToLatest, runInTransaction } from '@fd/chassis-postgres';
-import { startPostgresContainer, type StartedPostgres } from '@fd/chassis-testing';
+import {
+  recordSpans,
+  startPostgresContainer,
+  traceparentOf,
+  type StartedPostgres,
+} from '@fd/chassis-testing';
 import { AggregateRoot, left, right, type DomainEvent } from '@fd/domain';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -89,12 +95,12 @@ class TabRepository {
 const metadata: MessageMetadata = {
   correlationId: '0192a1b2-0000-7000-8000-0000000000c1',
   causationId: '0192a1b2-0000-7000-8000-0000000000c2',
-  traceparent: undefined,
   actorId: 'consumer-1',
   actorType: 'consumer',
 };
 
 const occurredAt = new Date('2026-10-01T12:00:00.000Z');
+const spans = recordSpans();
 
 function toOutboxMessages(event: TabRenamed): readonly OutboxMessage[] {
   return [
@@ -197,6 +203,20 @@ describe('PostgresUnitOfWork.execute', () => {
         sagaId: '0192a1b2-0000-7000-8000-0000000000a1',
       }),
     ]);
+  });
+
+  it('stores the traceparent of the active span on every outbox row it writes', async () => {
+    await runInRootSpan('renaming tab', () =>
+      postgresUnitOfWork().execute(metadata, async (tabs) => {
+        await renameTab(tabs, 'Friday dinner');
+        tabs.enqueueReminder('tab-1');
+        return right(undefined);
+      }),
+    );
+
+    const renamingTab = traceparentOf(spans.spansNamed('renaming tab')[0]);
+    const outboxRows = await database.selectFrom('outbox').select('traceparent').execute();
+    expect(outboxRows).toEqual([{ traceparent: renamingTab }, { traceparent: renamingTab }]);
   });
 
   it('rolls everything back and returns the left when the work fails as expected', async () => {

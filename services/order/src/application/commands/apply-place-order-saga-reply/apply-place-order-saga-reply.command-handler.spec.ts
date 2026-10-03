@@ -21,7 +21,6 @@ const repliedAt = new Date('2026-10-02T12:00:30.000Z');
 const replyMetadata: MessageMetadata = {
   correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
   causationId: '0199a5d0-0000-7000-8000-0000000000d1',
-  traceparent: undefined,
   actorId: undefined,
   actorType: undefined,
 };

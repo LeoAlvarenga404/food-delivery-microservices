@@ -28,7 +28,6 @@ function timeoutMetadata(correlationId: string): MessageMetadata {
   return {
     correlationId,
     causationId: undefined,
-    traceparent: undefined,
     actorId: undefined,
     actorType: undefined,
   };

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@fd/chassis-kafka": "workspace:*",
+    "@fd/chassis-observability": "workspace:*",
     "@fd/chassis-postgres": "workspace:*",
     "@fd/domain": "workspace:*",
     "kysely": "0.29.6"

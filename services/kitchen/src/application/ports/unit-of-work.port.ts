@@ -10,7 +10,6 @@ export interface TransactionScope {
 export interface MessageMetadata {
   readonly correlationId: string;
   readonly causationId: string | undefined;
-  readonly traceparent: string | undefined;
   readonly actorId: string | undefined;
   readonly actorType: string | undefined;
 }

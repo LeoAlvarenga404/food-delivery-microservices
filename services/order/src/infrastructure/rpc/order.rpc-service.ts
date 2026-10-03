@@ -51,7 +51,6 @@ function toRequestMetadata(context: HandlerContext): MessageMetadata {
   return {
     correlationId: context.values.get(correlationIdKey),
     causationId: undefined,
-    traceparent: undefined,
     actorId: undefined,
     actorType: undefined,
   };

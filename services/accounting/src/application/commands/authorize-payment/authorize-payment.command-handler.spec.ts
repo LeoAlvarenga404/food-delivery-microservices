@@ -28,7 +28,6 @@ const command: AuthorizePaymentCommand = {
   metadata: {
     correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
     causationId: '0199a5d0-0000-7000-8000-000000000d03',
-    traceparent: undefined,
     actorId: undefined,
     actorType: undefined,
   },

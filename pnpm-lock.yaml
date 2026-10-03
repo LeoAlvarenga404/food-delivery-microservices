@@ -249,6 +249,9 @@ importers:
       '@fd/chassis-kafka':
         specifier: workspace:*
         version: link:../kafka
+      '@fd/chassis-observability':
+        specifier: workspace:*
+        version: link:../observability
       '@fd/chassis-postgres':
         specifier: workspace:*
         version: link:../postgres
