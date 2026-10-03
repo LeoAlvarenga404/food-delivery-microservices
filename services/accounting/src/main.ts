@@ -1,12 +1,19 @@
-import { withInbox } from '@fd/chassis-inbox';
+import { deleteExpiredInboxEntries, withInbox } from '@fd/chassis-inbox';
 import {
   createKafka,
   startConsumerRunner,
   type MessageHandler,
   type RunningConsumer,
 } from '@fd/chassis-kafka';
-import { startHealthServer, stopInOrder, stopOnSignals, type Stopper } from '@fd/chassis-lifecycle';
+import {
+  StartedParts,
+  startHealthServer,
+  startPeriodicJob,
+  stopOnSignals,
+  type RunningPeriodicJob,
+} from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
+import { deleteExpiredOutboxMessages } from '@fd/chassis-outbox';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
 import type { Kysely } from 'kysely';
 import { v7 as generateUuidV7 } from 'uuid';
@@ -34,6 +41,8 @@ interface AccountingServiceParts {
   readonly database: Kysely<AccountingDatabase>;
   readonly clock: Clock;
 }
+
+const housekeepingIntervalInMilliseconds = 3_600_000;
 
 function openDatabase(
   configuration: AccountingServiceConfiguration,
@@ -81,23 +90,40 @@ function startCommandConsumer(parts: AccountingServiceParts): Promise<RunningCon
   });
 }
 
+function startHousekeeping(parts: AccountingServiceParts): RunningPeriodicJob {
+  const { logger, database, clock } = parts;
+  return startPeriodicJob({
+    name: 'housekeeping',
+    intervalInMilliseconds: housekeepingIntervalInMilliseconds,
+    run: async () => {
+      const deletedOutboxMessageCount = await deleteExpiredOutboxMessages(database, clock.now());
+      const deletedInboxEntryCount = await deleteExpiredInboxEntries(database, clock.now());
+      logger.info({ deletedOutboxMessageCount, deletedInboxEntryCount }, 'housekeeping done');
+    },
+    logger,
+  });
+}
+
 export async function startAccountingService(
   configuration: AccountingServiceConfiguration,
 ): Promise<RunningAccountingService> {
   const logger = createLogger({ serviceName: 'accounting-service', level: configuration.logLevel });
   const database = openDatabase(configuration, logger);
-  const stoppers: Stopper[] = [() => database.destroy()];
+  const started = new StartedParts();
+  started.add(() => database.destroy());
   try {
     await migrateToLatest(database, accountingMigrationSources);
     const parts = { configuration, logger, database, clock: new SystemClock() };
     const commandConsumer = await startCommandConsumer(parts);
-    stoppers.unshift(() => commandConsumer.stop());
+    started.add(() => commandConsumer.stop());
+    const housekeeping = startHousekeeping(parts);
+    started.add(() => housekeeping.stop());
     const healthServer = await startHealthServer(configuration);
-    stoppers.unshift(() => healthServer.stop());
+    started.add(() => healthServer.stop());
     logger.info({ url: healthServer.url }, 'accounting service started');
-    return { url: healthServer.url, stop: () => stopInOrder(stoppers) };
+    return { url: healthServer.url, stop: () => started.stopAll() };
   } catch (error) {
-    await stopInOrder(stoppers).catch((stopError: unknown) => {
+    await started.stopAll().catch((stopError: unknown) => {
       logger.error({ err: stopError }, 'releasing resources after a failed start failed');
     });
     throw error;
