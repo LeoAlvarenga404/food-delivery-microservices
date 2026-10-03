@@ -71,6 +71,40 @@ describe('createLogger', () => {
     expect(entries[1]).not.toHaveProperty('trace_id');
     expect(entries[1]).not.toHaveProperty('span_id');
   });
+
+  it('redacts credentials at the top level and one level deep', () => {
+    const { destination, entries } = captureEntries();
+    const logger = createLogger({ serviceName: 'consumer-bff', level: 'info' }, destination);
+
+    logger.info(
+      {
+        authorization: 'Bearer header.payload.signature',
+        password: 'consumer-a-password',
+        request: { method: 'POST', headers: { authorization: 'Bearer header.payload.signature' } },
+        configuration: {
+          databaseUrl: 'postgresql://order-db:5432/order_service',
+          connectionString: 'postgresql://order-db:5432/order_service',
+          clientSecret: 'local-consumer-bff-secret',
+          accessToken: 'header.payload.signature',
+          host: '0.0.0.0',
+        },
+      },
+      'credentials around',
+    );
+
+    expect(entries[0]).toMatchObject({
+      authorization: '[redacted]',
+      password: '[redacted]',
+      request: { method: 'POST', headers: { authorization: '[redacted]' } },
+      configuration: {
+        databaseUrl: '[redacted]',
+        connectionString: '[redacted]',
+        clientSecret: '[redacted]',
+        accessToken: '[redacted]',
+        host: '0.0.0.0',
+      },
+    });
+  });
 });
 
 describe('withCorrelation', () => {

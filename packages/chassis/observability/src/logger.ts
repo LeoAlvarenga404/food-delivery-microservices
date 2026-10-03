@@ -17,6 +17,19 @@ export interface CorrelationFields {
 
 const traceIdField = 'trace_id';
 const spanIdField = 'span_id';
+const credentialFields = [
+  'authorization',
+  'password',
+  'clientSecret',
+  'accessToken',
+  'connectionString',
+  'databaseUrl',
+];
+const redactedPaths = [
+  ...credentialFields,
+  ...credentialFields.map((field) => `*.${field}`),
+  '*.headers.authorization',
+];
 
 function activeTraceFields(): Readonly<Record<string, string>> {
   const spanContext = trace.getActiveSpan()?.spanContext();
@@ -30,6 +43,7 @@ export function createLogger(settings: LoggerSettings, destination?: Destination
     base: { service: settings.serviceName },
     timestamp: pino.stdTimeFunctions.isoTime,
     mixin: activeTraceFields,
+    redact: { paths: redactedPaths, censor: '[redacted]' },
   };
   return destination === undefined ? pino(options) : pino(options, destination);
 }
