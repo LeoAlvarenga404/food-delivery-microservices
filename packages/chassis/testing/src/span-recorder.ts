@@ -1,3 +1,4 @@
+export { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
   NodeTracerProvider,

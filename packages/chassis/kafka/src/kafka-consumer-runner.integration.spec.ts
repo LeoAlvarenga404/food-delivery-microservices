@@ -4,6 +4,8 @@ import type { KafkaJS } from '@confluentinc/kafka-javascript';
 import { activeTraceparent, createLogger } from '@fd/chassis-observability';
 import {
   recordSpans,
+  SpanKind,
+  SpanStatusCode,
   startKafkaContainer,
   traceparentOf,
   type StartedKafka,
@@ -16,8 +18,6 @@ import { startConsumerRunner, type RunningConsumer } from './kafka-consumer-runn
 
 const silentLogger = createLogger({ serviceName: 'runner-test', level: 'silent' });
 const spans = recordSpans();
-const consumerSpanKind = 4;
-const errorStatusCode = 2;
 const producerTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
 const producerSpanId = '00f067aa0ba902b7';
 
@@ -376,7 +376,7 @@ describe('startConsumerRunner', () => {
     await scenario.runner.stop();
 
     const [consumed] = spans.spansNamed('process traced.commands');
-    expect(consumed?.kind).toBe(consumerSpanKind);
+    expect(consumed?.kind).toBe(SpanKind.CONSUMER);
     expect(consumed?.spanContext().traceId).toBe(producerTraceId);
     expect(consumed?.parentSpanContext?.spanId).toBe(producerSpanId);
     expect(consumed?.attributes).toEqual({
@@ -400,7 +400,7 @@ describe('startConsumerRunner', () => {
     await scenario.runner.stop();
 
     const [consumed] = spans.spansNamed('process failed.commands');
-    expect(consumed?.status.code).toBe(errorStatusCode);
+    expect(consumed?.status.code).toBe(SpanStatusCode.ERROR);
     expect(consumed?.events.map((event) => event.attributes?.['exception.message'])).toEqual([
       'missing required header message-type',
     ]);

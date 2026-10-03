@@ -14,8 +14,8 @@ interface ExportedSpan {
 }
 
 const runFile = promisify(execFile);
-const serverSpanKind = 2;
-const clientSpanKind = 3;
+const otlpServerSpanKind = 2;
+const otlpClientSpanKind = 3;
 const maximumExitTimeInMilliseconds = 7_000;
 const packageDirectory = new URL('..', import.meta.url);
 
@@ -100,8 +100,8 @@ describe('the tracing registered through --import', () => {
       OTEL_EXPORTER_OTLP_ENDPOINT: await startReceiver(exportedSpans),
     });
 
-    const serverSpans = exportedSpans.filter((span) => span.kind === serverSpanKind);
-    const clientSpans = exportedSpans.filter((span) => span.kind === clientSpanKind);
+    const serverSpans = exportedSpans.filter((span) => span.kind === otlpServerSpanKind);
+    const clientSpans = exportedSpans.filter((span) => span.kind === otlpClientSpanKind);
     expect(new Set(exportedSpans.map((span) => span.serviceName))).toEqual(
       new Set(['traced-requests']),
     );

@@ -1,11 +1,10 @@
 import { Writable } from 'node:stream';
 import { createLogger, runInRootSpan, type Logger } from '@fd/chassis-observability';
-import { recordSpans } from '@fd/chassis-testing';
+import { recordSpans, SpanStatusCode } from '@fd/chassis-testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startPeriodicJob } from './start-periodic-job.ts';
 
 const intervalInMilliseconds = 1_000;
-const errorStatusCode = 2;
 const spans = recordSpans();
 
 let logEntries: Record<string, unknown>[];
@@ -130,7 +129,7 @@ describe('startPeriodicJob', () => {
     await job.stop();
 
     const failedRun = spans.spansNamed('failing')[0];
-    expect(failedRun?.status.code).toBe(errorStatusCode);
+    expect(failedRun?.status.code).toBe(SpanStatusCode.ERROR);
     expect(logEntries[0]?.['trace_id']).toBe(failedRun?.spanContext().traceId);
   });
 

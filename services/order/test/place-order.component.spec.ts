@@ -6,6 +6,7 @@ import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
   recordSpans,
+  SpanStatusCode,
   startKafkaContainer,
   startPostgresContainer,
   type StartedKafka,
@@ -41,7 +42,6 @@ const repliesTopic = 'order.place-order-saga.replies';
 const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
 const replyTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
-const errorStatusCode = 2;
 const spans = recordSpans();
 const componentSagaTimeoutsInMilliseconds = {
   ...sagaTimeoutsInMilliseconds,
@@ -326,6 +326,6 @@ describe('order service', () => {
     expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
     const deadlineSweeps = spans.spansNamed('place order saga deadlines');
     expect(deadlineSweeps.length).toBeGreaterThan(0);
-    expect(deadlineSweeps.map((sweep) => sweep.status.code)).not.toContain(errorStatusCode);
+    expect(deadlineSweeps.map((sweep) => sweep.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });

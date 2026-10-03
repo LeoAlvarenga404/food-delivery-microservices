@@ -1,14 +1,12 @@
 import { createClient, createRouterTransport, type Client } from '@connectrpc/connect';
 import { runInRootSpan } from '@fd/chassis-observability';
-import { recordSpans, traceparentOf } from '@fd/chassis-testing';
+import { recordSpans, SpanKind, SpanStatusCode, traceparentOf } from '@fd/chassis-testing';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeOrderService } from '../../test/support/order-service.fake.ts';
 import { traceContextInterceptor } from './trace-context-interceptor.adapter.ts';
 
 const spans = recordSpans();
-const clientSpanKind = 2;
-const errorStatusCode = 2;
 
 let orderService: FakeOrderService;
 
@@ -35,7 +33,7 @@ describe('traceContextInterceptor', () => {
 
     const [call] = spans.spansNamed('fooddelivery.order.v1.OrderService/PlaceOrder');
     const [request] = spans.spansNamed('handling request');
-    expect(call?.kind).toBe(clientSpanKind);
+    expect(call?.kind).toBe(SpanKind.CLIENT);
     expect(call?.parentSpanContext?.spanId).toBe(request?.spanContext().spanId);
     expect(call?.attributes).toEqual({
       'rpc.system': 'connect_rpc',
@@ -51,6 +49,6 @@ describe('traceContextInterceptor', () => {
     ).rejects.toThrow();
 
     const [call] = spans.spansNamed('fooddelivery.order.v1.OrderService/GetOrder');
-    expect(call?.status.code).toBe(errorStatusCode);
+    expect(call?.status.code).toBe(SpanStatusCode.ERROR);
   });
 });
