@@ -1,5 +1,5 @@
 import { Writable } from 'node:stream';
-import { setImmediate as nextTurn } from 'node:timers/promises';
+import { setImmediate as nextTurn, setTimeout as delay } from 'node:timers/promises';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { stopOnSignals } from './stop-on-signals.ts';
@@ -55,6 +55,27 @@ describe('stopOnSignals', () => {
 
     expect(stopCount).toBe(1);
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it('stops the service once when a second, different signal arrives during the stop', async () => {
+    const listenerCountsBefore = signals.map((signal) => process.listenerCount(signal));
+    let stopCount = 0;
+    stopOnSignals(
+      {
+        stop: async () => {
+          stopCount += 1;
+          await delay(50);
+        },
+      },
+      captureLogger(),
+    );
+
+    process.emit('SIGTERM');
+    process.emit('SIGINT');
+    await delay(100);
+
+    expect(stopCount).toBe(1);
+    expect(signals.map((signal) => process.listenerCount(signal))).toEqual(listenerCountsBefore);
   });
 
   it('logs a failed stop and marks the process as failed', async () => {

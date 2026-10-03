@@ -19,6 +19,7 @@ describe('startHealthServer', () => {
 
     const response = await fetch(`${healthServer.url}/health`);
 
+    expect(new URL(healthServer.url).hostname).toBe('127.0.0.1');
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: 'ok' });
   });
