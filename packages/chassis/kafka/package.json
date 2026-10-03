@@ -1,0 +1,23 @@
+{
+  "name": "@fd/chassis-kafka",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
+  },
+  "dependencies": {
+    "@confluentinc/kafka-javascript": "1.10.1",
+    "@fd/chassis-observability": "workspace:*"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "vitest": "5.0.3"
+  }
+}

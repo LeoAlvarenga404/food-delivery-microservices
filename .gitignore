@@ -3,6 +3,7 @@ dist/
 coverage/
 .turbo/
 *.tsbuildinfo
+packages/contracts/src/generated/
 
 .env
 .env.*
@@ -15,6 +16,7 @@ Thumbs.db
 .vscode/
 
 .claude/
+.superpowers/
 CLAUDE.md
 CLAUDE.local.md
 docs/

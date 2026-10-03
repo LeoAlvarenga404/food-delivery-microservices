@@ -1,0 +1,305 @@
+name: food-delivery
+
+x-kafka-node: &kafka-node
+  image: apache/kafka:4.3.1
+  profiles: [core]
+  restart: unless-stopped
+  healthcheck:
+    test: ['CMD', 'nc', '-z', 'localhost', '29092']
+    interval: 5s
+    timeout: 5s
+    retries: 24
+
+x-kafka-environment: &kafka-environment
+  CLUSTER_ID: DC3rsUb6S-SqkihC0jfwfg
+  KAFKA_PROCESS_ROLES: broker,controller
+  KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:29093,2@kafka-2:29093,3@kafka-3:29093
+  KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+  KAFKA_LOG_DIRS: /var/lib/kafka/data
+  KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+  KAFKA_MIN_INSYNC_REPLICAS: 2
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+  KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: 'false'
+  KAFKA_HEAP_OPTS: -Xms512m -Xmx512m
+
+x-postgres: &postgres
+  image: postgres:18.6-alpine
+  profiles: [core]
+  restart: unless-stopped
+  command: ['postgres', '-c', 'wal_level=logical', '-c', 'max_slot_wal_keep_size=1GB']
+  healthcheck:
+    test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+    interval: 5s
+    timeout: 5s
+    retries: 12
+
+x-application: &application
+  profiles: [apps]
+  restart: unless-stopped
+
+x-application-build: &application-build
+  context: ..
+  dockerfile: infra/docker/Dockerfile
+
+x-kafka-clients: &kafka-clients
+  KAFKA_BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+  LOG_LEVEL: info
+
+x-health-timing: &health-timing
+  interval: 5s
+  timeout: 5s
+  retries: 24
+
+services:
+  kafka-1:
+    <<: *kafka-node
+    hostname: kafka-1
+    ports: ['127.0.0.1:9092:9092']
+    volumes: ['kafka-1-data:/var/lib/kafka/data']
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENERS: CONTROLLER://:29093,INTERNAL://:29092,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:29092,EXTERNAL://localhost:9092
+
+  kafka-2:
+    <<: *kafka-node
+    hostname: kafka-2
+    ports: ['127.0.0.1:9093:9093']
+    volumes: ['kafka-2-data:/var/lib/kafka/data']
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 2
+      KAFKA_LISTENERS: CONTROLLER://:29093,INTERNAL://:29092,EXTERNAL://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:29092,EXTERNAL://localhost:9093
+
+  kafka-3:
+    <<: *kafka-node
+    hostname: kafka-3
+    ports: ['127.0.0.1:9094:9094']
+    volumes: ['kafka-3-data:/var/lib/kafka/data']
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 3
+      KAFKA_LISTENERS: CONTROLLER://:29093,INTERNAL://:29092,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-3:29092,EXTERNAL://localhost:9094
+
+  kafka-connect:
+    image: quay.io/debezium/connect:3.7.0.Final
+    profiles: [core]
+    restart: unless-stopped
+    depends_on:
+      kafka-1: { condition: service_healthy }
+      kafka-2: { condition: service_healthy }
+      kafka-3: { condition: service_healthy }
+    ports: ['127.0.0.1:8083:8083']
+    healthcheck:
+      test: ['CMD', 'curl', '-fs', 'http://localhost:8083/health']
+      interval: 5s
+      timeout: 5s
+      retries: 36
+    environment:
+      BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+      GROUP_ID: kafka-connect
+      CONFIG_STORAGE_TOPIC: kafka-connect.configs
+      OFFSET_STORAGE_TOPIC: kafka-connect.offsets
+      STATUS_STORAGE_TOPIC: kafka-connect.status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_PRODUCER_ACKS: all
+      CONNECT_PRODUCER_ENABLE_IDEMPOTENCE: 'true'
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      HEAP_OPTS: -Xms256m -Xmx512m
+      ORDER_DB_PASSWORD: ${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+      CONSUMER_DB_PASSWORD: ${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+      KITCHEN_DB_PASSWORD: ${KITCHEN_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+      ACCOUNTING_DB_PASSWORD: ${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
+  order-db:
+    <<: *postgres
+    ports: ['127.0.0.1:5432:5432']
+    volumes: ['order-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: order_service
+      POSTGRES_DB: order_service
+      POSTGRES_PASSWORD: ${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
+  consumer-db:
+    <<: *postgres
+    ports: ['127.0.0.1:5433:5432']
+    volumes: ['consumer-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: consumer_service
+      POSTGRES_DB: consumer_service
+      POSTGRES_PASSWORD: ${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
+  kitchen-db:
+    <<: *postgres
+    ports: ['127.0.0.1:5434:5432']
+    volumes: ['kitchen-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: kitchen_service
+      POSTGRES_DB: kitchen_service
+      POSTGRES_PASSWORD: ${KITCHEN_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
+  accounting-db:
+    <<: *postgres
+    ports: ['127.0.0.1:5435:5432']
+    volumes: ['accounting-db-data:/var/lib/postgresql']
+    environment:
+      POSTGRES_USER: accounting_service
+      POSTGRES_DB: accounting_service
+      POSTGRES_PASSWORD: ${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}
+
+  kafka-topics:
+    profiles: [apps]
+    build:
+      <<: *application-build
+      args: { PACKAGE_NAME: '@fd/infra', PACKAGE_DIRECTORY: infra }
+    command: ['node', 'kafka/create-topics.ts']
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
+    depends_on:
+      kafka-1: { condition: service_healthy }
+      kafka-2: { condition: service_healthy }
+      kafka-3: { condition: service_healthy }
+
+  order-service:
+    <<: *application
+    build:
+      <<: *application-build
+      args: { PACKAGE_NAME: '@fd/order-service', PACKAGE_DIRECTORY: services/order }
+    environment:
+      <<: *kafka-clients
+      ORDER_DATABASE_URL: postgresql://order_service:${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}@order-db:5432/order_service
+      ORDER_SERVICE_HOST: 0.0.0.0
+    healthcheck:
+      <<: *health-timing
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4001/health').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"
+    depends_on:
+      kafka-topics: { condition: service_completed_successfully }
+      order-db: { condition: service_healthy }
+
+  consumer-service:
+    <<: *application
+    build:
+      <<: *application-build
+      args: { PACKAGE_NAME: '@fd/consumer-service', PACKAGE_DIRECTORY: services/consumer }
+    environment:
+      <<: *kafka-clients
+      CONSUMER_DATABASE_URL: postgresql://consumer_service:${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}@consumer-db:5432/consumer_service
+      CONSUMER_SERVICE_HOST: 0.0.0.0
+    healthcheck:
+      <<: *health-timing
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4002/health').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"
+    depends_on:
+      kafka-topics: { condition: service_completed_successfully }
+      consumer-db: { condition: service_healthy }
+
+  kitchen-service:
+    <<: *application
+    build:
+      <<: *application-build
+      args: { PACKAGE_NAME: '@fd/kitchen-service', PACKAGE_DIRECTORY: services/kitchen }
+    environment:
+      <<: *kafka-clients
+      KITCHEN_DATABASE_URL: postgresql://kitchen_service:${KITCHEN_DB_PASSWORD:?copy infra/.env.example to infra/.env}@kitchen-db:5432/kitchen_service
+      KITCHEN_SERVICE_HOST: 0.0.0.0
+    healthcheck:
+      <<: *health-timing
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4003/health').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"
+    depends_on:
+      kafka-topics: { condition: service_completed_successfully }
+      kitchen-db: { condition: service_healthy }
+
+  accounting-service:
+    <<: *application
+    build:
+      <<: *application-build
+      args: { PACKAGE_NAME: '@fd/accounting-service', PACKAGE_DIRECTORY: services/accounting }
+    environment:
+      <<: *kafka-clients
+      ACCOUNTING_DATABASE_URL: postgresql://accounting_service:${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}@accounting-db:5432/accounting_service
+      ACCOUNTING_SERVICE_HOST: 0.0.0.0
+      SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: 9000
+    healthcheck:
+      <<: *health-timing
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4004/health').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"
+    depends_on:
+      kafka-topics: { condition: service_completed_successfully }
+      accounting-db: { condition: service_healthy }
+
+  outbox-connectors:
+    profiles: [apps]
+    build:
+      <<: *application-build
+      args: { PACKAGE_NAME: '@fd/infra', PACKAGE_DIRECTORY: infra }
+    command: ['node', 'debezium/register-outbox-connectors.ts']
+    environment:
+      KAFKA_CONNECT_URL: http://kafka-connect:8083
+    depends_on:
+      kafka-connect: { condition: service_healthy }
+      order-service: { condition: service_healthy }
+      consumer-service: { condition: service_healthy }
+      kitchen-service: { condition: service_healthy }
+      accounting-service: { condition: service_healthy }
+
+  consumer-bff:
+    <<: *application
+    build:
+      <<: *application-build
+      args: { PACKAGE_NAME: '@fd/consumer-bff', PACKAGE_DIRECTORY: bffs/consumer-bff }
+    environment:
+      ORDER_SERVICE_URL: http://order-service:4001
+      CONSUMER_BFF_HOST: 0.0.0.0
+      LOG_LEVEL: info
+    healthcheck:
+      <<: *health-timing
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/health').then((response) => process.exit(response.ok ? 0 : 1), () => process.exit(1))"
+    depends_on:
+      order-service: { condition: service_healthy }
+
+  envoy:
+    <<: *application
+    image: envoyproxy/envoy:v1.39.2
+    ports: ['127.0.0.1:8080:8080']
+    volumes: ['./envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro']
+    depends_on:
+      consumer-bff: { condition: service_healthy }
+      outbox-connectors: { condition: service_completed_successfully }
+
+volumes:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:
+  order-db-data:
+  consumer-db-data:
+  kitchen-db-data:
+  accounting-db-data:

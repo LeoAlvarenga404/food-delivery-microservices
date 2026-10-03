@@ -1,0 +1,49 @@
+{
+  "name": "food-delivery-microservices",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=24.19.0"
+  },
+  "scripts": {
+    "lint": "turbo run lint",
+    "generate": "turbo run generate",
+    "typecheck": "turbo run typecheck",
+    "test:unit": "turbo run test:unit",
+    "test:integration": "turbo run test:integration --concurrency=2",
+    "test:golden": "turbo run test:golden",
+    "test:component": "turbo run test:component --concurrency=2",
+    "test:e2e": "pnpm --filter @fd/e2e test:e2e",
+    "lint:files": "node tooling/src/file-names/check-file-names.cli.ts",
+    "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra services bffs e2e --config .dependency-cruiser.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky",
+    "infra:up": "docker compose -f infra/compose.yaml --profile core up -d --wait",
+    "infra:down": "docker compose -f infra/compose.yaml --profile core down",
+    "infra:topics": "node infra/kafka/create-topics.ts",
+    "infra:smoke": "node infra/smoke/outbox-relay-smoke.ts",
+    "infra:connectors": "node infra/debezium/register-outbox-connectors.ts",
+    "stack:up": "docker compose -f infra/compose.yaml --profile core --profile apps up -d --build --wait",
+    "stack:down": "docker compose -f infra/compose.yaml --profile core --profile apps down"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "21.2.3",
+    "@commitlint/config-conventional": "21.2.3",
+    "@eslint/js": "10.0.1",
+    "@fd/tooling": "workspace:*",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.6",
+    "@types/node": "24.19.0",
+    "dependency-cruiser": "18.5.0",
+    "eslint": "10.11.0",
+    "eslint-config-prettier": "10.1.8",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0",
+    "prettier": "3.9.9",
+    "secretlint": "13.0.6",
+    "turbo": "2.11.5",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.0"
+  }
+}

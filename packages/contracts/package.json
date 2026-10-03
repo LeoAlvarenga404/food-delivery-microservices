@@ -1,0 +1,22 @@
+{
+  "name": "@fd/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fooddelivery/*": "./src/generated/fooddelivery/*"
+  },
+  "scripts": {
+    "generate": "buf generate",
+    "lint": "buf lint && buf format -d --exit-code && eslint .",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.73.0",
+    "@bufbuild/protoc-gen-es": "2.16.0"
+  }
+}

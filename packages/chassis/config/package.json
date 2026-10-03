@@ -1,0 +1,21 @@
+{
+  "name": "@fd/chassis-config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "vitest": "5.0.3"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "globalDependencies": ["tsconfig.base.json", "eslint.config.js", "tooling/src/eslint/**"],
+  "tasks": {
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
+    "generate": {
+      "dependsOn": ["^generate"],
+      "inputs": ["proto/**", "buf.yaml", "buf.gen.yaml"],
+      "outputs": ["src/generated/**"]
+    },
+    "lint": {
+      "dependsOn": ["transit", "generate", "^generate"]
+    },
+    "typecheck": {
+      "dependsOn": ["transit", "generate", "^generate"]
+    },
+    "test:unit": {
+      "dependsOn": ["transit", "generate", "^generate"]
+    },
+    "test:integration": {
+      "dependsOn": ["transit", "generate", "^generate"],
+      "passThroughEnv": ["TESTCONTAINERS_*"],
+      "env": ["UPDATE_GOLDEN"]
+    },
+    "test:golden": {
+      "cache": false,
+      "dependsOn": ["transit", "generate", "^generate"],
+      "env": ["UPDATE_GOLDEN"]
+    },
+    "test:component": {
+      "dependsOn": ["transit", "generate", "^generate"],
+      "passThroughEnv": ["TESTCONTAINERS_*"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

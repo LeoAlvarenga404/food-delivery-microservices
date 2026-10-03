@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package fooddelivery.order.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message OrderLineItem {
+  string menu_item_id = 1;
+  string name = 2;
+  int64 unit_price_in_cents = 3;
+  int32 quantity = 4;
+}
+
+message OrderPlaced {
+  string order_id = 1;
+  string consumer_id = 2;
+  string restaurant_id = 3;
+  repeated OrderLineItem line_items = 4;
+  int64 total_in_cents = 5;
+  string currency = 6;
+  google.protobuf.Timestamp placed_at = 7;
+}
+
+message OrderApproved {
+  string order_id = 1;
+  google.protobuf.Timestamp approved_at = 2;
+}

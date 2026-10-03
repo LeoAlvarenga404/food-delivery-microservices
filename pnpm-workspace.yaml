@@ -1,0 +1,11 @@
+packages:
+  - packages/*
+  - packages/chassis/*
+  - services/*
+  - bffs/*
+  - tooling
+  - e2e
+  - infra
+
+onlyBuiltDependencies:
+  - '@confluentinc/kafka-javascript'

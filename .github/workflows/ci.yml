@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm lint:files
+      - run: pnpm lint:architecture
+      - run: pnpm turbo run lint typecheck test:unit test:golden
+      - run: pnpm turbo run test:integration test:component --concurrency=2
+      - if: github.event_name == 'pull_request'
+        name: buf breaking
+        run: |
+          if git cat-file -e origin/main:packages/contracts/buf.yaml 2>/dev/null; then
+            cd packages/contracts
+            pnpm exec buf breaking proto --against "../../.git#ref=origin/main,subdir=packages/contracts/proto"
+          else
+            echo "main has no contracts yet; nothing to compare"
+          fi
+      - if: github.event_name == 'pull_request'
+        run: >-
+          pnpm exec commitlint
+          --from ${{ github.event.pull_request.base.sha }}
+          --to ${{ github.event.pull_request.head.sha }}
+          --verbose
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --verbose
