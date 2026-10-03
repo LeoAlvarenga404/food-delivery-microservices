@@ -33,6 +33,21 @@ describe('findFileNameViolations', () => {
     'packages/contracts/proto/fooddelivery/order/v1/events.proto',
     'packages/contracts/samples/order.order.events/OrderPlaced.json',
     'packages/contracts/samples/order.place-order-saga.replies/TicketCreated.json',
+    'bffs/consumer-bff/src/main.ts',
+    'bffs/consumer-bff/src/main.spec.ts',
+    'bffs/consumer-bff/src/consumer-bff.config.ts',
+    'bffs/consumer-bff/src/orders/order.routes.ts',
+    'bffs/consumer-bff/src/orders/order.routes.spec.ts',
+    'bffs/consumer-bff/src/orders/order-view.message-mapper.ts',
+    'bffs/consumer-bff/src/http/problem-details.adapter.ts',
+    'bffs/consumer-bff/test/consumer-bff.component.spec.ts',
+    'bffs/consumer-bff/test/support/order-service.fake.ts',
+    'bffs/consumer-bff/vitest.config.ts',
+    'e2e/test/place-order.e2e.spec.ts',
+    'e2e/test/support/http-consumer-api.adapter.ts',
+    'e2e/vitest.config.ts',
+    'infra/docker/Dockerfile',
+    'infra/envoy/envoy.yaml',
   ])('accepts %s', (path) => {
     expect(reasonsFor(path)).toEqual([]);
   });
@@ -81,6 +96,17 @@ describe('findFileNameViolations', () => {
       'role ".weird" is not allowed in TypeScript outside catalogued folders',
     ],
     ['e2e/order.weird.ts', 'role ".weird" is not allowed in TypeScript outside catalogued folders'],
+    [
+      'bffs/consumer-bff/src/orders/order.aggregate.ts',
+      'role ".aggregate" is not allowed in bff source',
+    ],
+    ['bffs/consumer-bff/src/server.ts', 'file "server.ts" needs a role suffix in bff source'],
+    [
+      'bffs/consumer-bff/test/support/helpers.ts',
+      'file "helpers.ts" needs a role suffix in bff test support',
+    ],
+    ['e2e/test/support/stack.ts', 'file "stack.ts" needs a role suffix in end-to-end tests'],
+    ['e2e/test/orders.routes.ts', 'role ".routes" is not allowed in end-to-end tests'],
     ['packages/domain/src/nested/index.ts', 'file "index.ts" is allowed only as package entry'],
     ['services/order/test/support/index.ts', 'file "index.ts" is allowed only as package entry'],
     [

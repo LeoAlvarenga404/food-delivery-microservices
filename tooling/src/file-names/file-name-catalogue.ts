@@ -40,6 +40,8 @@ const infrastructureRoles = [
 
 const testSupportRoles = ['repository', 'adapter', 'fake', 'builder', 'contract'];
 
+const bffRoles = ['routes', 'message-mapper', 'adapter', 'config'];
+
 export const fileNameCatalogue: readonly CatalogueRule[] = [
   {
     description: 'generated database types',
@@ -80,6 +82,24 @@ export const fileNameCatalogue: readonly CatalogueRule[] = [
   {
     description: 'service test support',
     pathPattern: /^services\/[^/]+\/test\//,
+    allowedRoles: testSupportRoles,
+    allowedRolelessNames: 'test-files',
+  },
+  {
+    description: 'bff source',
+    pathPattern: /^bffs\/[^/]+\/src\//,
+    allowedRoles: bffRoles,
+    allowedRolelessNames: ['main'],
+  },
+  {
+    description: 'bff test support',
+    pathPattern: /^bffs\/[^/]+\/test\//,
+    allowedRoles: testSupportRoles,
+    allowedRolelessNames: 'test-files',
+  },
+  {
+    description: 'end-to-end tests',
+    pathPattern: /^e2e\/test\//,
     allowedRoles: testSupportRoles,
     allowedRolelessNames: 'test-files',
   },
