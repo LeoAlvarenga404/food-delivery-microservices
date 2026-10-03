@@ -57,12 +57,15 @@ function toExportedSpans(body: string): ExportedSpan[] {
   });
 }
 
-async function startReceiver(exportedSpans: ExportedSpan[]): Promise<string> {
+async function startReceiver(
+  exportedSpans: ExportedSpan[],
+  tracesPath = '/v1/traces',
+): Promise<string> {
   receiver = createServer((request, response) => {
     let body = '';
     request.on('data', (chunk: Buffer) => (body += chunk.toString()));
     request.on('end', () => {
-      if (request.url === '/v1/traces') exportedSpans.push(...toExportedSpans(body));
+      if (request.url === tracesPath) exportedSpans.push(...toExportedSpans(body));
       response.writeHead(200, { 'content-type': 'application/json' }).end('{}');
     });
   });
@@ -94,10 +97,10 @@ afterEach(() => {
 });
 
 describe('the tracing registered through --import', () => {
-  it('exports the spans of the instrumented requests before the process exits', async () => {
+  it('exports the spans of the instrumented requests below the endpoint path before the process exits', async () => {
     const exportedSpans: ExportedSpan[] = [];
     await runTracedRequests({
-      OTEL_EXPORTER_OTLP_ENDPOINT: await startReceiver(exportedSpans),
+      OTEL_EXPORTER_OTLP_ENDPOINT: `${await startReceiver(exportedSpans, '/otlp/v1/traces')}/otlp/`,
     });
 
     const serverSpans = exportedSpans.filter((span) => span.kind === otlpServerSpanKind);
