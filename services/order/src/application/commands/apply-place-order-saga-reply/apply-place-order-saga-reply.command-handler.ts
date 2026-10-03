@@ -53,8 +53,12 @@ export class ApplyPlaceOrderSagaReplyCommandHandler {
       if (outcome.isLeft()) return outcome;
     }
     const state = placeOrderSaga.evolve(instance.state, command.reply);
-    const timeouts = this.#sagaTimeoutsInMilliseconds;
-    const deadlineAt = placeOrderSagaDeadline(state.step, this.#clock.now(), timeouts);
+    const stepTimeoutsInMilliseconds = this.#sagaTimeoutsInMilliseconds;
+    const deadlineAt = placeOrderSagaDeadline(
+      state.step,
+      this.#clock.now(),
+      stepTimeoutsInMilliseconds,
+    );
     await scope.sagas.save({ ...instance, state, deadlineAt });
     return right(undefined);
   }

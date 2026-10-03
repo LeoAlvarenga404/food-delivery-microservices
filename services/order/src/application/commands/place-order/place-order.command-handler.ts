@@ -25,7 +25,7 @@ interface Placement {
   readonly placedAt: Date;
 }
 
-interface SagaStart {
+interface SagaStartInput {
   readonly sagaOrder: PlaceOrderSagaOrder;
   readonly paymentToken: string;
   readonly placement: Placement;
@@ -91,7 +91,7 @@ export class PlaceOrderCommandHandler {
     return right({ orderId: placement.orderId });
   }
 
-  async #startSaga(scope: TransactionScope, start: SagaStart): Promise<void> {
+  async #startSaga(scope: TransactionScope, start: SagaStartInput): Promise<void> {
     const { idGenerator, sagaTimeoutsInMilliseconds } = this.#dependencies;
     const sagaId = idGenerator.generateSagaId();
     const { state, commands } = placeOrderSaga.start(start.sagaOrder, start.paymentToken);
