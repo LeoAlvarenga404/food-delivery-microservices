@@ -261,6 +261,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.16.0
         version: 2.16.0
+      '@fd/chassis-config':
+        specifier: workspace:*
+        version: link:../../packages/chassis/config
       '@fd/chassis-inbox':
         specifier: workspace:*
         version: link:../../packages/chassis/inbox
@@ -285,6 +288,12 @@ importers:
       kysely:
         specifier: 0.29.6
         version: 0.29.6
+      uuid:
+        specifier: 14.0.2
+        version: 14.0.2
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@fd/chassis-testing':
         specifier: workspace:*
