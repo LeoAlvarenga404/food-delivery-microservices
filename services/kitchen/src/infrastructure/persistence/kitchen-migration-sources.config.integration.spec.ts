@@ -30,6 +30,7 @@ describe('kitchenMigrationSources', () => {
     expect(appliedMigrations).toEqual([
       'inbox/0001-create-inbox-table',
       'kitchen/0001-create-tickets-table',
+      'kitchen/0002-add-rejected-ticket-status',
       'outbox/0001-create-outbox-table',
     ]);
   });

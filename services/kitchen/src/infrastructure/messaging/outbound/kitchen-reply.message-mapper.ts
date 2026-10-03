@@ -5,13 +5,16 @@ import {
   TicketCreatedSchema,
   TicketCreationFailedSchema,
   TicketCreationFailureReason,
+  TicketRejectedSchema,
   type TicketApproved,
   type TicketCreated,
   type TicketCreationFailed,
+  type TicketRejected,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import type {
   KitchenReply,
   TicketCreationFailedReply,
+  TicketRejectedReply,
   TicketReply,
 } from '#application/ports/reply-sender.port.ts';
 
@@ -39,6 +42,10 @@ export function toTicketCreationFailed(reply: TicketCreationFailedReply): Ticket
   });
 }
 
+export function toTicketRejected(reply: TicketRejectedReply): TicketRejected {
+  return create(TicketRejectedSchema, { orderId: reply.orderId });
+}
+
 function toReplyMessage<Schema extends DescMessage>(
   schema: Schema,
   payload: MessageShape<Schema>,
@@ -62,5 +69,7 @@ export function toKitchenReplyMessage(reply: KitchenReply, sagaId: string): Outb
       return toReplyMessage(TicketApprovedSchema, toTicketApproved(reply), sagaId);
     case 'TicketCreationFailed':
       return toReplyMessage(TicketCreationFailedSchema, toTicketCreationFailed(reply), sagaId);
+    case 'TicketRejected':
+      return toReplyMessage(TicketRejectedSchema, toTicketRejected(reply), sagaId);
   }
 }

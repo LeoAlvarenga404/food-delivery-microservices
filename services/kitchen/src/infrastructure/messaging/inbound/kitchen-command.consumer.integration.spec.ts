@@ -5,12 +5,14 @@ import { createLogger } from '@fd/chassis-observability';
 import {
   ApproveTicketSchema,
   CreateTicketSchema,
+  RejectTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import {
   TicketApprovedSchema,
   TicketCreatedSchema,
   TicketCreationFailedSchema,
   TicketCreationFailureReason,
+  TicketRejectedSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -200,11 +202,56 @@ describe('kitchenCommandConsumer', () => {
     expect(await countRows('inbox')).toBe(1);
   });
 
+  it('rejects the pending ticket of the order and replies TicketRejected', async () => {
+    await handleCommand(buildCommandMessage(CreateTicketSchema, createTicket));
+    const command = buildCommandMessage(RejectTicketSchema, { orderId });
+
+    await handleCommand(command);
+
+    const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
+    expect(ticket?.toSnapshot()).toMatchObject({ status: 'REJECTED', version: 2 });
+    const [, reply, ...others] = await readOutbox();
+    expect(others).toEqual([]);
+    expect(reply).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      messageType: 'fooddelivery.kitchen.v1.TicketRejected',
+      sagaId,
+      causationId: command.headers.messageId,
+    });
+    expect(fromBinary(TicketRejectedSchema, reply?.payload ?? new Uint8Array())).toMatchObject({
+      orderId,
+    });
+  });
+
+  it('replies TicketRejected for an order without ticket and stores nothing', async () => {
+    await handleCommand(buildCommandMessage(RejectTicketSchema, { orderId }));
+
+    const replies = await readOutbox();
+    expect(replies.map((row) => row.messageType)).toEqual([
+      'fooddelivery.kitchen.v1.TicketRejected',
+    ]);
+    expect(await countRows('tickets')).toBe(0);
+    expect(await countRows('inbox')).toBe(1);
+  });
+
+  it('records a RejectTicket for an approved ticket as processed without replying', async () => {
+    await handleCommand(buildCommandMessage(CreateTicketSchema, createTicket));
+    await handleCommand(buildCommandMessage(ApproveTicketSchema, { orderId }));
+
+    await handleCommand(buildCommandMessage(RejectTicketSchema, { orderId }));
+
+    const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
+    expect(ticket?.toSnapshot().status).toBe('AWAITING_ACCEPTANCE');
+    expect(await readOutbox()).toHaveLength(2);
+    expect(await countRows('inbox')).toBe(3);
+  });
+
   it('dead-letters a command type the kitchen does not handle', async () => {
     const command = buildCommandMessage(
       ApproveTicketSchema,
       { orderId },
-      { messageType: 'fooddelivery.kitchen.v1.RejectTicket' },
+      { messageType: 'fooddelivery.kitchen.v1.AcceptTicket' },
     );
 
     await expect(handleCommand(command)).rejects.toThrow(PermanentMessageFailure);

@@ -13,7 +13,12 @@ export interface TicketCreationFailedReply {
   readonly reason: 'EmptyTicket' | 'InvalidQuantity';
 }
 
-export type KitchenReply = TicketReply | TicketCreationFailedReply;
+export interface TicketRejectedReply {
+  readonly type: 'TicketRejected';
+  readonly orderId: OrderId;
+}
+
+export type KitchenReply = TicketReply | TicketCreationFailedReply | TicketRejectedReply;
 
 export interface ReplySender {
   send(reply: KitchenReply, sagaId: string): void;

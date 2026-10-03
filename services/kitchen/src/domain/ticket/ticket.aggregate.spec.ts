@@ -77,6 +77,43 @@ describe('Ticket', () => {
     expect(ticket.toSnapshot().status).toBe('AWAITING_ACCEPTANCE');
   });
 
+  it('rejects a pending ticket', () => {
+    const ticket = buildTicket();
+
+    expect(ticket.reject()).toEqual(right(undefined));
+    expect(ticket.toSnapshot().status).toBe('REJECTED');
+  });
+
+  it('refuses to reject an approved ticket and keeps its state', () => {
+    const ticket = buildTicket();
+    unwrap(ticket.approve());
+
+    expect(ticket.reject()).toEqual(
+      left({
+        type: 'InvalidTicketTransition',
+        ticketId,
+        from: 'AWAITING_ACCEPTANCE',
+        to: 'REJECTED',
+      }),
+    );
+    expect(ticket.toSnapshot().status).toBe('AWAITING_ACCEPTANCE');
+  });
+
+  it('refuses to approve a rejected ticket', () => {
+    const ticket = buildTicket();
+    unwrap(ticket.reject());
+
+    expect(ticket.approve()).toEqual(
+      left({
+        type: 'InvalidTicketTransition',
+        ticketId,
+        from: 'REJECTED',
+        to: 'AWAITING_ACCEPTANCE',
+      }),
+    );
+    expect(ticket.toSnapshot().status).toBe('REJECTED');
+  });
+
   it('restores an approved ticket that cannot be approved again', () => {
     const approved = buildTicket();
     unwrap(approved.approve());

@@ -3,6 +3,7 @@ import { goldenSamplesDirectory } from '@fd/contracts';
 import {
   ApproveTicketSchema,
   CreateTicketSchema,
+  RejectTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { describe, expect, it } from 'vitest';
 import { buildCommandMessage } from '../../../../test/support/command-message.builder.ts';
@@ -32,6 +33,17 @@ describe('kitchen command golden samples', () => {
 
     expect(kitchenCommand).toMatchObject({
       type: 'ApproveTicket',
+      command: { orderId: createTicketInput().orderId },
+    });
+  });
+
+  it('reads the RejectTicket sample the Order service produces', async () => {
+    const sample = await readGoldenSample({ directory, topic, schema: RejectTicketSchema });
+
+    const kitchenCommand = toKitchenCommand(buildCommandMessage(RejectTicketSchema, sample));
+
+    expect(kitchenCommand).toMatchObject({
+      type: 'RejectTicket',
       command: { orderId: createTicketInput().orderId },
     });
   });
