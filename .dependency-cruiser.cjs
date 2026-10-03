@@ -72,7 +72,7 @@ module.exports = {
       name: 'end-to-end-tests-stay-black-box',
       comment: 'design 11: end-to-end tests drive the stack over HTTP and Docker only',
       severity: 'error',
-      from: { path: '^e2e/', pathNot: 'vitest\.config\.ts$' },
+      from: { path: '^e2e/', pathNot: 'vitest\\.config\\.ts$' },
       to: { path: '^(services|bffs|packages)/' },
     },
     {
