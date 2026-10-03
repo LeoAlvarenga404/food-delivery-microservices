@@ -155,6 +155,67 @@ describe('kitchenCommandConsumer', () => {
     expect(await countRows('tickets')).toBe(1);
   });
 
+  it('answers a repeated CreateTicket again with the ticket it created', async () => {
+    await handleCommand(buildCommandMessage(CreateTicketSchema, createTicket));
+    const repeated = buildCommandMessage(CreateTicketSchema, createTicket);
+
+    await handleCommand(repeated);
+
+    const replies = await readOutbox();
+    expect(replies).toHaveLength(2);
+    expect(replies[1]).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      messageType: 'fooddelivery.kitchen.v1.TicketCreated',
+      sagaId,
+      correlationId: repeated.headers.correlationId,
+      causationId: repeated.headers.messageId,
+    });
+    expect(fromBinary(TicketCreatedSchema, replies[1]?.payload ?? new Uint8Array())).toMatchObject({
+      orderId,
+      ticketId,
+    });
+    expect(await countRows('tickets')).toBe(1);
+    expect(await countRows('inbox')).toBe(2);
+  });
+
+  it.each([
+    { command: 'ApproveTicket', schema: ApproveTicketSchema, reply: 'TicketApproved' },
+    { command: 'RejectTicket', schema: RejectTicketSchema, reply: 'TicketRejected' },
+  ])('answers a repeated $command again with $reply', async ({ schema, reply }) => {
+    await handleCommand(buildCommandMessage(CreateTicketSchema, createTicket));
+    await handleCommand(buildCommandMessage(schema, { orderId }));
+    const repeated = buildCommandMessage(schema, { orderId });
+
+    await handleCommand(repeated);
+
+    const replies = await readOutbox();
+    expect(replies.map((row) => row.messageType)).toEqual([
+      'fooddelivery.kitchen.v1.TicketCreated',
+      `fooddelivery.kitchen.v1.${reply}`,
+      `fooddelivery.kitchen.v1.${reply}`,
+    ]);
+    expect(replies[2]).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      sagaId,
+      causationId: repeated.headers.messageId,
+    });
+    const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
+    expect(ticket?.toSnapshot().version).toBe(2);
+  });
+
+  it('rolls back a repeated reply and its inbox row when the inbox transaction fails', async () => {
+    await handleCommand(buildCommandMessage(CreateTicketSchema, createTicket));
+    await handleCommand(buildCommandMessage(ApproveTicketSchema, { orderId }));
+    const repeated = buildCommandMessage(ApproveTicketSchema, { orderId });
+
+    await expect(failingInboxTransaction()(repeated)).rejects.toThrow('inbox transaction failed');
+
+    expect(await readOutbox()).toHaveLength(2);
+    expect(await countRows('inbox')).toBe(2);
+  });
+
   it('rolls back the ticket, the reply and the inbox row when the inbox transaction fails', async () => {
     const command = buildCommandMessage(CreateTicketSchema, createTicket);
 

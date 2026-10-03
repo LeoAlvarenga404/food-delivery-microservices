@@ -49,9 +49,26 @@ describe('ApproveTicketCommandHandler', () => {
     expect(unitOfWork.replies.sentReplies).toEqual([]);
   });
 
-  it('sends no reply and keeps the ticket when it was already approved', async () => {
+  it('answers TicketApproved again for a ticket it already approved and keeps the ticket', async () => {
     const unitOfWork = await unitOfWorkWithTicket();
+    const reply: KitchenReply = { type: 'TicketApproved', orderId, ticketId };
     unwrap(await new ApproveTicketCommandHandler(unitOfWork).execute(command));
+
+    const outcome = await new ApproveTicketCommandHandler(unitOfWork).execute(command);
+
+    expect(outcome).toEqual(right(reply));
+    expect(unitOfWork.replies.sentReplies).toEqual([
+      { reply, sagaId },
+      { reply, sagaId },
+    ]);
+    expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot().version).toBe(2);
+  });
+
+  it('sends no reply and keeps a rejected ticket', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    const rejected = buildTicket();
+    unwrap(rejected.reject());
+    await unitOfWork.tickets.save(rejected);
 
     const outcome = await new ApproveTicketCommandHandler(unitOfWork).execute(command);
 
@@ -59,11 +76,10 @@ describe('ApproveTicketCommandHandler', () => {
       left({
         type: 'InvalidTicketTransition',
         ticketId,
-        from: 'AWAITING_ACCEPTANCE',
+        from: 'REJECTED',
         to: 'AWAITING_ACCEPTANCE',
       }),
     );
-    expect(unitOfWork.replies.sentReplies).toHaveLength(1);
-    expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot().version).toBe(2);
+    expect(unitOfWork.replies.sentReplies).toEqual([]);
   });
 });

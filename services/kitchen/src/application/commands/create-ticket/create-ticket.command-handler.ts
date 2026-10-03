@@ -5,6 +5,15 @@ import type { TransactionScope, UnitOfWork } from '#application/ports/unit-of-wo
 import { Ticket } from '#domain/ticket/ticket.aggregate.ts';
 import type { CreateTicketCommand } from './create-ticket.command.ts';
 
+function answerSaga(
+  scope: TransactionScope,
+  reply: KitchenReply,
+  sagaId: string,
+): Either<never, KitchenReply> {
+  scope.replies.send(reply, sagaId);
+  return right(reply);
+}
+
 export class CreateTicketCommandHandler {
   readonly #unitOfWork: UnitOfWork;
   readonly #idGenerator: IdGenerator;
@@ -23,17 +32,18 @@ export class CreateTicketCommandHandler {
     command: CreateTicketCommand,
   ): Promise<Either<never, KitchenReply>> {
     const { orderId, restaurantId, lineItems, sagaId } = command;
+    const existing = await scope.tickets.findByOrderId(orderId);
+    if (existing !== undefined) {
+      const { ticketId } = existing.toSnapshot();
+      return answerSaga(scope, { type: 'TicketCreated', orderId, ticketId }, sagaId);
+    }
     const ticketId = this.#idGenerator.generateTicketId();
     const creation = Ticket.create({ ticketId, orderId, restaurantId, lineItems });
     if (creation.isLeft()) {
       const reason = creation.failure.type;
-      const failed: KitchenReply = { type: 'TicketCreationFailed', orderId, reason };
-      scope.replies.send(failed, sagaId);
-      return right(failed);
+      return answerSaga(scope, { type: 'TicketCreationFailed', orderId, reason }, sagaId);
     }
     await scope.tickets.save(creation.success);
-    const created: KitchenReply = { type: 'TicketCreated', orderId, ticketId };
-    scope.replies.send(created, sagaId);
-    return right(created);
+    return answerSaga(scope, { type: 'TicketCreated', orderId, ticketId }, sagaId);
   }
 }

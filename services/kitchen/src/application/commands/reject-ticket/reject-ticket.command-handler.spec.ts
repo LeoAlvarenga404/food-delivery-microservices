@@ -46,6 +46,21 @@ describe('RejectTicketCommandHandler', () => {
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 
+  it('answers TicketRejected again for a ticket it already rejected and keeps the ticket', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    await unitOfWork.tickets.save(buildTicket());
+    unwrap(await new RejectTicketCommandHandler(unitOfWork).execute(command));
+
+    const outcome = await new RejectTicketCommandHandler(unitOfWork).execute(command);
+
+    expect(outcome).toEqual(right(reply));
+    expect(unitOfWork.replies.sentReplies).toEqual([
+      { reply, sagaId },
+      { reply, sagaId },
+    ]);
+    expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot().version).toBe(2);
+  });
+
   it('sends no reply and keeps the ticket when it was already approved', async () => {
     const unitOfWork = new InMemoryUnitOfWork();
     const approved = buildTicket();

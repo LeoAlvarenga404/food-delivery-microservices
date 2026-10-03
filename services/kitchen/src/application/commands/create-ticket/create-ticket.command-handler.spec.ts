@@ -2,7 +2,12 @@ import { right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import { FakeIdGenerator } from '../../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
-import { createTicketInput, orderId, ticketId } from '../../../../test/support/ticket.builder.ts';
+import {
+  createTicketInput,
+  orderId,
+  ticketId,
+  unwrap,
+} from '../../../../test/support/ticket.builder.ts';
 import type {
   KitchenReply,
   TicketCreationFailedReply,
@@ -46,6 +51,22 @@ describe('CreateTicketCommandHandler', () => {
     });
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
     expect(unitOfWork.executedMetadata).toEqual([command.metadata]);
+  });
+
+  it('answers TicketCreated again with the ticket it already created for the order', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    const handler = createTicket(unitOfWork);
+    const reply: KitchenReply = { type: 'TicketCreated', orderId, ticketId };
+    unwrap(await handler.execute(command));
+
+    const outcome = await handler.execute(command);
+
+    expect(outcome).toEqual(right(reply));
+    expect(unitOfWork.tickets.rows.size).toBe(1);
+    expect(unitOfWork.replies.sentReplies).toEqual([
+      { reply, sagaId },
+      { reply, sagaId },
+    ]);
   });
 
   it.each<{
