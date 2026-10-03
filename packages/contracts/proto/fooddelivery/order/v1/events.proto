@@ -25,3 +25,17 @@ message OrderApproved {
   string order_id = 1;
   google.protobuf.Timestamp approved_at = 2;
 }
+
+enum OrderRejectionReason {
+  ORDER_REJECTION_REASON_UNSPECIFIED = 0;
+  ORDER_REJECTION_REASON_CONSUMER_NOT_FOUND = 1;
+  ORDER_REJECTION_REASON_CONSUMER_BLOCKED = 2;
+  ORDER_REJECTION_REASON_TICKET_REFUSED = 3;
+  ORDER_REJECTION_REASON_PAYMENT_DECLINED = 4;
+}
+
+message OrderRejected {
+  string order_id = 1;
+  OrderRejectionReason reason = 2;
+  google.protobuf.Timestamp rejected_at = 3;
+}

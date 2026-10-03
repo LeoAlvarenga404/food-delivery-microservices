@@ -6,3 +6,15 @@ message ConsumerVerified {
   string consumer_id = 1;
   string order_id = 2;
 }
+
+enum ConsumerVerificationFailureReason {
+  CONSUMER_VERIFICATION_FAILURE_REASON_UNSPECIFIED = 0;
+  CONSUMER_VERIFICATION_FAILURE_REASON_CONSUMER_NOT_FOUND = 1;
+  CONSUMER_VERIFICATION_FAILURE_REASON_CONSUMER_BLOCKED = 2;
+}
+
+message ConsumerVerificationFailed {
+  string consumer_id = 1;
+  string order_id = 2;
+  ConsumerVerificationFailureReason reason = 3;
+}

@@ -17,3 +17,7 @@ message CreateTicket {
 message ApproveTicket {
   string order_id = 1;
 }
+
+message RejectTicket {
+  string order_id = 1;
+}
