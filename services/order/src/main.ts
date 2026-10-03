@@ -1,6 +1,7 @@
 import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
 import { withInbox } from '@fd/chassis-inbox';
 import { createKafka, startConsumerRunner, type RunningConsumer } from '@fd/chassis-kafka';
+import { stopInOrder, stopOnSignals, type Stopper } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
@@ -24,7 +25,6 @@ import {
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
 import { createOrderRpcService } from '#infrastructure/rpc/order.rpc-service.ts';
 import { createRpcCorrelation } from '#infrastructure/rpc/rpc-correlation.adapter.ts';
-import { stopInOrder, type Stopper } from '#infrastructure/system/stop-in-order.adapter.ts';
 import { SystemClock } from '#infrastructure/system/system-clock.adapter.ts';
 import { UuidV7IdGenerator } from '#infrastructure/system/uuid-v7-id-generator.adapter.ts';
 
@@ -136,10 +136,8 @@ export async function startOrderService(
 }
 
 if (import.meta.main) {
-  const orderService = await startOrderService(readOrderServiceConfiguration(process.env));
-  const stop = (): void => {
-    void orderService.stop();
-  };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const configuration = readOrderServiceConfiguration(process.env);
+  const orderService = await startOrderService(configuration);
+  const logger = createLogger({ serviceName: 'order-service', level: configuration.logLevel });
+  stopOnSignals(orderService, logger);
 }
