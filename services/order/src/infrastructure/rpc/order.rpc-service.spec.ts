@@ -304,6 +304,26 @@ describe('OrderService.PlaceOrder', () => {
         lineItems: [{ menuItemId: '0199a5d0-0000-7000-8000-0000000000ff', quantity: 1 }],
       },
     },
+    { reason: 'EmptyOrder', overrides: { lineItems: [] } },
+    {
+      reason: 'InvalidQuantity',
+      overrides: { lineItems: [{ menuItemId: margheritaId, quantity: 0 }] },
+    },
+    {
+      reason: 'IncompleteDeliveryAddress',
+      overrides: {
+        deliveryAddress: {
+          street: ' ',
+          number: '1500',
+          city: 'Sao Paulo',
+          postalCode: '01304-001',
+        },
+      },
+    },
+    {
+      reason: 'UnknownRestaurant',
+      overrides: { restaurantId: '0199a5d0-0000-7000-8000-0000000000ff' },
+    },
   ])('names the $reason failure in a typed error detail', async ({ reason, overrides }) => {
     const failure = await client
       .placeOrder(placeOrderRequest(overrides))

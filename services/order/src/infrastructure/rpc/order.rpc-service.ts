@@ -9,7 +9,10 @@ import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
 import type { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { toGetOrderResponse } from './get-order-response.message-mapper.ts';
-import { toPlaceOrderCommand } from './place-order-request.message-mapper.ts';
+import {
+  toPlaceOrderCommand,
+  type InvalidPlaceOrderRequest,
+} from './place-order-request.message-mapper.ts';
 import { correlationIdKey } from './rpc-correlation.adapter.ts';
 
 export interface OrderRpcServiceSettings {
@@ -32,7 +35,13 @@ function toConnectCode(error: PlaceOrderError): Code {
   }
 }
 
-function placeOrderFailure(message: string, code: Code, reason: string): ConnectError {
+type PlaceOrderFailureReason = PlaceOrderError['type'] | InvalidPlaceOrderRequest['type'];
+
+function placeOrderFailure(
+  message: string,
+  code: Code,
+  reason: PlaceOrderFailureReason,
+): ConnectError {
   return new ConnectError(message, code, undefined, [
     { desc: PlaceOrderFailureSchema, value: { reason } },
   ]);
