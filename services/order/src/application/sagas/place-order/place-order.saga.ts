@@ -23,7 +23,11 @@ export interface FailureReply {
   readonly rejectionReason: OrderRejectionReason;
 }
 
-export type PlaceOrderSagaReply = SuccessReply | FailureReply;
+export interface StepTimedOut {
+  readonly type: 'StepTimedOut';
+}
+
+export type PlaceOrderSagaReply = SuccessReply | FailureReply | StepTimedOut;
 
 export type PlaceOrderSagaReplyType = PlaceOrderSagaReply['type'];
 
@@ -73,6 +77,41 @@ function rejectOrder(
   };
 }
 
+function rejectTicket(
+  order: PlaceOrderSagaOrder,
+  rejectionReason: OrderRejectionReason,
+): SagaTransition {
+  return {
+    state: { step: 'REJECTING_TICKET', order, rejectionReason },
+    commands: [{ type: 'RejectTicket', order }],
+  };
+}
+
+function sendAgain(
+  state: PlaceOrderSagaState,
+  commandType: 'ApproveTicket' | 'RejectTicket',
+): SagaTransition {
+  return { state, commands: [{ type: commandType, order: state.order }] };
+}
+
+function timeoutTransition(state: PlaceOrderSagaState): SagaTransition | undefined {
+  switch (state.step) {
+    case 'VERIFYING_CONSUMER':
+      return rejectOrder(state.order, 'CONSUMER_VERIFICATION_TIMED_OUT');
+    case 'CREATING_TICKET':
+      return rejectTicket(state.order, 'TICKET_CREATION_TIMED_OUT');
+    case 'AUTHORIZING_PAYMENT':
+      return rejectTicket(state.order, 'PAYMENT_AUTHORIZATION_TIMED_OUT');
+    case 'APPROVING_TICKET':
+      return sendAgain(state, 'ApproveTicket');
+    case 'REJECTING_TICKET':
+      return sendAgain(state, 'RejectTicket');
+    case 'COMPLETED':
+    case 'COMPENSATED':
+      return undefined;
+  }
+}
+
 function afterConsumerVerification(
   { order, paymentToken }: BeforePivotSagaState,
   reply: PlaceOrderSagaReply,
@@ -101,13 +140,7 @@ function afterPaymentAuthorization(
   { order }: BeforePivotSagaState,
   reply: PlaceOrderSagaReply,
 ): SagaTransition | undefined {
-  if (reply.type === 'PaymentFailed') {
-    const { rejectionReason } = reply;
-    return {
-      state: { step: 'REJECTING_TICKET', order, rejectionReason },
-      commands: [{ type: 'RejectTicket', order }],
-    };
-  }
+  if (reply.type === 'PaymentFailed') return rejectTicket(order, reply.rejectionReason);
   if (reply.type !== 'PaymentAuthorized') return undefined;
   return {
     state: { step: 'APPROVING_TICKET', order },
@@ -131,7 +164,7 @@ function afterTicketRejection(
   return rejectOrder(order, rejectionReason);
 }
 
-function transition(
+function replyTransition(
   state: PlaceOrderSagaState,
   reply: PlaceOrderSagaReply,
 ): SagaTransition | undefined {
@@ -150,6 +183,14 @@ function transition(
     case 'COMPENSATED':
       return undefined;
   }
+}
+
+function transition(
+  state: PlaceOrderSagaState,
+  reply: PlaceOrderSagaReply,
+): SagaTransition | undefined {
+  if (reply.type === 'StepTimedOut') return timeoutTransition(state);
+  return replyTransition(state, reply);
 }
 
 export const placeOrderSaga = {
