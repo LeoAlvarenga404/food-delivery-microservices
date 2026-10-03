@@ -1,5 +1,5 @@
 import { fromBinary } from '@bufbuild/protobuf';
-import { withInbox } from '@fd/chassis-inbox';
+import { withInbox, type InboxSettings, type TransactionalMessageHandler } from '@fd/chassis-inbox';
 import { PermanentMessageFailure, type MessageHandler } from '@fd/chassis-kafka';
 import { createLogger } from '@fd/chassis-observability';
 import { VerifyConsumerSchema } from '@fd/contracts/fooddelivery/consumer/v1/commands_pb.js';
@@ -16,6 +16,7 @@ import {
   buildConsumer,
   unwrap,
 } from '../../../../test/support/consumer.builder.ts';
+import type { DB as ConsumerDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { parseConsumerId } from '#domain/consumer/consumer-id.value-object.ts';
 import { createConsumerUnitOfWork } from '#infrastructure/persistence/consumer-unit-of-work.adapter.ts';
 import { consumerCommandConsumer } from './consumer-command.consumer.ts';
@@ -37,6 +38,8 @@ const processedAt = new Date('2026-10-02T12:00:01.000Z');
 
 let testDatabase: ConsumerTestDatabase;
 let handleCommand: MessageHandler;
+let consumeCommand: TransactionalMessageHandler<ConsumerDatabase>;
+let inboxSettings: InboxSettings<ConsumerDatabase>;
 let messageCount = 0;
 
 async function readOutbox(): Promise<readonly OutboxRow[]> {
@@ -71,13 +74,16 @@ beforeEach(async () => {
     },
     now: () => processedAt,
   });
-  handleCommand = withInbox(
-    { database: testDatabase.database, handlerName: 'consumer-command', now: () => processedAt },
-    consumerCommandConsumer({
-      unitOfWork,
-      logger: createLogger({ serviceName: 'consumer-service', level: 'silent' }),
-    }),
-  );
+  consumeCommand = consumerCommandConsumer({
+    unitOfWork,
+    logger: createLogger({ serviceName: 'consumer-service', level: 'silent' }),
+  });
+  inboxSettings = {
+    database: testDatabase.database,
+    handlerName: 'consumer-command',
+    now: () => processedAt,
+  };
+  handleCommand = withInbox(inboxSettings, consumeCommand);
 });
 
 afterAll(async () => {
@@ -119,6 +125,22 @@ describe('consumerCommandConsumer', () => {
     await handleCommand(command);
 
     expect(await readOutbox()).toHaveLength(1);
+  });
+
+  it('rolls back the reply and the inbox row when the inbox transaction fails', async () => {
+    const command = buildCommandMessage(VerifyConsumerSchema, {
+      consumerId: activeConsumerId,
+      orderId,
+    });
+    const failingHandleCommand = withInbox(inboxSettings, async (message, transaction) => {
+      await consumeCommand(message, transaction);
+      throw new Error('inbox transaction failed');
+    });
+
+    await expect(failingHandleCommand(command)).rejects.toThrow('inbox transaction failed');
+
+    expect(await readOutbox()).toEqual([]);
+    expect(await countInboxRows()).toBe(0);
   });
 
   it('records a command for a blocked consumer as processed without replying', async () => {
