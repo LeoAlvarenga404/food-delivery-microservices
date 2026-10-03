@@ -1,4 +1,4 @@
-import { parseEnvironment } from '@fd/chassis-config';
+import { environmentVariables, parseEnvironment } from '@fd/chassis-config';
 import type { LogLevel } from '@fd/chassis-observability';
 import { z } from 'zod';
 
@@ -11,19 +11,11 @@ export interface OrderServiceConfiguration {
 }
 
 const orderServiceEnvironmentSchema = z.object({
-  ORDER_DATABASE_URL: z.string().regex(/^postgres(?:ql)?:\/\//),
-  KAFKA_BOOTSTRAP_SERVERS: z
-    .string()
-    .transform((servers) =>
-      servers
-        .split(',')
-        .map((server) => server.trim())
-        .filter((server) => server.length > 0),
-    )
-    .pipe(z.array(z.string()).min(1)),
-  ORDER_SERVICE_HOST: z.string().min(1).default('127.0.0.1'),
-  ORDER_SERVICE_PORT: z.coerce.number().int().min(1).max(65_535).default(4001),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  ORDER_DATABASE_URL: environmentVariables.postgresUrl,
+  KAFKA_BOOTSTRAP_SERVERS: environmentVariables.kafkaBootstrapServers,
+  ORDER_SERVICE_HOST: environmentVariables.listenHost,
+  ORDER_SERVICE_PORT: environmentVariables.listenPort.default(4001),
+  LOG_LEVEL: environmentVariables.logLevel,
 });
 
 export function readOrderServiceConfiguration(

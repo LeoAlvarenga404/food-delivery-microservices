@@ -1,4 +1,4 @@
-import { parseEnvironment } from '@fd/chassis-config';
+import { environmentVariables, parseEnvironment } from '@fd/chassis-config';
 import type { LogLevel } from '@fd/chassis-observability';
 import { z } from 'zod';
 
@@ -9,17 +9,9 @@ export interface KitchenServiceConfiguration {
 }
 
 const kitchenServiceEnvironmentSchema = z.object({
-  KITCHEN_DATABASE_URL: z.string().regex(/^postgres(?:ql)?:\/\//),
-  KAFKA_BOOTSTRAP_SERVERS: z
-    .string()
-    .transform((servers) =>
-      servers
-        .split(',')
-        .map((server) => server.trim())
-        .filter((server) => server.length > 0),
-    )
-    .pipe(z.array(z.string()).min(1)),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  KITCHEN_DATABASE_URL: environmentVariables.postgresUrl,
+  KAFKA_BOOTSTRAP_SERVERS: environmentVariables.kafkaBootstrapServers,
+  LOG_LEVEL: environmentVariables.logLevel,
 });
 
 export function readKitchenServiceConfiguration(

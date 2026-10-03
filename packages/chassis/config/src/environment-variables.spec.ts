@@ -1,0 +1,45 @@
+import { describe, expect, it } from 'vitest';
+import { environmentVariables } from './environment-variables.ts';
+
+describe('environmentVariables', () => {
+  it.each(['postgres://order_service@127.0.0.1/order', 'postgresql://order_service@db/order'])(
+    'accepts the database url %s',
+    (databaseUrl) => {
+      expect(environmentVariables.postgresUrl.safeParse(databaseUrl).success).toBe(true);
+    },
+  );
+
+  it('refuses a database url of another kind', () => {
+    expect(environmentVariables.postgresUrl.safeParse('mysql://order@db/order').success).toBe(
+      false,
+    );
+  });
+
+  it('trims the bootstrap servers and drops empty entries', () => {
+    expect(
+      environmentVariables.kafkaBootstrapServers.parse(' kafka-1:29092, ,kafka-2:29092 '),
+    ).toEqual(['kafka-1:29092', 'kafka-2:29092']);
+  });
+
+  it('refuses bootstrap servers made only of separators', () => {
+    expect(environmentVariables.kafkaBootstrapServers.safeParse(' , ').success).toBe(false);
+  });
+
+  it('listens on the loopback interface unless told otherwise', () => {
+    expect(environmentVariables.listenHost.parse(undefined)).toBe('127.0.0.1');
+    expect(environmentVariables.listenHost.parse('0.0.0.0')).toBe('0.0.0.0');
+  });
+
+  it('reads a listen port from text', () => {
+    expect(environmentVariables.listenPort.parse('4001')).toBe(4001);
+  });
+
+  it.each(['', '0', '65536', '40.5'])('refuses the listen port "%s"', (port) => {
+    expect(environmentVariables.listenPort.safeParse(port).success).toBe(false);
+  });
+
+  it('defaults the log level to info and refuses unknown levels', () => {
+    expect(environmentVariables.logLevel.parse(undefined)).toBe('info');
+    expect(environmentVariables.logLevel.safeParse('verbose').success).toBe(false);
+  });
+});

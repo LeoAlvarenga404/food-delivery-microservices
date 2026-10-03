@@ -1,4 +1,4 @@
-import { parseEnvironment } from '@fd/chassis-config';
+import { environmentVariables, parseEnvironment } from '@fd/chassis-config';
 import type { LogLevel } from '@fd/chassis-observability';
 import { z } from 'zod';
 
@@ -10,16 +10,8 @@ export interface AccountingServiceConfiguration {
 }
 
 const accountingServiceEnvironmentSchema = z.object({
-  ACCOUNTING_DATABASE_URL: z.string().regex(/^postgres(?:ql)?:\/\//),
-  KAFKA_BOOTSTRAP_SERVERS: z
-    .string()
-    .transform((servers) =>
-      servers
-        .split(',')
-        .map((server) => server.trim())
-        .filter((server) => server.length > 0),
-    )
-    .pipe(z.array(z.string()).min(1)),
+  ACCOUNTING_DATABASE_URL: environmentVariables.postgresUrl,
+  KAFKA_BOOTSTRAP_SERVERS: environmentVariables.kafkaBootstrapServers,
   SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: z
     .string()
     .trim()
@@ -27,7 +19,7 @@ const accountingServiceEnvironmentSchema = z.object({
     .default('3000')
     .transform(Number)
     .pipe(z.number().int().min(0).max(2_147_483_647)),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  LOG_LEVEL: environmentVariables.logLevel,
 });
 
 export function readAccountingServiceConfiguration(
