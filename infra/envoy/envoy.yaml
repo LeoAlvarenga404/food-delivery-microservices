@@ -9,6 +9,34 @@ static_resources:
               typed_config:
                 '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: edge
+                local_reply_config:
+                  mappers:
+                    - filter:
+                        status_code_filter:
+                          comparison:
+                            {
+                              op: EQ,
+                              value: { default_value: 503, runtime_key: edge.local_reply.503 },
+                            }
+                      body_format_override:
+                        content_type: application/problem+json
+                        json_format:
+                          {
+                            type: about:blank,
+                            title: Service Unavailable,
+                            status: '%RESPONSE_CODE%',
+                          }
+                    - filter:
+                        status_code_filter:
+                          comparison:
+                            {
+                              op: EQ,
+                              value: { default_value: 504, runtime_key: edge.local_reply.504 },
+                            }
+                      body_format_override:
+                        content_type: application/problem+json
+                        json_format:
+                          { type: about:blank, title: Gateway Timeout, status: '%RESPONSE_CODE%' }
                 http_filters:
                   - name: envoy.filters.http.router
                     typed_config:
@@ -40,6 +68,11 @@ static_resources:
     - name: consumer-bff
       type: STRICT_DNS
       connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          common_http_protocol_options: { idle_timeout: 60s }
+          explicit_http_config: { http_protocol_options: {} }
       load_assignment:
         cluster_name: consumer-bff
         endpoints:
