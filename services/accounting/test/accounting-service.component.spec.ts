@@ -4,6 +4,7 @@ import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
   recordSpans,
+  SpanStatusCode,
   startKafkaContainer,
   startPostgresContainer,
   traceparentOf,
@@ -266,5 +267,6 @@ describe('accounting service', () => {
     await delay(500);
     expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
     expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
+    expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });

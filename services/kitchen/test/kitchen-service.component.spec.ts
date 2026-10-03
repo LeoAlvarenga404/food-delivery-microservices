@@ -10,6 +10,7 @@ import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
   recordSpans,
+  SpanStatusCode,
   startKafkaContainer,
   startPostgresContainer,
   traceparentOf,
@@ -215,7 +216,11 @@ describe('kitchen service', () => {
       spans.spansNamed('process kitchen.commands').map(traceparentOf),
     );
     expect(handled.spanContext().traceId).toBe(commandTraceId);
-    expect(handled.attributes).toMatchObject({ 'fooddelivery.order.id': orderId });
+    expect(
+      spans
+        .spansNamed('process kitchen.commands')
+        .map((span) => span.attributes['fooddelivery.order.id']),
+    ).toEqual([orderId, orderId]);
   });
 
   it('answers its health endpoint', async () => {
@@ -297,5 +302,6 @@ describe('kitchen service', () => {
     await delay(500);
     expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
     expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
+    expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });

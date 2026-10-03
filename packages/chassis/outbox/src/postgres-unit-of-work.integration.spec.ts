@@ -214,9 +214,12 @@ describe('PostgresUnitOfWork.execute', () => {
       }),
     );
 
-    const renamingTab = traceparentOf(spans.spansNamed('renaming tab')[0]);
+    const renamingTabTraceparent = traceparentOf(spans.spansNamed('renaming tab')[0]);
     const outboxRows = await database.selectFrom('outbox').select('traceparent').execute();
-    expect(outboxRows).toEqual([{ traceparent: renamingTab }, { traceparent: renamingTab }]);
+    expect(outboxRows).toEqual([
+      { traceparent: renamingTabTraceparent },
+      { traceparent: renamingTabTraceparent },
+    ]);
   });
 
   it('rolls everything back and returns the left when the work fails as expected', async () => {
