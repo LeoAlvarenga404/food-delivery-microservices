@@ -39,7 +39,7 @@ function spanProcessors(exporterUrl: string | undefined): SpanProcessor[] {
   const exporter = new OTLPTraceExporter({
     url: new URL('/v1/traces', exporterUrl).toString(),
     timeoutMillis: exportTimeoutInMilliseconds,
-    httpAgentOptions: { timeout: exportTimeoutInMilliseconds },
+    httpAgentOptions: { keepAlive: true, timeout: exportTimeoutInMilliseconds },
   });
   return [new BatchSpanProcessor(exporter)];
 }

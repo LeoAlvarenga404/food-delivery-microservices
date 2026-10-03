@@ -16,7 +16,7 @@ interface ExportedSpan {
 const runFile = promisify(execFile);
 const serverSpanKind = 2;
 const clientSpanKind = 3;
-const maximumExitTimeInMilliseconds = 5_000;
+const maximumExitTimeInMilliseconds = 7_000;
 const packageDirectory = new URL('..', import.meta.url);
 
 const exportRequestSchema = z.object({
