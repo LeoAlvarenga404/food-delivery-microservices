@@ -1,4 +1,4 @@
-import { left, right } from '@fd/domain';
+import { right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import type { ConsumerReply } from '#application/ports/reply-sender.port.ts';
 import { activeConsumerId, buildConsumer } from '../../../../test/support/consumer.builder.ts';
@@ -37,21 +37,33 @@ describe('VerifyConsumerCommandHandler', () => {
     expect(unitOfWork.executedMetadata).toEqual([command.metadata]);
   });
 
-  it('sends no reply for a blocked consumer', async () => {
+  it('replies ConsumerVerificationFailed for a blocked consumer', async () => {
     const unitOfWork = new InMemoryUnitOfWork([buildConsumer({ status: 'BLOCKED' })]);
+    const reply: ConsumerReply = {
+      type: 'ConsumerVerificationFailed',
+      consumerId: activeConsumerId,
+      orderId,
+      reason: 'ConsumerBlocked',
+    };
 
     const outcome = await new VerifyConsumerCommandHandler(unitOfWork).execute(command);
 
-    expect(outcome).toEqual(left({ type: 'ConsumerBlocked', consumerId: activeConsumerId }));
-    expect(unitOfWork.replies.sentReplies).toEqual([]);
+    expect(outcome).toEqual(right(reply));
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 
-  it('sends no reply for a consumer it does not know', async () => {
+  it('replies ConsumerVerificationFailed for a consumer it does not know', async () => {
     const unitOfWork = new InMemoryUnitOfWork();
+    const reply: ConsumerReply = {
+      type: 'ConsumerVerificationFailed',
+      consumerId: activeConsumerId,
+      orderId,
+      reason: 'ConsumerNotFound',
+    };
 
     const outcome = await new VerifyConsumerCommandHandler(unitOfWork).execute(command);
 
-    expect(outcome).toEqual(left({ type: 'ConsumerNotFound', consumerId: activeConsumerId }));
-    expect(unitOfWork.replies.sentReplies).toEqual([]);
+    expect(outcome).toEqual(right(reply));
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 });

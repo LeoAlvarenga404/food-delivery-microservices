@@ -27,10 +27,6 @@ export function consumerCommandConsumer(
     });
     const unitOfWork = joinTransaction(settings.unitOfWork, transaction);
     const outcome = await new VerifyConsumerCommandHandler(unitOfWork).execute(command);
-    if (outcome.isLeft()) {
-      logger.warn({ failure: outcome.failure }, 'consumer not verified, no reply sent');
-      return;
-    }
-    logger.info({ consumerId: command.consumerId }, 'consumer verified');
+    if (outcome.isRight()) logger.info({ reply: outcome.success }, 'VerifyConsumer answered');
   };
 }
