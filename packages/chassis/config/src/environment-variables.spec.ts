@@ -31,6 +31,17 @@ describe('environmentVariables', () => {
     expect(environmentVariables.kafkaBootstrapServers.safeParse(' , ').success).toBe(false);
   });
 
+  it.each(['http://keycloak:8080/realms/food-delivery', 'https://auth.example.com/certs'])(
+    'accepts the http url %s',
+    (url) => {
+      expect(environmentVariables.httpUrl.safeParse(url).success).toBe(true);
+    },
+  );
+
+  it.each(['ftp://keycloak/realms', 'keycloak:8080', ''])('refuses the http url "%s"', (url) => {
+    expect(environmentVariables.httpUrl.safeParse(url).success).toBe(false);
+  });
+
   it('listens on the loopback interface unless told otherwise', () => {
     expect(environmentVariables.listenHost.parse(undefined)).toBe('127.0.0.1');
     expect(environmentVariables.listenHost.parse('0.0.0.0')).toBe('0.0.0.0');

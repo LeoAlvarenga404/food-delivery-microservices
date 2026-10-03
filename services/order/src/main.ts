@@ -30,8 +30,8 @@ import {
 } from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
 import { PostgresIdempotencyKeyStore } from '#infrastructure/persistence/postgres-idempotency-key-store.adapter.ts';
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
+import { createOrderRpcInterceptors } from '#infrastructure/rpc/order-rpc-interceptors.adapter.ts';
 import { createOrderRpcService } from '#infrastructure/rpc/order.rpc-service.ts';
-import { createRpcCorrelation } from '#infrastructure/rpc/rpc-correlation.adapter.ts';
 import { PlaceOrderSagaDeadlineWorker } from '#infrastructure/scheduling/place-order-saga-deadline-worker.adapter.ts';
 import { SystemClock } from '#infrastructure/system/system-clock.adapter.ts';
 import { UuidV7IdGenerator } from '#infrastructure/system/uuid-v7-id-generator.adapter.ts';
@@ -71,7 +71,7 @@ async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpSer
   const server = fastify();
   await server.register(fastifyConnectPlugin, {
     routes: (router) => router.service(OrderService, rpcService),
-    interceptors: [createRpcCorrelation({ logger, generateCorrelationId: generateUuidV7 })],
+    interceptors: createOrderRpcInterceptors(configuration, logger),
   });
   server.get('/health', () => ({ status: 'ok' }));
   try {

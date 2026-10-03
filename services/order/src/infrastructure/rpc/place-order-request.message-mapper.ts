@@ -8,9 +8,9 @@ import {
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import type { PlaceOrderCommand } from '#application/commands/place-order/place-order.command.ts';
 import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
+import type { Principal } from '#domain/identity/principal.value-object.ts';
 import { parseMenuItemId } from '#domain/menu/menu-item-id.value-object.ts';
 import { parseRestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
-import { parseConsumerId } from '#domain/order/consumer-id.value-object.ts';
 import type { RequestedLineItem } from '#domain/order/order-placement.policy.ts';
 
 export interface InvalidPlaceOrderRequest {
@@ -40,7 +40,7 @@ export function hashPlaceOrderRequest(request: PlaceOrderRequest): string {
     {
       ...request,
       idempotencyKey: '',
-      consumerId: request.consumerId.toLowerCase(),
+      consumerId: '',
       restaurantId: request.restaurantId.toLowerCase(),
       lineItems: request.lineItems.map((lineItem) => ({
         ...lineItem,
@@ -54,14 +54,13 @@ export function hashPlaceOrderRequest(request: PlaceOrderRequest): string {
 
 export function toPlaceOrderCommand(
   request: PlaceOrderRequest,
+  principal: Principal,
   metadata: MessageMetadata,
 ): Either<InvalidPlaceOrderRequest, PlaceOrderCommand> {
-  const consumerId = parseConsumerId(request.consumerId);
   const restaurantId = parseRestaurantId(request.restaurantId);
   const requestedLineItems = parseLineItems(request.lineItems);
   const { idempotencyKey, deliveryAddress, paymentToken } = request;
   if (idempotencyKey.trim().length === 0) return invalidField('idempotency_key');
-  if (consumerId.isLeft()) return invalidField('consumer_id');
   if (restaurantId.isLeft()) return invalidField('restaurant_id');
   if (requestedLineItems.isLeft()) return requestedLineItems;
   if (deliveryAddress === undefined) return invalidField('delivery_address');
@@ -70,7 +69,7 @@ export function toPlaceOrderCommand(
   return right({
     idempotencyKey,
     requestHash: hashPlaceOrderRequest(request),
-    consumerId: consumerId.success,
+    principal,
     restaurantId: restaurantId.success,
     requestedLineItems: requestedLineItems.success,
     deliveryAddress: { street, number, city, postalCode },

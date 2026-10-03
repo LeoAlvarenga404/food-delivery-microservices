@@ -21,6 +21,7 @@
     "@connectrpc/connect": "2.2.0",
     "@connectrpc/connect-fastify": "2.2.0",
     "@connectrpc/connect-node": "2.2.0",
+    "@fd/chassis-auth": "workspace:*",
     "@fd/chassis-config": "workspace:*",
     "@fd/chassis-inbox": "workspace:*",
     "@fd/chassis-kafka": "workspace:*",

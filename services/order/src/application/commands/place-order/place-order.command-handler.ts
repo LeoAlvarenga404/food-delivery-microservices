@@ -58,7 +58,7 @@ export class PlaceOrderCommandHandler {
     const placement = { orderId: idGenerator.generateOrderId(), placedAt: clock.now() };
     return unitOfWork.execute(command.metadata, async (scope) => {
       const reserved = await scope.idempotencyKeys.reserve({
-        consumerId: command.consumerId,
+        consumerId: command.principal.consumerId,
         idempotencyKey: command.idempotencyKey,
         requestHash: command.requestHash,
         orderId: placement.orderId,
@@ -79,7 +79,7 @@ export class PlaceOrderCommandHandler {
     if (menu === undefined) return left({ type: 'UnknownRestaurant', restaurantId });
     const order = Order.place({
       ...placement,
-      consumerId: command.consumerId,
+      consumerId: command.principal.consumerId,
       menu,
       requestedLineItems: command.requestedLineItems,
       deliveryAddress: command.deliveryAddress,

@@ -4,6 +4,8 @@ import { readOrderServiceConfiguration } from './order-service.config.ts';
 const requiredVariables = {
   ORDER_DATABASE_URL: 'postgres://order_service:secret@127.0.0.1:5432/order_service',
   KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092,localhost:9093,localhost:9094',
+  ACCESS_TOKEN_ISSUER: 'http://localhost:8180/realms/food-delivery',
+  ACCESS_TOKEN_JWKS_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
 };
 
 describe('readOrderServiceConfiguration', () => {
@@ -22,6 +24,8 @@ describe('readOrderServiceConfiguration', () => {
         REJECTING_TICKET: 30_000,
       },
       housekeepingIntervalInMilliseconds: 3_600_000,
+      accessTokenIssuer: 'http://localhost:8180/realms/food-delivery',
+      accessTokenJwksUrl: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
     });
   });
 
@@ -52,6 +56,7 @@ describe('readOrderServiceConfiguration', () => {
 
   it('accepts the postgresql scheme and trims the bootstrap servers, dropping empty entries', () => {
     const configuration = readOrderServiceConfiguration({
+      ...requiredVariables,
       ORDER_DATABASE_URL: 'postgresql://order_service:secret@127.0.0.1:5432/order_service',
       KAFKA_BOOTSTRAP_SERVERS: ' localhost:9092 , localhost:9093,, ',
     });
@@ -73,6 +78,14 @@ describe('readOrderServiceConfiguration', () => {
     {
       problem: 'bootstrap servers made only of separators',
       variables: { ...requiredVariables, KAFKA_BOOTSTRAP_SERVERS: ' , ,' },
+    },
+    {
+      problem: 'a missing access token issuer',
+      variables: { ...requiredVariables, ACCESS_TOKEN_ISSUER: undefined },
+    },
+    {
+      problem: 'a key set url that is not an http url',
+      variables: { ...requiredVariables, ACCESS_TOKEN_JWKS_URL: 'keycloak:8080/certs' },
     },
     {
       problem: 'a database url with another scheme',

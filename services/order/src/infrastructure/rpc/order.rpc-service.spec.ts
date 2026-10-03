@@ -6,7 +6,10 @@ import {
   createClient,
   createRouterTransport,
   type Client,
+  type Interceptor,
 } from '@connectrpc/connect';
+import { createAccessTokenInterceptor, type AccessTokenVerifier } from '@fd/chassis-auth';
+import { left, right } from '@fd/domain';
 import {
   OrderService,
   OrderStatus,
@@ -20,15 +23,27 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../test/support/in-memory-unit-of-work.adapter.ts';
-import { guaranaId, margheritaId, pizzeriaMenu } from '../../../test/support/order.builder.ts';
+import {
+  guaranaId,
+  margheritaId,
+  pizzeriaMenu,
+  unwrap,
+} from '../../../test/support/order.builder.ts';
 import { sagaTimeoutsInMilliseconds } from '../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
+import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { createOrderRpcService } from './order.rpc-service.ts';
 import { createRpcCorrelation } from './rpc-correlation.adapter.ts';
 
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
+const consumerId = '0199a5d0-0000-7000-8000-0000000000c1';
 const spans = recordSpans();
+const verifiedAccessTokens = new Map([
+  ['consumer-a-token', { subject: consumerId, roles: ['consumer'] }],
+  ['consumer-b-token', { subject: '0199a5d0-0000-7000-8000-0000000000c2', roles: ['consumer'] }],
+  ['staff-token', { subject: '0199a5d0-0000-7000-8000-0000000000e1', roles: ['restaurant_staff'] }],
+]);
 
 type PlaceOrderRequestInit = Exclude<
   MessageInitShape<typeof PlaceOrderRequestSchema>,
@@ -36,8 +51,25 @@ type PlaceOrderRequestInit = Exclude<
 >;
 
 let unitOfWork: InMemoryUnitOfWork;
+let idGenerator: FakeIdGenerator;
 let client: Client<typeof OrderService>;
 let logEntries: Record<string, unknown>[];
+
+const verify: AccessTokenVerifier = (accessToken) => {
+  const verified = verifiedAccessTokens.get(accessToken);
+  return Promise.resolve(
+    verified === undefined
+      ? left({ type: 'InvalidAccessToken', reason: 'ERR_JWS_INVALID' })
+      : right(verified),
+  );
+};
+
+function sendingAccessToken(accessToken: string): Interceptor {
+  return (next) => (request) => {
+    request.header.set('authorization', `Bearer ${accessToken}`);
+    return next(request);
+  };
+}
 
 function captureLogger(): ReturnType<typeof createLogger> {
   const destination = new Writable({
@@ -53,7 +85,6 @@ function captureLogger(): ReturnType<typeof createLogger> {
 function placeOrderRequest(overrides: PlaceOrderRequestInit = {}): PlaceOrderRequest {
   return create(PlaceOrderRequestSchema, {
     idempotencyKey: 'checkout-7f3a',
-    consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
     restaurantId: pizzeriaMenu.restaurantId,
     lineItems: [
       { menuItemId: margheritaId, quantity: 2 },
@@ -70,15 +101,10 @@ function placeOrderRequest(overrides: PlaceOrderRequestInit = {}): PlaceOrderReq
   });
 }
 
-beforeEach(() => {
-  unitOfWork = new InMemoryUnitOfWork();
-  logEntries = [];
-  const interceptors = [
-    createRpcCorrelation({
-      logger: captureLogger(),
-      generateCorrelationId: () => generatedCorrelationId,
-    }),
-  ];
+function clientOf(
+  accessToken: string,
+  routerInterceptors: Interceptor[],
+): Client<typeof OrderService> {
   const transport = createRouterTransport(
     ({ service }) => {
       service(
@@ -87,24 +113,76 @@ beforeEach(() => {
           placeOrder: new PlaceOrderCommandHandler({
             unitOfWork,
             clock: new FakeClock(),
-            idGenerator: new FakeIdGenerator(),
+            idGenerator,
             sagaTimeoutsInMilliseconds,
           }),
           getOrder: new GetOrderQueryHandler(unitOfWork.orders),
         }),
       );
     },
-    { router: { interceptors } },
+    {
+      router: { interceptors: routerInterceptors },
+      transport: { interceptors: [sendingAccessToken(accessToken)] },
+    },
   );
-  client = createClient(OrderService, transport);
+  return createClient(OrderService, transport);
+}
+
+function clientFor(accessToken: string): Client<typeof OrderService> {
+  const correlation = createRpcCorrelation({
+    logger: captureLogger(),
+    generateCorrelationId: () => generatedCorrelationId,
+  });
+  return clientOf(accessToken, [correlation, createAccessTokenInterceptor(verify)]);
+}
+
+beforeEach(() => {
+  unitOfWork = new InMemoryUnitOfWork();
+  idGenerator = new FakeIdGenerator();
+  logEntries = [];
+  client = clientFor('consumer-a-token');
 });
 
 describe('OrderService.PlaceOrder', () => {
-  it('places an order and returns its id', async () => {
+  it('places an order for the consumer of the access token, who becomes its actor', async () => {
     const response = await client.placeOrder(placeOrderRequest());
 
     expect(response.orderId).toBe('0199a5d0-0000-7000-8000-0000000000a1');
-    expect(unitOfWork.executedMetadata[0]?.correlationId).toBe(generatedCorrelationId);
+    expect(unitOfWork.executedMetadata).toEqual([
+      {
+        correlationId: generatedCorrelationId,
+        causationId: undefined,
+        actorId: consumerId,
+        actorType: 'consumer',
+      },
+    ]);
+    const storedOrder = await unitOfWork.orders.findById(unwrap(parseOrderId(response.orderId)));
+    expect(storedOrder?.toSnapshot().consumerId).toBe(consumerId);
+  });
+
+  it('refuses a caller without the consumer role as permission denied', async () => {
+    await expect(clientFor('staff-token').placeOrder(placeOrderRequest())).rejects.toMatchObject({
+      code: Code.PermissionDenied,
+    });
+    expect(unitOfWork.executedMetadata).toEqual([]);
+  });
+
+  it('refuses a call whose access token was never verified as unauthenticated', async () => {
+    const unverifiedClient = clientOf('consumer-a-token', []);
+
+    await expect(unverifiedClient.placeOrder(placeOrderRequest())).rejects.toMatchObject({
+      code: Code.Unauthenticated,
+    });
+    await expect(
+      unverifiedClient.getOrder({ orderId: generatedCorrelationId }),
+    ).rejects.toMatchObject({ code: Code.Unauthenticated });
+  });
+
+  it('keeps the same Idempotency-Key of two consumers apart', async () => {
+    const forConsumerA = await client.placeOrder(placeOrderRequest());
+    const forConsumerB = await clientFor('consumer-b-token').placeOrder(placeOrderRequest());
+
+    expect(forConsumerB.orderId).not.toBe(forConsumerA.orderId);
   });
 
   it('adds the placed order id to the active span', async () => {
@@ -172,7 +250,7 @@ describe('OrderService.PlaceOrder', () => {
     const correlationId = '0199a5d0-0000-7000-8000-0000000000e2';
 
     const failure = await client
-      .placeOrder(placeOrderRequest({ consumerId: 'consumer-1' }), {
+      .placeOrder(placeOrderRequest({ restaurantId: 'pizzeria' }), {
         headers: { 'x-correlation-id': correlationId },
       })
       .catch((error: unknown) => error);
@@ -210,7 +288,6 @@ describe('OrderService.PlaceOrder', () => {
   it('answers a lowercase retry of an uppercase placement with the same order', async () => {
     const lowercase = placeOrderRequest();
     const uppercase = placeOrderRequest({
-      consumerId: lowercase.consumerId.toUpperCase(),
       restaurantId: lowercase.restaurantId.toUpperCase(),
       lineItems: lowercase.lineItems.map((lineItem) => ({
         menuItemId: lineItem.menuItemId.toUpperCase(),
@@ -226,7 +303,6 @@ describe('OrderService.PlaceOrder', () => {
 
   it.each<{ readonly invalidPart: string; readonly overrides: PlaceOrderRequestInit }>([
     { invalidPart: 'a blank idempotency key', overrides: { idempotencyKey: ' ' } },
-    { invalidPart: 'a consumer id that is not a uuid', overrides: { consumerId: 'consumer-1' } },
     {
       invalidPart: 'a menu item id that is not a uuid',
       overrides: { lineItems: [{ menuItemId: 'margherita', quantity: 1 }] },
@@ -300,7 +376,7 @@ describe('OrderService.PlaceOrder', () => {
   });
 
   it.each<{ readonly reason: string; readonly overrides: PlaceOrderRequestInit }>([
-    { reason: 'InvalidPlaceOrderRequest', overrides: { consumerId: 'consumer-1' } },
+    { reason: 'InvalidPlaceOrderRequest', overrides: { restaurantId: 'pizzeria' } },
     {
       reason: 'DuplicateMenuItem',
       overrides: {
@@ -384,6 +460,14 @@ describe('OrderService.GetOrder', () => {
 
     expect(spans.spansNamed('tracking').at(-1)?.attributes).toEqual({
       'fooddelivery.order.id': orderId,
+    });
+  });
+
+  it('reports the order of another consumer as not found', async () => {
+    const { orderId } = await client.placeOrder(placeOrderRequest());
+
+    await expect(clientFor('consumer-b-token').getOrder({ orderId })).rejects.toMatchObject({
+      code: Code.NotFound,
     });
   });
 

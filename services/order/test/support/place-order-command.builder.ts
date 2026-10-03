@@ -16,7 +16,7 @@ export function buildPlaceOrderCommand(
   return {
     idempotencyKey: 'checkout-7f3a',
     requestHash: 'hash-of-the-first-request',
-    consumerId,
+    principal: { consumerId },
     restaurantId: pizzeriaMenu.restaurantId,
     requestedLineItems,
     deliveryAddress,

@@ -11,6 +11,8 @@ export interface OrderServiceConfiguration {
   readonly logLevel: LogLevel;
   readonly sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds;
   readonly housekeepingIntervalInMilliseconds: number;
+  readonly accessTokenIssuer: string;
+  readonly accessTokenJwksUrl: string;
 }
 
 const orderServiceEnvironmentSchema = z.object({
@@ -25,6 +27,8 @@ const orderServiceEnvironmentSchema = z.object({
     environmentVariables.durationInMilliseconds.default(60_000),
   HOUSEKEEPING_INTERVAL_IN_MILLISECONDS:
     environmentVariables.durationInMilliseconds.default(3_600_000),
+  ACCESS_TOKEN_ISSUER: environmentVariables.httpUrl,
+  ACCESS_TOKEN_JWKS_URL: environmentVariables.httpUrl,
 });
 
 function toSagaTimeouts(
@@ -55,5 +59,7 @@ export function readOrderServiceConfiguration(
       variables.PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS,
     ),
     housekeepingIntervalInMilliseconds: variables.HOUSEKEEPING_INTERVAL_IN_MILLISECONDS,
+    accessTokenIssuer: variables.ACCESS_TOKEN_ISSUER,
+    accessTokenJwksUrl: variables.ACCESS_TOKEN_JWKS_URL,
   };
 }

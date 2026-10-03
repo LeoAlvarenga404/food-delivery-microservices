@@ -530,6 +530,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config

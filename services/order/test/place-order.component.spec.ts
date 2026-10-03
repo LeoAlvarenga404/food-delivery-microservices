@@ -1,16 +1,19 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { create, toBinary, type DescMessage, type MessageInitShape } from '@bufbuild/protobuf';
-import { Code, createClient, type Client } from '@connectrpc/connect';
+import { Code, createClient, type Client, type Interceptor } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
+import { createTokenExchange } from '@fd/chassis-auth';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
   recordSpans,
   SpanStatusCode,
   startKafkaContainer,
+  startKeycloakContainer,
   startPostgresContainer,
   traceparentOf,
   type StartedKafka,
+  type StartedKeycloak,
   type StartedPostgres,
 } from '@fd/chassis-testing';
 import { PaymentAuthorizedSchema } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
@@ -29,6 +32,7 @@ import {
 import { sql, type Kysely } from 'kysely';
 import { v7 as generateUuidV7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { OrderServiceConfiguration } from '../src/infrastructure/order-service.config.ts';
 import { startOrderService, type RunningOrderService } from '../src/main.ts';
 import { guaranaId, margheritaId, pizzeriaMenu } from './support/order.builder.ts';
 import { sagaTimeoutsInMilliseconds } from './support/place-order-saga.builder.ts';
@@ -37,12 +41,15 @@ interface CommandRow {
   readonly sagaId: string;
   readonly correlationId: string;
   readonly traceparent: string | null;
+  readonly actorId: string | null;
+  readonly actorType: string | null;
 }
 
 const repliesTopic = 'order.place-order-saga.replies';
 const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
 const replyTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+const consumerAId = '0199a5d0-0000-7000-8000-0000000000c1';
 const spans = recordSpans();
 const componentSagaTimeoutsInMilliseconds = {
   ...sagaTimeoutsInMilliseconds,
@@ -51,6 +58,7 @@ const componentSagaTimeoutsInMilliseconds = {
 
 let postgres: StartedPostgres;
 let kafka: StartedKafka;
+let keycloak: StartedKeycloak;
 let orderService: RunningOrderService;
 let client: Client<typeof OrderService>;
 let outboxReader: Kysely<unknown>;
@@ -72,7 +80,8 @@ async function waitFor<Result>(
 async function waitForCommand(messageType: string): Promise<CommandRow> {
   return waitFor(async () => {
     const result = await sql<CommandRow>`
-      select saga_id, correlation_id, traceparent from outbox where message_type = ${messageType}
+      select saga_id, correlation_id, traceparent, actor_id, actor_type
+      from outbox where message_type = ${messageType}
     `.execute(outboxReader);
     return result.rows[0];
   });
@@ -127,7 +136,6 @@ function buildPlaceOrderRequest(idempotencyKey: string, paymentToken: string): P
   return create(PlaceOrderRequestSchema, {
     idempotencyKey,
     paymentToken,
-    consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
     restaurantId: pizzeriaMenu.restaurantId,
     lineItems: [
       { menuItemId: margheritaId, quantity: 2 },
@@ -149,8 +157,54 @@ async function countConnectionsTo(databaseName: string): Promise<number> {
   return Number(result.rows[0]?.connectionCount);
 }
 
+function sendingAccessToken(accessToken: string): Interceptor {
+  return (next) => (request) => {
+    request.header.set('authorization', `Bearer ${accessToken}`);
+    return next(request);
+  };
+}
+
+function clientFor(accessToken: string | undefined): Client<typeof OrderService> {
+  return createClient(
+    OrderService,
+    createConnectTransport({
+      baseUrl: orderService.url,
+      httpVersion: '1.1',
+      interceptors: accessToken === undefined ? [] : [sendingAccessToken(accessToken)],
+    }),
+  );
+}
+
+async function orderServiceTokenOf(username: string): Promise<string> {
+  const exchange = createTokenExchange({
+    tokenUrl: keycloak.tokenUrl,
+    clientId: 'consumer-bff',
+    clientSecret: keycloak.consumerBffClientSecret,
+  });
+  const exchanged = await exchange(await keycloak.signIn(username), 'order-service');
+  if (exchanged.isLeft()) throw new Error(`exchange refused: ${exchanged.failure.error}`);
+  return exchanged.success;
+}
+
+function serviceConfiguration(
+  overrides: Partial<OrderServiceConfiguration>,
+): OrderServiceConfiguration {
+  return {
+    databaseUrl: postgres.connectionUri,
+    kafkaBootstrapServers: [kafka.bootstrapServer],
+    host: '127.0.0.1',
+    port: 0,
+    logLevel: 'silent',
+    housekeepingIntervalInMilliseconds,
+    sagaTimeoutsInMilliseconds,
+    accessTokenIssuer: keycloak.issuer,
+    accessTokenJwksUrl: keycloak.jwksUrl,
+    ...overrides,
+  };
+}
+
 beforeAll(async () => {
-  [postgres, kafka] = await Promise.all([
+  [postgres, kafka, keycloak] = await Promise.all([
     startPostgresContainer().then((started) => {
       stoppers.push(() => started.stop());
       return started;
@@ -159,22 +213,17 @@ beforeAll(async () => {
       stoppers.push(() => started.stop());
       return started;
     }),
+    startKeycloakContainer().then((started) => {
+      stoppers.push(() => started.stop());
+      return started;
+    }),
   ]);
   await createReplyTopics();
-  orderService = await startOrderService({
-    databaseUrl: postgres.connectionUri,
-    kafkaBootstrapServers: [kafka.bootstrapServer],
-    host: '127.0.0.1',
-    port: 0,
-    logLevel: 'silent',
-    housekeepingIntervalInMilliseconds,
-    sagaTimeoutsInMilliseconds: componentSagaTimeoutsInMilliseconds,
-  });
-  stoppers.push(() => orderService.stop());
-  client = createClient(
-    OrderService,
-    createConnectTransport({ baseUrl: orderService.url, httpVersion: '1.1' }),
+  orderService = await startOrderService(
+    serviceConfiguration({ sagaTimeoutsInMilliseconds: componentSagaTimeoutsInMilliseconds }),
   );
+  stoppers.push(() => orderService.stop());
+  client = clientFor(await orderServiceTokenOf('consumer-a'));
   outboxReader = createDatabase({
     connectionString: postgres.connectionUri,
     maximumConnectionCount: 1,
@@ -231,6 +280,10 @@ describe('order service', () => {
       return order.status === OrderStatus.APPROVED ? order : undefined;
     });
     expect(approved.totalInCents).toBe(9800n);
+    expect(await waitForCommand('fooddelivery.consumer.v1.VerifyConsumer')).toMatchObject({
+      actorId: consumerAId,
+      actorType: 'consumer',
+    });
     const createTicket = await waitForCommand('fooddelivery.kitchen.v1.CreateTicket');
     expect(spans.spansNamed('process order.place-order-saga.replies').map(traceparentOf)).toContain(
       createTicket.traceparent,
@@ -253,6 +306,51 @@ describe('order service', () => {
     await expect(client.placeOrder(different)).rejects.toMatchObject({
       code: Code.AlreadyExists,
     });
+  });
+
+  it('refuses a call without an access token as unauthenticated', async () => {
+    await expect(
+      clientFor(undefined).getOrder({ orderId: '0199a5d0-0000-7000-8000-0000000000ff' }),
+    ).rejects.toMatchObject({ code: Code.Unauthenticated });
+  });
+
+  it('refuses a token issued for another audience as unauthenticated', async () => {
+    const consumerBffToken = await keycloak.signIn('consumer-a');
+
+    await expect(
+      clientFor(consumerBffToken).placeOrder(
+        buildPlaceOrderRequest('checkout-audience-test', 'tok_visa_4242'),
+      ),
+    ).rejects.toMatchObject({ code: Code.Unauthenticated });
+  });
+
+  it('refuses a caller without the consumer role as permission denied', async () => {
+    const staffClient = clientFor(await orderServiceTokenOf('staff-a'));
+
+    await expect(
+      staffClient.placeOrder(buildPlaceOrderRequest('checkout-staff-test', 'tok_visa_4242')),
+    ).rejects.toMatchObject({ code: Code.PermissionDenied });
+  });
+
+  it('answers the order of another consumer as not found', async () => {
+    const { orderId } = await client.placeOrder(
+      buildPlaceOrderRequest('checkout-ownership-test', 'tok_visa_4242'),
+    );
+    const consumerBClient = clientFor(await orderServiceTokenOf('consumer-b'));
+
+    await expect(consumerBClient.getOrder({ orderId })).rejects.toMatchObject({
+      code: Code.NotFound,
+    });
+  });
+
+  it('keeps the same Idempotency-Key of two consumers apart', async () => {
+    const request = buildPlaceOrderRequest('checkout-two-consumers-test', 'tok_visa_4242');
+    const consumerBClient = clientFor(await orderServiceTokenOf('consumer-b'));
+
+    const forConsumerA = await client.placeOrder(request);
+    const forConsumerB = await consumerBClient.placeOrder(request);
+
+    expect(forConsumerB.orderId).not.toBe(forConsumerA.orderId);
   });
 
   it('rejects an order whose consumer never answers once the verification step times out', async () => {
@@ -288,15 +386,12 @@ describe('order service', () => {
     const databaseUrl = new URL(postgres.connectionUri);
     databaseUrl.pathname = `/${databaseName}`;
 
-    const failedStart = startOrderService({
-      databaseUrl: databaseUrl.toString(),
-      kafkaBootstrapServers: [kafka.bootstrapServer],
-      host: '127.0.0.1',
-      port: Number(new URL(orderService.url).port),
-      logLevel: 'silent',
-      housekeepingIntervalInMilliseconds,
-      sagaTimeoutsInMilliseconds,
-    });
+    const failedStart = startOrderService(
+      serviceConfiguration({
+        databaseUrl: databaseUrl.toString(),
+        port: Number(new URL(orderService.url).port),
+      }),
+    );
 
     await expect(failedStart).rejects.toThrow();
     const openConnections = await waitFor(async () => {
@@ -310,15 +405,12 @@ describe('order service', () => {
     await sql`create database order_stopped`.execute(outboxReader);
     const databaseUrl = new URL(postgres.connectionUri);
     databaseUrl.pathname = '/order_stopped';
-    const stoppableService = await startOrderService({
-      databaseUrl: databaseUrl.toString(),
-      kafkaBootstrapServers: [kafka.bootstrapServer],
-      host: '127.0.0.1',
-      port: 0,
-      logLevel: 'silent',
-      sagaTimeoutsInMilliseconds,
-      housekeepingIntervalInMilliseconds: 100,
-    });
+    const stoppableService = await startOrderService(
+      serviceConfiguration({
+        databaseUrl: databaseUrl.toString(),
+        housekeepingIntervalInMilliseconds: 100,
+      }),
+    );
     await waitFor(() => Promise.resolve(spans.spansNamed('housekeeping').at(0)));
 
     await stoppableService.stop();

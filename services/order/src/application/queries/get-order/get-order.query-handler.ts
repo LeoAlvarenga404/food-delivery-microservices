@@ -11,8 +11,10 @@ export class GetOrderQueryHandler {
   }
 
   async execute(query: GetOrderQuery): Promise<Either<OrderNotFound, OrderSnapshot>> {
-    const order = await this.#orders.findById(query.orderId);
-    if (order === undefined) return left({ type: 'OrderNotFound', orderId: query.orderId });
-    return right(order.toSnapshot());
+    const snapshot = (await this.#orders.findById(query.orderId))?.toSnapshot();
+    if (snapshot?.consumerId !== query.principal.consumerId) {
+      return left({ type: 'OrderNotFound', orderId: query.orderId });
+    }
+    return right(snapshot);
   }
 }

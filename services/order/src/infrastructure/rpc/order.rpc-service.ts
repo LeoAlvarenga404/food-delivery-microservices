@@ -3,11 +3,16 @@ import { annotateActiveSpan } from '@fd/chassis-observability';
 import {
   PlaceOrderFailureSchema,
   type OrderService,
+  type PlaceOrderRequest,
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
-import type { PlaceOrderError } from '#application/commands/place-order/place-order.command.ts';
+import type {
+  PlaceOrderCommand,
+  PlaceOrderError,
+} from '#application/commands/place-order/place-order.command.ts';
 import type { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
 import type { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
+import type { Principal } from '#domain/identity/principal.value-object.ts';
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { toGetOrderResponse } from './get-order-response.message-mapper.ts';
 import {
@@ -15,6 +20,7 @@ import {
   type InvalidPlaceOrderRequest,
 } from './place-order-request.message-mapper.ts';
 import { correlationIdKey } from './rpc-correlation.adapter.ts';
+import { principalOf } from './rpc-principal.adapter.ts';
 
 export interface OrderRpcServiceSettings {
   readonly placeOrder: PlaceOrderCommandHandler;
@@ -48,13 +54,23 @@ function placeOrderFailure(
   ]);
 }
 
-function toRequestMetadata(context: HandlerContext): MessageMetadata {
+function toRequestMetadata(context: HandlerContext, principal: Principal): MessageMetadata {
   return {
     correlationId: context.values.get(correlationIdKey),
     causationId: undefined,
-    actorId: undefined,
-    actorType: undefined,
+    actorId: principal.consumerId,
+    actorType: 'consumer',
   };
+}
+
+function toCommand(request: PlaceOrderRequest, context: HandlerContext): PlaceOrderCommand {
+  const principal = principalOf(context);
+  const command = toPlaceOrderCommand(request, principal, toRequestMetadata(context, principal));
+  if (command.isLeft()) {
+    const { field, type } = command.failure;
+    throw placeOrderFailure(field, Code.InvalidArgument, type);
+  }
+  return command.success;
 }
 
 export function createOrderRpcService(
@@ -62,13 +78,7 @@ export function createOrderRpcService(
 ): ServiceImpl<typeof OrderService> {
   return {
     async placeOrder(request, context) {
-      const metadata = toRequestMetadata(context);
-      const command = toPlaceOrderCommand(request, metadata);
-      if (command.isLeft()) {
-        const { field, type } = command.failure;
-        throw placeOrderFailure(field, Code.InvalidArgument, type);
-      }
-      const outcome = await settings.placeOrder.execute(command.success);
+      const outcome = await settings.placeOrder.execute(toCommand(request, context));
       if (outcome.isLeft()) {
         const { failure } = outcome;
         throw placeOrderFailure(JSON.stringify(failure), toConnectCode(failure), failure.type);
@@ -77,11 +87,12 @@ export function createOrderRpcService(
       return { orderId: outcome.success.orderId };
     },
 
-    async getOrder(request) {
+    async getOrder(request, context) {
+      const principal = principalOf(context);
       const orderId = parseOrderId(request.orderId);
       if (orderId.isLeft()) throw new ConnectError('order_id', Code.InvalidArgument);
       annotateActiveSpan({ orderId: orderId.success });
-      const outcome = await settings.getOrder.execute({ orderId: orderId.success });
+      const outcome = await settings.getOrder.execute({ orderId: orderId.success, principal });
       if (outcome.isLeft()) throw new ConnectError(request.orderId, Code.NotFound);
       return toGetOrderResponse(outcome.success);
     },
