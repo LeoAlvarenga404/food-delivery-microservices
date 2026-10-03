@@ -1,3 +1,4 @@
+export { deleteExpiredOutboxMessages } from './delete-expired-outbox-messages.ts';
 export { metadataCausedBy } from './metadata-caused-by.ts';
 export { outboxMigrations } from './outbox-migrations.ts';
 export type { MessageMetadata, OutboxMessage } from './outbox-message.ts';
