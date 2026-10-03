@@ -14,10 +14,5 @@ export const environmentVariables = {
   listenHost: z.string().min(1).default('127.0.0.1'),
   listenPort: z.coerce.number().int().min(1).max(65_535),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
-  durationInMilliseconds: z
-    .string()
-    .trim()
-    .min(1)
-    .transform(Number)
-    .pipe(z.number().int().min(1).max(2_147_483_647)),
+  durationInMilliseconds: z.coerce.number().int().min(1).max(2_147_483_647),
 };
