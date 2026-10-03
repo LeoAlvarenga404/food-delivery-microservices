@@ -11,20 +11,22 @@ export interface PlaceOrderSagaOrder {
   readonly lineItems: readonly OrderLineItemSnapshot[];
   readonly totalInCents: bigint;
   readonly currency: Currency;
+}
+
+export interface BeforePivotSagaState {
+  readonly step: 'VERIFYING_CONSUMER' | 'CREATING_TICKET' | 'AUTHORIZING_PAYMENT';
+  readonly order: PlaceOrderSagaOrder;
   readonly paymentToken: string;
 }
 
-export type PlaceOrderSagaStep =
-  | 'VERIFYING_CONSUMER'
-  | 'CREATING_TICKET'
-  | 'AUTHORIZING_PAYMENT'
-  | 'APPROVING_TICKET'
-  | 'COMPLETED';
-
-export interface PlaceOrderSagaState {
-  readonly step: PlaceOrderSagaStep;
+export interface AfterPivotSagaState {
+  readonly step: 'APPROVING_TICKET' | 'COMPLETED';
   readonly order: PlaceOrderSagaOrder;
 }
+
+export type PlaceOrderSagaState = BeforePivotSagaState | AfterPivotSagaState;
+
+export type PlaceOrderSagaStep = PlaceOrderSagaState['step'];
 
 export interface PlaceOrderSagaInstance {
   readonly sagaId: string;

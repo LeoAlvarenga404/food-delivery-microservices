@@ -24,9 +24,9 @@ function replayPlacement(
   return right({ orderId: reservation.orderId });
 }
 
-function toSagaOrder(snapshot: OrderSnapshot, paymentToken: string): PlaceOrderSagaOrder {
+function toSagaOrder(snapshot: OrderSnapshot): PlaceOrderSagaOrder {
   const { orderId, consumerId, restaurantId, lineItems, totalInCents, currency } = snapshot;
-  return { orderId, consumerId, restaurantId, lineItems, totalInCents, currency, paymentToken };
+  return { orderId, consumerId, restaurantId, lineItems, totalInCents, currency };
 }
 
 export class PlaceOrderCommandHandler {
@@ -72,13 +72,17 @@ export class PlaceOrderCommandHandler {
     });
     if (order.isLeft()) return order;
     await scope.orders.save(order.success);
-    await this.#startSaga(scope, toSagaOrder(order.success.toSnapshot(), command.paymentToken));
+    await this.#startSaga(scope, toSagaOrder(order.success.toSnapshot()), command.paymentToken);
     return right({ orderId: placement.orderId });
   }
 
-  async #startSaga(scope: TransactionScope, sagaOrder: PlaceOrderSagaOrder): Promise<void> {
+  async #startSaga(
+    scope: TransactionScope,
+    sagaOrder: PlaceOrderSagaOrder,
+    paymentToken: string,
+  ): Promise<void> {
     const sagaId = this.#idGenerator.generateSagaId();
-    const { state, commands } = placeOrderSaga.start(sagaOrder);
+    const { state, commands } = placeOrderSaga.start(sagaOrder, paymentToken);
     await scope.sagas.save({ sagaId, state, version: 0 });
     commands.forEach((sagaCommand) => {
       scope.commands.send(sagaCommand, sagaId);

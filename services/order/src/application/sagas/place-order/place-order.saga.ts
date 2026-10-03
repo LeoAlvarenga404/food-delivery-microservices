@@ -1,30 +1,31 @@
 import { left, right, type Either } from '@fd/domain';
 import type {
+  AfterPivotSagaState,
+  BeforePivotSagaState,
   PlaceOrderSagaOrder,
   PlaceOrderSagaState,
   PlaceOrderSagaStep,
 } from './place-order.saga-state.ts';
 
-export type PlaceOrderSagaReplyType =
-  'ConsumerVerified' | 'TicketCreated' | 'PaymentAuthorized' | 'TicketApproved';
-
 export interface PlaceOrderSagaReply {
-  readonly type: PlaceOrderSagaReplyType;
+  readonly type: 'ConsumerVerified' | 'TicketCreated' | 'PaymentAuthorized' | 'TicketApproved';
 }
 
-export type ParticipantCommandType =
-  'VerifyConsumer' | 'CreateTicket' | 'AuthorizePayment' | 'ApproveTicket';
+export type PlaceOrderSagaReplyType = PlaceOrderSagaReply['type'];
 
-export type PlaceOrderSagaCommandType = ParticipantCommandType | 'ApproveOrder';
+export type ParticipantCommand =
+  | {
+      readonly type: 'VerifyConsumer' | 'CreateTicket' | 'ApproveTicket';
+      readonly order: PlaceOrderSagaOrder;
+    }
+  | {
+      readonly type: 'AuthorizePayment';
+      readonly order: PlaceOrderSagaOrder;
+      readonly paymentToken: string;
+    };
 
-export interface PlaceOrderSagaCommand<
-  CommandType extends PlaceOrderSagaCommandType = PlaceOrderSagaCommandType,
-> {
-  readonly type: CommandType;
-  readonly order: PlaceOrderSagaOrder;
-}
-
-export type ParticipantCommand = PlaceOrderSagaCommand<ParticipantCommandType>;
+export type PlaceOrderSagaCommand =
+  ParticipantCommand | { readonly type: 'ApproveOrder'; readonly order: PlaceOrderSagaOrder };
 
 export interface UnexpectedSagaReply {
   readonly type: 'UnexpectedSagaReply';
@@ -37,53 +38,74 @@ export interface PlaceOrderSagaStart {
   readonly commands: readonly ParticipantCommand[];
 }
 
-interface StepTransition {
-  readonly awaitedStep: PlaceOrderSagaStep;
-  readonly replyType: PlaceOrderSagaReplyType;
-  readonly nextStep: PlaceOrderSagaStep;
-  readonly nextCommandType: PlaceOrderSagaCommandType;
+interface SagaTransition {
+  readonly state: PlaceOrderSagaState;
+  readonly commands: readonly PlaceOrderSagaCommand[];
 }
 
-const happyPathTransitions: readonly StepTransition[] = [
-  {
-    awaitedStep: 'VERIFYING_CONSUMER',
-    replyType: 'ConsumerVerified',
-    nextStep: 'CREATING_TICKET',
-    nextCommandType: 'CreateTicket',
-  },
-  {
-    awaitedStep: 'CREATING_TICKET',
-    replyType: 'TicketCreated',
-    nextStep: 'AUTHORIZING_PAYMENT',
-    nextCommandType: 'AuthorizePayment',
-  },
-  {
-    awaitedStep: 'AUTHORIZING_PAYMENT',
-    replyType: 'PaymentAuthorized',
-    nextStep: 'APPROVING_TICKET',
-    nextCommandType: 'ApproveTicket',
-  },
-  {
-    awaitedStep: 'APPROVING_TICKET',
-    replyType: 'TicketApproved',
-    nextStep: 'COMPLETED',
-    nextCommandType: 'ApproveOrder',
-  },
-];
+function afterConsumerVerification(
+  { order, paymentToken }: BeforePivotSagaState,
+  reply: PlaceOrderSagaReply,
+): SagaTransition | undefined {
+  if (reply.type !== 'ConsumerVerified') return undefined;
+  return {
+    state: { step: 'CREATING_TICKET', order, paymentToken },
+    commands: [{ type: 'CreateTicket', order }],
+  };
+}
 
-function findTransition(
+function afterTicketCreation(
+  { order, paymentToken }: BeforePivotSagaState,
+  reply: PlaceOrderSagaReply,
+): SagaTransition | undefined {
+  if (reply.type !== 'TicketCreated') return undefined;
+  return {
+    state: { step: 'AUTHORIZING_PAYMENT', order, paymentToken },
+    commands: [{ type: 'AuthorizePayment', order, paymentToken }],
+  };
+}
+
+function afterPaymentAuthorization(
+  { order }: BeforePivotSagaState,
+  reply: PlaceOrderSagaReply,
+): SagaTransition | undefined {
+  if (reply.type !== 'PaymentAuthorized') return undefined;
+  return {
+    state: { step: 'APPROVING_TICKET', order },
+    commands: [{ type: 'ApproveTicket', order }],
+  };
+}
+
+function afterTicketApproval(
+  { order }: AfterPivotSagaState,
+  reply: PlaceOrderSagaReply,
+): SagaTransition | undefined {
+  if (reply.type !== 'TicketApproved') return undefined;
+  return { state: { step: 'COMPLETED', order }, commands: [{ type: 'ApproveOrder', order }] };
+}
+
+function transition(
   state: PlaceOrderSagaState,
   reply: PlaceOrderSagaReply,
-): StepTransition | undefined {
-  return happyPathTransitions.find(
-    (transition) => transition.awaitedStep === state.step && transition.replyType === reply.type,
-  );
+): SagaTransition | undefined {
+  switch (state.step) {
+    case 'VERIFYING_CONSUMER':
+      return afterConsumerVerification(state, reply);
+    case 'CREATING_TICKET':
+      return afterTicketCreation(state, reply);
+    case 'AUTHORIZING_PAYMENT':
+      return afterPaymentAuthorization(state, reply);
+    case 'APPROVING_TICKET':
+      return afterTicketApproval(state, reply);
+    case 'COMPLETED':
+      return undefined;
+  }
 }
 
 export const placeOrderSaga = {
-  start(order: PlaceOrderSagaOrder): PlaceOrderSagaStart {
+  start(order: PlaceOrderSagaOrder, paymentToken: string): PlaceOrderSagaStart {
     return {
-      state: { step: 'VERIFYING_CONSUMER', order },
+      state: { step: 'VERIFYING_CONSUMER', order, paymentToken },
       commands: [{ type: 'VerifyConsumer', order }],
     };
   },
@@ -92,16 +114,14 @@ export const placeOrderSaga = {
     state: PlaceOrderSagaState,
     reply: PlaceOrderSagaReply,
   ): Either<UnexpectedSagaReply, readonly PlaceOrderSagaCommand[]> {
-    const transition = findTransition(state, reply);
-    if (transition === undefined) {
+    const next = transition(state, reply);
+    if (next === undefined) {
       return left({ type: 'UnexpectedSagaReply', step: state.step, replyType: reply.type });
     }
-    return right([{ type: transition.nextCommandType, order: state.order }]);
+    return right(next.commands);
   },
 
   evolve(state: PlaceOrderSagaState, reply: PlaceOrderSagaReply): PlaceOrderSagaState {
-    const transition = findTransition(state, reply);
-    if (transition === undefined) return state;
-    return { ...state, step: transition.nextStep };
+    return transition(state, reply)?.state ?? state;
   },
 };

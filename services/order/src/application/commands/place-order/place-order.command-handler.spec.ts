@@ -8,7 +8,10 @@ import {
   buildPlaceOrderCommand,
   requestMetadata,
 } from '../../../../test/support/place-order-command.builder.ts';
-import { buildSagaOrder } from '../../../../test/support/place-order-saga.builder.ts';
+import {
+  buildSagaOrder,
+  buildStartedSagaState,
+} from '../../../../test/support/place-order-saga.builder.ts';
 import { parseRestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import { PlaceOrderCommandHandler } from './place-order.command-handler.ts';
 
@@ -33,7 +36,7 @@ describe('PlaceOrderCommandHandler', () => {
     expect(storedOrder?.toSnapshot()).toEqual({ ...expectedOrder, version: 1 });
     expect(await unitOfWork.sagas.findById(firstSagaId)).toEqual({
       sagaId: firstSagaId,
-      state: { step: 'VERIFYING_CONSUMER', order: buildSagaOrder() },
+      state: buildStartedSagaState(),
       version: 1,
     });
     expect(unitOfWork.commands.sentCommands).toEqual([

@@ -7,7 +7,10 @@ import {
   CreateTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { describe, it } from 'vitest';
-import { buildSagaOrder } from '../../../../test/support/place-order-saga.builder.ts';
+import {
+  buildSagaOrder,
+  sagaPaymentToken,
+} from '../../../../test/support/place-order-saga.builder.ts';
 import {
   toApproveTicket,
   toAuthorizePayment,
@@ -36,7 +39,7 @@ describe('participant command golden samples', () => {
   it('produces the AuthorizePayment sample', async () => {
     await expectGoldenSample(
       { directory, topic: 'accounting.commands', schema: AuthorizePaymentSchema },
-      toAuthorizePayment(order),
+      toAuthorizePayment(order, sagaPaymentToken),
     );
   });
 

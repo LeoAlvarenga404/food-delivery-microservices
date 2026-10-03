@@ -52,7 +52,7 @@ export class ApplyPlaceOrderSagaReplyCommandHandler {
     if (sagaCommand.type === 'ApproveOrder') {
       return this.#approveOrder(scope, sagaCommand.order.orderId);
     }
-    scope.commands.send({ type: sagaCommand.type, order: sagaCommand.order }, sagaId);
+    scope.commands.send(sagaCommand, sagaId);
     return right(undefined);
   }
 

@@ -34,13 +34,16 @@ export function toCreateTicket(order: PlaceOrderSagaOrder): CreateTicket {
   });
 }
 
-export function toAuthorizePayment(order: PlaceOrderSagaOrder): AuthorizePayment {
+export function toAuthorizePayment(
+  order: PlaceOrderSagaOrder,
+  paymentToken: string,
+): AuthorizePayment {
   return create(AuthorizePaymentSchema, {
     orderId: order.orderId,
     consumerId: order.consumerId,
     amountInCents: order.totalInCents,
     currency: order.currency,
-    paymentToken: order.paymentToken,
+    paymentToken,
   });
 }
 
@@ -48,32 +51,36 @@ export function toApproveTicket(order: PlaceOrderSagaOrder): ApproveTicket {
   return create(ApproveTicketSchema, { orderId: order.orderId });
 }
 
+function commandTopicOf(commandType: ParticipantCommand['type']): string {
+  switch (commandType) {
+    case 'VerifyConsumer':
+      return 'consumer.commands';
+    case 'AuthorizePayment':
+      return 'accounting.commands';
+    case 'CreateTicket':
+    case 'ApproveTicket':
+      return 'kitchen.commands';
+  }
+}
+
 export function toParticipantCommandMessage(
   command: ParticipantCommand,
   sagaId: string,
 ): OutboxMessage {
   const { order } = command;
-  const routing = { orderId: order.orderId, sagaId };
+  const routing = { topic: commandTopicOf(command.type), orderId: order.orderId, sagaId };
   switch (command.type) {
     case 'VerifyConsumer':
-      return toOutboxMessage(VerifyConsumerSchema, toVerifyConsumer(order), {
-        ...routing,
-        topic: 'consumer.commands',
-      });
+      return toOutboxMessage(VerifyConsumerSchema, toVerifyConsumer(order), routing);
     case 'CreateTicket':
-      return toOutboxMessage(CreateTicketSchema, toCreateTicket(order), {
-        ...routing,
-        topic: 'kitchen.commands',
-      });
+      return toOutboxMessage(CreateTicketSchema, toCreateTicket(order), routing);
     case 'AuthorizePayment':
-      return toOutboxMessage(AuthorizePaymentSchema, toAuthorizePayment(order), {
-        ...routing,
-        topic: 'accounting.commands',
-      });
+      return toOutboxMessage(
+        AuthorizePaymentSchema,
+        toAuthorizePayment(order, command.paymentToken),
+        routing,
+      );
     case 'ApproveTicket':
-      return toOutboxMessage(ApproveTicketSchema, toApproveTicket(order), {
-        ...routing,
-        topic: 'kitchen.commands',
-      });
+      return toOutboxMessage(ApproveTicketSchema, toApproveTicket(order), routing);
   }
 }

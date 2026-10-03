@@ -1,104 +1,117 @@
 import { left, right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
-import { buildSagaOrder } from '../../../../test/support/place-order-saga.builder.ts';
+import {
+  buildSagaOrder,
+  sagaPaymentToken,
+} from '../../../../test/support/place-order-saga.builder.ts';
 import {
   placeOrderSaga,
-  type PlaceOrderSagaCommandType,
-  type PlaceOrderSagaReplyType,
+  type PlaceOrderSagaCommand,
+  type PlaceOrderSagaReply,
 } from './place-order.saga.ts';
-import type { PlaceOrderSagaStep } from './place-order.saga-state.ts';
+import type { PlaceOrderSagaState, PlaceOrderSagaStep } from './place-order.saga-state.ts';
 
 const order = buildSagaOrder();
+const paymentToken = sagaPaymentToken;
+
+const sagaStates: Readonly<Record<PlaceOrderSagaStep, PlaceOrderSagaState>> = {
+  VERIFYING_CONSUMER: { step: 'VERIFYING_CONSUMER', order, paymentToken },
+  CREATING_TICKET: { step: 'CREATING_TICKET', order, paymentToken },
+  AUTHORIZING_PAYMENT: { step: 'AUTHORIZING_PAYMENT', order, paymentToken },
+  APPROVING_TICKET: { step: 'APPROVING_TICKET', order },
+  COMPLETED: { step: 'COMPLETED', order },
+};
+
+const replies: readonly PlaceOrderSagaReply[] = [
+  { type: 'ConsumerVerified' },
+  { type: 'TicketCreated' },
+  { type: 'PaymentAuthorized' },
+  { type: 'TicketApproved' },
+];
+
+interface SagaTransition {
+  readonly state: PlaceOrderSagaState;
+  readonly reply: PlaceOrderSagaReply;
+  readonly nextState: PlaceOrderSagaState;
+  readonly commands: readonly PlaceOrderSagaCommand[];
+}
+
+const transitions: readonly SagaTransition[] = [
+  {
+    state: sagaStates.VERIFYING_CONSUMER,
+    reply: { type: 'ConsumerVerified' },
+    nextState: sagaStates.CREATING_TICKET,
+    commands: [{ type: 'CreateTicket', order }],
+  },
+  {
+    state: sagaStates.CREATING_TICKET,
+    reply: { type: 'TicketCreated' },
+    nextState: sagaStates.AUTHORIZING_PAYMENT,
+    commands: [{ type: 'AuthorizePayment', order, paymentToken }],
+  },
+  {
+    state: sagaStates.AUTHORIZING_PAYMENT,
+    reply: { type: 'PaymentAuthorized' },
+    nextState: sagaStates.APPROVING_TICKET,
+    commands: [{ type: 'ApproveTicket', order }],
+  },
+  {
+    state: sagaStates.APPROVING_TICKET,
+    reply: { type: 'TicketApproved' },
+    nextState: sagaStates.COMPLETED,
+    commands: [{ type: 'ApproveOrder', order }],
+  },
+];
+
+const unexpectedPairs = Object.values(sagaStates).flatMap((state) =>
+  replies
+    .filter(
+      (reply) =>
+        !transitions.some(
+          (transition) =>
+            transition.state.step === state.step && transition.reply.type === reply.type,
+        ),
+    )
+    .map((reply): [PlaceOrderSagaStep, PlaceOrderSagaReply] => [state.step, reply]),
+);
 
 describe('placeOrderSaga.start', () => {
-  it('starts by verifying the consumer', () => {
-    expect(placeOrderSaga.start(order)).toEqual({
-      state: { step: 'VERIFYING_CONSUMER', order },
+  it('starts by verifying the consumer and keeps the payment token for the payment step', () => {
+    expect(placeOrderSaga.start(order, paymentToken)).toEqual({
+      state: { step: 'VERIFYING_CONSUMER', order, paymentToken },
       commands: [{ type: 'VerifyConsumer', order }],
     });
   });
 });
 
-interface HappyPathTransition {
-  readonly step: PlaceOrderSagaStep;
-  readonly replyType: PlaceOrderSagaReplyType;
-  readonly nextStep: PlaceOrderSagaStep;
-  readonly commandType: PlaceOrderSagaCommandType;
-}
-
-const happyPath: readonly HappyPathTransition[] = [
-  {
-    step: 'VERIFYING_CONSUMER',
-    replyType: 'ConsumerVerified',
-    nextStep: 'CREATING_TICKET',
-    commandType: 'CreateTicket',
-  },
-  {
-    step: 'CREATING_TICKET',
-    replyType: 'TicketCreated',
-    nextStep: 'AUTHORIZING_PAYMENT',
-    commandType: 'AuthorizePayment',
-  },
-  {
-    step: 'AUTHORIZING_PAYMENT',
-    replyType: 'PaymentAuthorized',
-    nextStep: 'APPROVING_TICKET',
-    commandType: 'ApproveTicket',
-  },
-  {
-    step: 'APPROVING_TICKET',
-    replyType: 'TicketApproved',
-    nextStep: 'COMPLETED',
-    commandType: 'ApproveOrder',
-  },
-];
-
-const steps: readonly PlaceOrderSagaStep[] = [
-  'VERIFYING_CONSUMER',
-  'CREATING_TICKET',
-  'AUTHORIZING_PAYMENT',
-  'APPROVING_TICKET',
-  'COMPLETED',
-];
-const replyTypes: readonly PlaceOrderSagaReplyType[] = [
-  'ConsumerVerified',
-  'TicketCreated',
-  'PaymentAuthorized',
-  'TicketApproved',
-];
-const unexpectedPairs = steps.flatMap((step) =>
-  replyTypes
-    .filter(
-      (replyType) =>
-        !happyPath.some((entry) => entry.step === step && entry.replyType === replyType),
-    )
-    .map((replyType): [PlaceOrderSagaStep, PlaceOrderSagaReplyType] => [step, replyType]),
-);
-
-describe('placeOrderSaga happy path', () => {
-  it.each(happyPath)(
-    'in $step, $replyType moves to $nextStep and asks for $commandType',
-    ({ step, replyType, nextStep, commandType }) => {
-      const state = { step, order };
-      const reply = { type: replyType };
-
-      expect(placeOrderSaga.decide(state, reply)).toEqual(right([{ type: commandType, order }]));
-      expect(placeOrderSaga.evolve(state, reply)).toEqual({ step: nextStep, order });
+describe('placeOrderSaga transitions', () => {
+  it.each(transitions)(
+    'in $state.step, $reply.type moves to $nextState.step',
+    ({ state, reply, nextState, commands }) => {
+      expect(placeOrderSaga.decide(state, reply)).toEqual(right(commands));
+      expect(placeOrderSaga.evolve(state, reply)).toEqual(nextState);
     },
   );
+
+  it('forgets the payment token once the payment is authorized', () => {
+    const nextState = placeOrderSaga.evolve(sagaStates.AUTHORIZING_PAYMENT, {
+      type: 'PaymentAuthorized',
+    });
+
+    expect(nextState).not.toHaveProperty('paymentToken');
+  });
 });
 
 describe('placeOrderSaga with a reply it is not waiting for', () => {
-  it('covers every pair outside the happy path', () => {
+  it('covers every pair outside the transitions', () => {
     expect(unexpectedPairs).toHaveLength(16);
   });
 
-  it.each(unexpectedPairs)('in %s, rejects %s and keeps its state', (step, replyType) => {
-    const state = { step, order };
-    const reply = { type: replyType };
+  it.each(unexpectedPairs)('in %s, rejects %o and keeps its state', (step, reply) => {
+    const state = sagaStates[step];
 
     expect(placeOrderSaga.decide(state, reply)).toEqual(
-      left({ type: 'UnexpectedSagaReply', step, replyType }),
+      left({ type: 'UnexpectedSagaReply', step, replyType: reply.type }),
     );
     expect(placeOrderSaga.evolve(state, reply)).toBe(state);
   });

@@ -5,7 +5,10 @@ import { FakeIdGenerator } from '../../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
 import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../../test/support/place-order-command.builder.ts';
-import { buildSagaOrder } from '../../../../test/support/place-order-saga.builder.ts';
+import {
+  buildSagaOrder,
+  sagaPaymentToken,
+} from '../../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
 import type { PlaceOrderSagaReplyType } from '#application/sagas/place-order/place-order.saga.ts';
@@ -53,7 +56,14 @@ describe('ApplyPlaceOrderSagaReplyCommandHandler', () => {
 
     expect(unitOfWork.commands.sentCommands).toEqual([
       { command: { type: 'CreateTicket', order: buildSagaOrder() }, sagaId },
-      { command: { type: 'AuthorizePayment', order: buildSagaOrder() }, sagaId },
+      {
+        command: {
+          type: 'AuthorizePayment',
+          order: buildSagaOrder(),
+          paymentToken: sagaPaymentToken,
+        },
+        sagaId,
+      },
       { command: { type: 'ApproveTicket', order: buildSagaOrder() }, sagaId },
     ]);
     expect((await unitOfWork.sagas.findById(sagaId))?.state.step).toBe('APPROVING_TICKET');
