@@ -12,6 +12,7 @@ import {
   recordSpans,
   startKafkaContainer,
   startPostgresContainer,
+  traceparentOf,
   type StartedKafka,
   type StartedPostgres,
 } from '@fd/chassis-testing';
@@ -30,6 +31,7 @@ import { startKitchenService, type RunningKitchenService } from '../src/main.ts'
 interface ReplyRow {
   readonly messageType: string;
   readonly sagaId: string | null;
+  readonly traceparent: string | null;
   readonly payload: Uint8Array;
 }
 
@@ -38,6 +40,7 @@ const orderId = '0199a5d0-0000-7000-8000-0000000000a1';
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
+const commandTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
 const spans = recordSpans();
 
 let postgres: StartedPostgres;
@@ -96,6 +99,7 @@ async function sendCommand<Schema extends DescMessage>(
           'message-type': schema.typeName,
           'correlation-id': '0199a5d0-0000-7000-8000-0000000000e1',
           'saga-id': sagaId,
+          traceparent: `00-${commandTraceId}-00f067aa0ba902b7-01`,
         },
       },
     ],
@@ -106,7 +110,7 @@ async function sendCommand<Schema extends DescMessage>(
 async function waitForReplyTo(messageId: string): Promise<ReplyRow> {
   return waitFor(async () => {
     const result = await sql<ReplyRow>`
-      select message_type, saga_id, payload from outbox where causation_id = ${messageId}
+      select message_type, saga_id, traceparent, payload from outbox where causation_id = ${messageId}
     `.execute(outboxReader);
     return result.rows[0];
   });
@@ -204,6 +208,14 @@ describe('kitchen service', () => {
     );
     expect(fromBinary(TicketApprovedSchema, ticketApproved.payload).ticketId).toBe(createdTicketId);
     expect(createdTicketId).not.toBe(orderId);
+    const handled = await waitFor(() =>
+      Promise.resolve(spans.spansNamed('process kitchen.commands').at(1)),
+    );
+    expect([ticketCreated.traceparent, ticketApproved.traceparent]).toEqual(
+      spans.spansNamed('process kitchen.commands').map(traceparentOf),
+    );
+    expect(handled.spanContext().traceId).toBe(commandTraceId);
+    expect(handled.attributes).toMatchObject({ 'fooddelivery.order.id': orderId });
   });
 
   it('answers its health endpoint', async () => {

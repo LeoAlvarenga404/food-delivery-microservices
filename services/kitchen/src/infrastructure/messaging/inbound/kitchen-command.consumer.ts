@@ -1,5 +1,5 @@
 import type { TransactionalMessageHandler } from '@fd/chassis-inbox';
-import { withCorrelation, type Logger } from '@fd/chassis-observability';
+import { annotateActiveSpan, withCorrelation, type Logger } from '@fd/chassis-observability';
 import type { Either } from '@fd/domain';
 import type { ApproveTicketError } from '#application/commands/approve-ticket/approve-ticket.command.ts';
 import { ApproveTicketCommandHandler } from '#application/commands/approve-ticket/approve-ticket.command-handler.ts';
@@ -41,6 +41,7 @@ export function kitchenCommandConsumer(
 ): TransactionalMessageHandler<KitchenDatabase> {
   return async (message, transaction) => {
     const kitchenCommand = toKitchenCommand(message);
+    annotateActiveSpan({ orderId: kitchenCommand.command.orderId });
     const { messageId, correlationId, causationId } = message.headers;
     const logger = withCorrelation(settings.logger, {
       correlationId,

@@ -6,6 +6,7 @@ import {
   recordSpans,
   startKafkaContainer,
   startPostgresContainer,
+  traceparentOf,
   type StartedKafka,
   type StartedPostgres,
 } from '@fd/chassis-testing';
@@ -17,6 +18,7 @@ import { startAccountingService, type RunningAccountingService } from '../src/ma
 interface ReplyRow {
   readonly messageType: string;
   readonly sagaId: string | null;
+  readonly traceparent: string | null;
 }
 
 const commandsTopic = 'accounting.commands';
@@ -24,6 +26,7 @@ const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const commandMessageId = '0199a5d0-0000-7000-8000-000000000d03';
 const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
+const commandTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
 const spans = recordSpans();
 
 let postgres: StartedPostgres;
@@ -85,6 +88,7 @@ async function sendAuthorizePayment(): Promise<void> {
           'message-type': AuthorizePaymentSchema.typeName,
           'correlation-id': '0199a5d0-0000-7000-8000-0000000000e1',
           'saga-id': sagaId,
+          traceparent: `00-${commandTraceId}-00f067aa0ba902b7-01`,
         },
       },
     ],
@@ -161,12 +165,23 @@ describe('accounting service', () => {
 
     const reply = await waitFor(async () => {
       const result = await sql<ReplyRow>`
-        select message_type, saga_id from outbox where causation_id = ${commandMessageId}
+        select message_type, saga_id, traceparent from outbox where causation_id = ${commandMessageId}
       `.execute(outboxReader);
       return result.rows[0];
     });
 
-    expect(reply).toEqual({ messageType: 'fooddelivery.accounting.v1.PaymentAuthorized', sagaId });
+    const handled = await waitFor(() =>
+      Promise.resolve(spans.spansNamed('process accounting.commands').at(0)),
+    );
+    expect(reply).toEqual({
+      messageType: 'fooddelivery.accounting.v1.PaymentAuthorized',
+      sagaId,
+      traceparent: traceparentOf(handled),
+    });
+    expect(handled.spanContext().traceId).toBe(commandTraceId);
+    expect(handled.attributes).toMatchObject({
+      'fooddelivery.order.id': '0199a5d0-0000-7000-8000-0000000000a1',
+    });
   });
 
   it('answers its health endpoint', async () => {

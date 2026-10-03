@@ -1,5 +1,5 @@
 import type { TransactionalMessageHandler } from '@fd/chassis-inbox';
-import { withCorrelation, type Logger } from '@fd/chassis-observability';
+import { annotateActiveSpan, withCorrelation, type Logger } from '@fd/chassis-observability';
 import { AuthorizePaymentCommandHandler } from '#application/commands/authorize-payment/authorize-payment.command-handler.ts';
 import type { Clock } from '#application/ports/clock.port.ts';
 import type { IdGenerator } from '#application/ports/id-generator.port.ts';
@@ -21,6 +21,7 @@ export function accountingCommandConsumer(
 ): TransactionalMessageHandler<AccountingDatabase> {
   return async (message, transaction) => {
     const command = toAuthorizePaymentCommand(message);
+    annotateActiveSpan({ orderId: command.orderId });
     const { messageId, correlationId, causationId } = message.headers;
     const logger = withCorrelation(settings.logger, {
       correlationId,

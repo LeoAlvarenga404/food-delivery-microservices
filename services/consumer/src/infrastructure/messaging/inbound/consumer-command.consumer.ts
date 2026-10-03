@@ -1,5 +1,5 @@
 import type { TransactionalMessageHandler } from '@fd/chassis-inbox';
-import { withCorrelation, type Logger } from '@fd/chassis-observability';
+import { annotateActiveSpan, withCorrelation, type Logger } from '@fd/chassis-observability';
 import { VerifyConsumerCommandHandler } from '#application/commands/verify-consumer/verify-consumer.command-handler.ts';
 import type { ConsumerUnitOfWork } from '#infrastructure/persistence/consumer-unit-of-work.adapter.ts';
 import type { DB as ConsumerDatabase } from '#infrastructure/persistence/generated/database.ts';
@@ -15,6 +15,7 @@ export function consumerCommandConsumer(
 ): TransactionalMessageHandler<ConsumerDatabase> {
   return async (message, transaction) => {
     const command = toVerifyConsumerCommand(message);
+    annotateActiveSpan({ orderId: command.orderId });
     const { messageId, correlationId, causationId } = message.headers;
     const logger = withCorrelation(settings.logger, {
       correlationId,
