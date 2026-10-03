@@ -1,9 +1,13 @@
-import { left, right } from '@fd/domain';
+import { right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import { FakeIdGenerator } from '../../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
 import { createTicketInput, orderId, ticketId } from '../../../../test/support/ticket.builder.ts';
-import type { KitchenReply } from '#application/ports/reply-sender.port.ts';
+import type {
+  KitchenReply,
+  TicketCreationFailedReply,
+} from '#application/ports/reply-sender.port.ts';
+import type { TicketLineItem } from '#domain/ticket/ticket.aggregate.ts';
 import type { CreateTicketCommand } from './create-ticket.command.ts';
 import { CreateTicketCommandHandler } from './create-ticket.command-handler.ts';
 
@@ -44,13 +48,33 @@ describe('CreateTicketCommandHandler', () => {
     expect(unitOfWork.executedMetadata).toEqual([command.metadata]);
   });
 
-  it('stores nothing and sends no reply for a ticket without line items', async () => {
-    const unitOfWork = new InMemoryUnitOfWork();
+  it.each<{
+    readonly problem: string;
+    readonly refusedLineItems: readonly TicketLineItem[];
+    readonly reason: TicketCreationFailedReply['reason'];
+  }>([
+    { problem: 'without line items', refusedLineItems: [], reason: 'EmptyTicket' },
+    {
+      problem: 'with a quantity of zero',
+      refusedLineItems: [
+        { menuItemId: '0199a5d0-0000-7000-8000-000000000101', name: 'Pizza', quantity: 0 },
+      ],
+      reason: 'InvalidQuantity',
+    },
+  ])(
+    'stores nothing and replies TicketCreationFailed for a ticket $problem',
+    async ({ refusedLineItems, reason }) => {
+      const unitOfWork = new InMemoryUnitOfWork();
+      const reply: KitchenReply = { type: 'TicketCreationFailed', orderId, reason };
 
-    const outcome = await createTicket(unitOfWork).execute({ ...command, lineItems: [] });
+      const outcome = await createTicket(unitOfWork).execute({
+        ...command,
+        lineItems: refusedLineItems,
+      });
 
-    expect(outcome).toEqual(left({ type: 'EmptyTicket', orderId }));
-    expect(unitOfWork.tickets.rows.size).toBe(0);
-    expect(unitOfWork.replies.sentReplies).toEqual([]);
-  });
+      expect(outcome).toEqual(right(reply));
+      expect(unitOfWork.tickets.rows.size).toBe(0);
+      expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
+    },
+  );
 });

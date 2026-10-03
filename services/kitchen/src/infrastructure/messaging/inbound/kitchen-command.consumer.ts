@@ -7,7 +7,6 @@ import { CreateTicketCommandHandler } from '#application/commands/create-ticket/
 import type { IdGenerator } from '#application/ports/id-generator.port.ts';
 import type { KitchenReply } from '#application/ports/reply-sender.port.ts';
 import type { UnitOfWork } from '#application/ports/unit-of-work.port.ts';
-import type { TicketCreationError } from '#domain/ticket/ticket.errors.ts';
 import type { DB as KitchenDatabase } from '#infrastructure/persistence/generated/database.ts';
 import {
   joinTransaction,
@@ -25,7 +24,7 @@ function carryOut(
   kitchenCommand: KitchenCommand,
   unitOfWork: UnitOfWork,
   idGenerator: IdGenerator,
-): Promise<Either<TicketCreationError | ApproveTicketError, KitchenReply>> {
+): Promise<Either<ApproveTicketError, KitchenReply>> {
   switch (kitchenCommand.type) {
     case 'CreateTicket':
       return new CreateTicketCommandHandler(unitOfWork, idGenerator).execute(

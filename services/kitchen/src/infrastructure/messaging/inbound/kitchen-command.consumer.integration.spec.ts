@@ -9,6 +9,8 @@ import {
 import {
   TicketApprovedSchema,
   TicketCreatedSchema,
+  TicketCreationFailedSchema,
+  TicketCreationFailureReason,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -56,6 +58,13 @@ async function readOutbox(): Promise<readonly OutboxRow[]> {
 async function countRows(table: 'tickets' | 'inbox'): Promise<number> {
   const result = await sql`select 1 from ${sql.table(table)}`.execute(testDatabase.database);
   return result.rows.length;
+}
+
+function failingInboxTransaction(): MessageHandler {
+  return withInbox(inboxSettings, async (message, transaction) => {
+    await consumeCommand(message, transaction);
+    throw new Error('inbox transaction failed');
+  });
 }
 
 beforeAll(async () => {
@@ -146,16 +155,42 @@ describe('kitchenCommandConsumer', () => {
 
   it('rolls back the ticket, the reply and the inbox row when the inbox transaction fails', async () => {
     const command = buildCommandMessage(CreateTicketSchema, createTicket);
-    const failingHandleCommand = withInbox(inboxSettings, async (message, transaction) => {
-      await consumeCommand(message, transaction);
-      throw new Error('inbox transaction failed');
-    });
 
-    await expect(failingHandleCommand(command)).rejects.toThrow('inbox transaction failed');
+    await expect(failingInboxTransaction()(command)).rejects.toThrow('inbox transaction failed');
 
     expect(await readOutbox()).toEqual([]);
     expect(await countRows('inbox')).toBe(0);
     expect(await countRows('tickets')).toBe(0);
+  });
+
+  it('replies TicketCreationFailed for a ticket without line items together with its inbox row', async () => {
+    const command = buildCommandMessage(CreateTicketSchema, { ...createTicket, lineItems: [] });
+
+    await handleCommand(command);
+
+    const [reply, ...others] = await readOutbox();
+    expect(others).toEqual([]);
+    expect(reply).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      messageType: 'fooddelivery.kitchen.v1.TicketCreationFailed',
+      sagaId,
+      causationId: command.headers.messageId,
+    });
+    expect(
+      fromBinary(TicketCreationFailedSchema, reply?.payload ?? new Uint8Array()),
+    ).toMatchObject({ orderId, reason: TicketCreationFailureReason.EMPTY_TICKET });
+    expect(await countRows('tickets')).toBe(0);
+    expect(await countRows('inbox')).toBe(1);
+  });
+
+  it('rolls back a failure reply and the inbox row when the inbox transaction fails', async () => {
+    const command = buildCommandMessage(CreateTicketSchema, { ...createTicket, lineItems: [] });
+
+    await expect(failingInboxTransaction()(command)).rejects.toThrow('inbox transaction failed');
+
+    expect(await readOutbox()).toEqual([]);
+    expect(await countRows('inbox')).toBe(0);
   });
 
   it('records an ApproveTicket for an order without ticket as processed without replying', async () => {

@@ -3,17 +3,40 @@ import type { OutboxMessage } from '@fd/chassis-outbox';
 import {
   TicketApprovedSchema,
   TicketCreatedSchema,
+  TicketCreationFailedSchema,
+  TicketCreationFailureReason,
   type TicketApproved,
   type TicketCreated,
+  type TicketCreationFailed,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
-import type { KitchenReply } from '#application/ports/reply-sender.port.ts';
+import type {
+  KitchenReply,
+  TicketCreationFailedReply,
+  TicketReply,
+} from '#application/ports/reply-sender.port.ts';
 
-export function toTicketCreated(reply: KitchenReply): TicketCreated {
+function toFailureReason(reason: TicketCreationFailedReply['reason']): TicketCreationFailureReason {
+  switch (reason) {
+    case 'EmptyTicket':
+      return TicketCreationFailureReason.EMPTY_TICKET;
+    case 'InvalidQuantity':
+      return TicketCreationFailureReason.INVALID_QUANTITY;
+  }
+}
+
+export function toTicketCreated(reply: TicketReply): TicketCreated {
   return create(TicketCreatedSchema, { orderId: reply.orderId, ticketId: reply.ticketId });
 }
 
-export function toTicketApproved(reply: KitchenReply): TicketApproved {
+export function toTicketApproved(reply: TicketReply): TicketApproved {
   return create(TicketApprovedSchema, { orderId: reply.orderId, ticketId: reply.ticketId });
+}
+
+export function toTicketCreationFailed(reply: TicketCreationFailedReply): TicketCreationFailed {
+  return create(TicketCreationFailedSchema, {
+    orderId: reply.orderId,
+    reason: toFailureReason(reply.reason),
+  });
 }
 
 function toReplyMessage<Schema extends DescMessage>(
@@ -37,5 +60,7 @@ export function toKitchenReplyMessage(reply: KitchenReply, sagaId: string): Outb
       return toReplyMessage(TicketCreatedSchema, toTicketCreated(reply), sagaId);
     case 'TicketApproved':
       return toReplyMessage(TicketApprovedSchema, toTicketApproved(reply), sagaId);
+    case 'TicketCreationFailed':
+      return toReplyMessage(TicketCreationFailedSchema, toTicketCreationFailed(reply), sagaId);
   }
 }
