@@ -1,4 +1,4 @@
-import { left, right } from '@fd/domain';
+import { right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
 import { FakePaymentGateway } from '../../../../test/support/payment-gateway.fake.ts';
@@ -66,17 +66,16 @@ describe('AuthorizePaymentCommandHandler', () => {
     expect(unitOfWork.executedMetadata).toEqual([command.metadata]);
   });
 
-  it('records nothing and sends no reply when the gateway declines the card', async () => {
+  it('records nothing and replies PaymentFailed when the gateway declines the card', async () => {
     const unitOfWork = new InMemoryUnitOfWork();
+    const reply: AccountingReply = { type: 'PaymentFailed', orderId };
 
     const outcome = await authorizePayment(unitOfWork, new FakePaymentGateway(true)).execute(
       command,
     );
 
-    expect(outcome).toEqual(
-      left({ type: 'PaymentDeclined', idempotencyKey: `${sagaId}:AuthorizePayment` }),
-    );
+    expect(outcome).toEqual(right(reply));
     expect(unitOfWork.payments.rows.size).toBe(0);
-    expect(unitOfWork.replies.sentReplies).toEqual([]);
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 });

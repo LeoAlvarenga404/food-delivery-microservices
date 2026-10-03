@@ -39,10 +39,6 @@ export function accountingCommandConsumer(
       clock,
     });
     const outcome = await handler.execute(command);
-    if (outcome.isLeft()) {
-      logger.warn({ failure: outcome.failure }, 'payment not authorized, no reply sent');
-      return;
-    }
-    logger.info({ paymentId: outcome.success.paymentId }, 'payment authorized');
+    if (outcome.isRight()) logger.info({ reply: outcome.success }, 'AuthorizePayment answered');
   };
 }
