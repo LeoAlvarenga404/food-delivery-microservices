@@ -1,0 +1,23 @@
+{
+  "name": "@fd/kitchen-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#domain/*": "./src/domain/*",
+    "#application/*": "./src/application/*",
+    "#infrastructure/*": "./src/infrastructure/*"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit"
+  },
+  "dependencies": {
+    "@fd/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "vitest": "5.0.3"
+  }
+}

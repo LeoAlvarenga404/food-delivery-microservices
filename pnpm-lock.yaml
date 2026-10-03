@@ -256,6 +256,19 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
 
+  services/kitchen:
+    dependencies:
+      '@fd/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+    devDependencies:
+      '@fd/chassis-testing':
+        specifier: workspace:*
+        version: link:../../packages/chassis/testing
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
+
   services/order:
     dependencies:
       '@bufbuild/protobuf':
