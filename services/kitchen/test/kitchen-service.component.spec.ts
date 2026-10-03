@@ -199,6 +199,7 @@ describe('kitchen service', () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
     expect(fromBinary(TicketApprovedSchema, ticketApproved.payload).ticketId).toBe(createdTicketId);
+    expect(createdTicketId).not.toBe(orderId);
   });
 
   it('answers its health endpoint', async () => {
@@ -242,6 +243,31 @@ describe('kitchen service', () => {
     });
 
     await expect(failedStart).rejects.toThrow('EADDRINUSE');
+    const openConnections = await waitFor(async () => {
+      const count = await countConnectionsTo(databaseName);
+      return count === 0 ? count : undefined;
+    }, 5_000);
+    expect(openConnections).toBe(0);
+  });
+
+  it('stops answering its health endpoint and releases its database connections once stopped', async () => {
+    const databaseName = 'kitchen_stopped';
+    await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = `/${databaseName}`;
+    const stoppableService = await startKitchenService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: 0,
+      logLevel: 'silent',
+    });
+    const healthUrl = `${stoppableService.url}/health`;
+    expect((await fetch(healthUrl)).status).toBe(200);
+
+    await stoppableService.stop();
+
+    await expect(fetch(healthUrl)).rejects.toThrow('fetch failed');
     const openConnections = await waitFor(async () => {
       const count = await countConnectionsTo(databaseName);
       return count === 0 ? count : undefined;

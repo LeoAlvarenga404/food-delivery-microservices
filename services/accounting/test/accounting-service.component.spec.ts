@@ -214,4 +214,30 @@ describe('accounting service', () => {
     }, 5_000);
     expect(openConnections).toBe(0);
   });
+
+  it('stops answering its health endpoint and releases its database connections once stopped', async () => {
+    const databaseName = 'accounting_stopped';
+    await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = `/${databaseName}`;
+    const stoppableService = await startAccountingService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      slowGatewayResponseInMilliseconds: 0,
+      host: '127.0.0.1',
+      port: 0,
+      logLevel: 'silent',
+    });
+    const healthUrl = `${stoppableService.url}/health`;
+    expect((await fetch(healthUrl)).status).toBe(200);
+
+    await stoppableService.stop();
+
+    await expect(fetch(healthUrl)).rejects.toThrow('fetch failed');
+    const openConnections = await waitFor(async () => {
+      const count = await countConnectionsTo(databaseName);
+      return count === 0 ? count : undefined;
+    }, 5_000);
+    expect(openConnections).toBe(0);
+  });
 });
