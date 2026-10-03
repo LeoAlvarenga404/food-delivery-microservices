@@ -48,6 +48,17 @@ describe('SimulatedPaymentGateway', () => {
     );
   });
 
+  it('answers a repeated idempotency key with the first authorization whatever the request says', async () => {
+    const gateway = simulatedGateway();
+
+    await gateway.authorize(request());
+    const repeated = await gateway.authorize(
+      request({ paymentToken: 'tok_visa_0002', amountInCents: 1n }),
+    );
+
+    expect(repeated).toEqual(right({ authorizationId: 'authorization-1' }));
+  });
+
   it('declines a card ending in 0002', async () => {
     const declined = request({ paymentToken: 'tok_visa_0002' });
 
@@ -68,6 +79,8 @@ describe('SimulatedPaymentGateway', () => {
 
     await simulatedGateway().authorize(request({ paymentToken: 'tok_visa_0009' }));
 
-    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(slowResponseInMilliseconds - 5);
+    const elapsedInMilliseconds = performance.now() - startedAt;
+    expect(elapsedInMilliseconds).toBeGreaterThanOrEqual(slowResponseInMilliseconds - 5);
+    expect(elapsedInMilliseconds).toBeLessThan(slowResponseInMilliseconds + 1000);
   });
 });

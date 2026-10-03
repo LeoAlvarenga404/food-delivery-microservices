@@ -159,6 +159,7 @@ describe('accountingCommandConsumer', () => {
     );
 
     expect(await readOutbox()).toEqual([]);
+    expect(await countRows('inbox')).toBe(1);
     expect(
       await new PostgresPaymentRepository(testDatabase.database).findByOrderId(orderId),
     ).toBeUndefined();
@@ -172,6 +173,8 @@ describe('accountingCommandConsumer', () => {
 
     await expect(handleCommand(command)).rejects.toMatchObject({ code: 'ETIMEDOUT' });
     expect(await readOutbox()).toEqual([]);
+    expect(await countRows('inbox')).toBe(0);
+    expect(await countRows('payments')).toBe(0);
   });
 
   it('dead-letters a command with an amount that is not positive', async () => {

@@ -32,8 +32,8 @@ export class SimulatedPaymentGateway implements PaymentGateway {
   async authorize(
     request: PaymentAuthorizationRequest,
   ): Promise<Either<PaymentDeclined, GatewayAuthorization>> {
-    const previous = this.#authorizations.get(request.idempotencyKey);
-    if (previous !== undefined) return right(previous);
+    const firstAuthorization = this.#authorizations.get(request.idempotencyKey);
+    if (firstAuthorization !== undefined) return right(firstAuthorization);
     const { paymentToken, idempotencyKey } = request;
     if (paymentToken.endsWith(decliningCardSuffix)) {
       return left({ type: 'PaymentDeclined', idempotencyKey });

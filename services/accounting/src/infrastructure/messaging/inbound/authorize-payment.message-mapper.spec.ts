@@ -80,6 +80,13 @@ describe('toAuthorizePaymentCommand', () => {
       }),
     },
     {
+      problem: 'a negative amount',
+      message: buildCommandMessage(AuthorizePaymentSchema, {
+        ...authorizePayment,
+        amountInCents: -1n,
+      }),
+    },
+    {
       problem: 'a currency other than BRL',
       message: buildCommandMessage(AuthorizePaymentSchema, {
         ...authorizePayment,
