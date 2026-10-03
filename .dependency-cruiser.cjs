@@ -59,7 +59,7 @@ module.exports = {
       comment: 'design 9.3 and ADR-0013: a BFF calls services over Connect RPC with @fd/contracts',
       severity: 'error',
       from: { path: '^bffs/([^/]+)/' },
-      to: { path: '^(services|bffs)/', pathNot: '^bffs/$1/' },
+      to: { path: '^(services|bffs|infra|tooling)/', pathNot: '^bffs/$1/' },
     },
     {
       name: 'shared-code-never-imports-deployables',
@@ -73,7 +73,7 @@ module.exports = {
       comment: 'design 11: end-to-end tests drive the stack over HTTP and Docker only',
       severity: 'error',
       from: { path: '^e2e/', pathNot: 'vitest\\.config\\.ts$' },
-      to: { path: '^(services|bffs|packages)/' },
+      to: { path: '^(services|bffs|packages|infra|tooling)/' },
     },
     {
       name: 'production-code-never-imports-test-code',
