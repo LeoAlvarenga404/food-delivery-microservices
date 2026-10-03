@@ -209,15 +209,27 @@ importers:
 
   services/accounting:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.16.0
+        version: 2.16.0
       '@fd/chassis-inbox':
         specifier: workspace:*
         version: link:../../packages/chassis/inbox
+      '@fd/chassis-kafka':
+        specifier: workspace:*
+        version: link:../../packages/chassis/kafka
+      '@fd/chassis-observability':
+        specifier: workspace:*
+        version: link:../../packages/chassis/observability
       '@fd/chassis-outbox':
         specifier: workspace:*
         version: link:../../packages/chassis/outbox
       '@fd/chassis-postgres':
         specifier: workspace:*
         version: link:../../packages/chassis/postgres
+      '@fd/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@fd/domain':
         specifier: workspace:*
         version: link:../../packages/domain

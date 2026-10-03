@@ -1,5 +1,6 @@
 import { readGoldenSample } from '@fd/chassis-testing';
 import { goldenSamplesDirectory } from '@fd/contracts';
+import { PaymentAuthorizedSchema } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
 import { ConsumerVerifiedSchema } from '@fd/contracts/fooddelivery/consumer/v1/replies_pb.js';
 import {
   TicketApprovedSchema,
@@ -34,6 +35,14 @@ describe('place order saga reply golden samples', () => {
 
     expect(toPlaceOrderSagaReply(buildReplyMessage(TicketApprovedSchema, sample))).toEqual({
       type: 'TicketApproved',
+    });
+  });
+
+  it('reads the PaymentAuthorized sample the Accounting service produces', async () => {
+    const sample = await readGoldenSample({ directory, topic, schema: PaymentAuthorizedSchema });
+
+    expect(toPlaceOrderSagaReply(buildReplyMessage(PaymentAuthorizedSchema, sample))).toEqual({
+      type: 'PaymentAuthorized',
     });
   });
 });
