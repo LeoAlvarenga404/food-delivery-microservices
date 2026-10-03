@@ -91,6 +91,12 @@ const transitions: readonly SagaTransition[] = [
     nextState: sagaStates.COMPENSATED,
     commands: [{ type: 'RejectOrder', order, rejectionReason: 'PAYMENT_DECLINED' }],
   },
+  {
+    state: { step: 'REJECTING_TICKET', order, rejectionReason: 'TICKET_REFUSED' },
+    reply: { type: 'TicketRejected' },
+    nextState: { step: 'COMPENSATED', order, rejectionReason: 'TICKET_REFUSED' },
+    commands: [{ type: 'RejectOrder', order, rejectionReason: 'TICKET_REFUSED' }],
+  },
 ];
 
 const unexpectedPairs = Object.values(sagaStates).flatMap((state) =>

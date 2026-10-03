@@ -23,12 +23,14 @@ export interface BeforePivotSagaState {
 export interface AfterPivotSagaState {
   readonly step: 'APPROVING_TICKET' | 'COMPLETED';
   readonly order: PlaceOrderSagaOrder;
+  readonly paymentToken?: never;
 }
 
 export interface CompensationSagaState {
   readonly step: 'REJECTING_TICKET' | 'COMPENSATED';
   readonly order: PlaceOrderSagaOrder;
   readonly rejectionReason: OrderRejectionReason;
+  readonly paymentToken?: never;
 }
 
 export type PlaceOrderSagaState =
