@@ -1,6 +1,6 @@
 import { Writable } from 'node:stream';
 import { createLogger, runInRootSpan, type Logger } from '@fd/chassis-observability';
-import { recordSpans, traceparentOf } from '@fd/chassis-testing';
+import { recordSpans, SpanStatusCode, traceparentOf } from '@fd/chassis-testing';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
@@ -224,6 +224,7 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
     const sagas = [
       {
         sagaId: '0199a5d0-0000-7000-8000-0000000002b2',
+        deadlineAt: new Date('2026-10-02T12:01:00.000Z'),
         order: {
           ...buildSagaOrder(),
           orderId: unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000002c2')),
@@ -231,18 +232,19 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
       },
       {
         sagaId: '0199a5d0-0000-7000-8000-0000000002b3',
+        deadlineAt: new Date('2026-10-02T12:01:01.000Z'),
         order: {
           ...buildSagaOrder(),
           orderId: unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000002c3')),
         },
       },
     ];
-    for (const { sagaId, order } of sagas) {
-      await saveExpiredSaga(sagaId, {
-        step: 'CREATING_TICKET',
-        order,
-        paymentToken: 'tok_visa_4242',
-      });
+    for (const { sagaId, order, deadlineAt } of sagas) {
+      await saveExpiredSaga(
+        sagaId,
+        { step: 'CREATING_TICKET', order, paymentToken: 'tok_visa_4242' },
+        deadlineAt,
+      );
     }
 
     await runInRootSpan('place order saga deadlines', () =>
@@ -311,11 +313,16 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
 
     expect((await readSaga(orphanSagaId))?.state.step).toBe('VERIFYING_CONSUMER');
     expect((await readSaga(ticketSagaId))?.state.step).toBe('REJECTING_TICKET');
+    const failedTimeout = spans
+      .spansNamed('place order saga step timeout')
+      .find((span) => span.attributes['fooddelivery.saga.id'] === orphanSagaId);
+    expect(failedTimeout?.status.code).toBe(SpanStatusCode.ERROR);
     expect(logEntries).toContainEqual(
       expect.objectContaining({
         level: 50,
         msg: 'place order saga timeout failed',
         sagaId: orphanSagaId,
+        ['trace_id']: failedTimeout?.spanContext().traceId,
       }),
     );
   });

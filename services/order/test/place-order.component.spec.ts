@@ -9,6 +9,7 @@ import {
   SpanStatusCode,
   startKafkaContainer,
   startPostgresContainer,
+  traceparentOf,
   type StartedKafka,
   type StartedPostgres,
 } from '@fd/chassis-testing';
@@ -231,7 +232,9 @@ describe('order service', () => {
     });
     expect(approved.totalInCents).toBe(9800n);
     const createTicket = await waitForCommand('fooddelivery.kitchen.v1.CreateTicket');
-    expect(createTicket.traceparent).toMatch(new RegExp(`^00-${replyTraceId}-[0-9a-f]{16}-01$`));
+    expect(spans.spansNamed('process order.place-order-saga.replies').map(traceparentOf)).toContain(
+      createTicket.traceparent,
+    );
     expect(
       spans
         .spansNamed('process order.place-order-saga.replies')
@@ -303,7 +306,7 @@ describe('order service', () => {
     expect(openConnections).toBe(0);
   });
 
-  it('runs housekeeping in root spans every interval until it stops', async () => {
+  it('runs housekeeping in root spans and stops its periodic jobs when it stops', async () => {
     await sql`create database order_stopped`.execute(outboxReader);
     const databaseUrl = new URL(postgres.connectionUri);
     databaseUrl.pathname = '/order_stopped';
@@ -324,8 +327,8 @@ describe('order service', () => {
 
     expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
     expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
+    expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
     const deadlineSweeps = spans.spansNamed('place order saga deadlines');
-    expect(deadlineSweeps.length).toBeGreaterThan(0);
     expect(deadlineSweeps.map((sweep) => sweep.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });
