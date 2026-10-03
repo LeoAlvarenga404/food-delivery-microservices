@@ -1,3 +1,7 @@
+export {
+  createAccessTokenInterceptor,
+  verifiedAccessTokenKey,
+} from './access-token-interceptor.ts';
 export { createAccessTokenVerifier } from './access-token-verifier.ts';
 export type {
   AccessTokenVerifier,
