@@ -8,6 +8,7 @@ import { inboxMigrations } from './inbox-migrations.ts';
 const now = new Date('2026-10-03T12:00:00.000Z');
 const thirtyDaysInMilliseconds = 2_592_000_000;
 const expiredMessageId = '0199a5d0-0000-7000-8000-000000000d01';
+const otherExpiredMessageId = '0199a5d0-0000-7000-8000-000000000d04';
 const thirtyDaysOldMessageId = '0199a5d0-0000-7000-8000-000000000d02';
 const freshMessageId = '0199a5d0-0000-7000-8000-000000000d03';
 
@@ -40,6 +41,7 @@ afterAll(async () => {
 describe('deleteExpiredInboxEntries', () => {
   it('deletes the entries older than thirty days and keeps the others', async () => {
     await insertInboxEntry(expiredMessageId, thirtyDaysInMilliseconds + 1);
+    await insertInboxEntry(otherExpiredMessageId, thirtyDaysInMilliseconds + 2);
     await insertInboxEntry(thirtyDaysOldMessageId, thirtyDaysInMilliseconds);
     await insertInboxEntry(freshMessageId, 1_000);
 
@@ -48,7 +50,7 @@ describe('deleteExpiredInboxEntries', () => {
     const remaining = await sql<{ readonly messageId: string }>`
       select message_id from inbox order by message_id
     `.execute(database);
-    expect(deletedCount).toBe(1);
+    expect(deletedCount).toBe(2);
     expect(remaining.rows.map((row) => row.messageId)).toEqual([
       thirtyDaysOldMessageId,
       freshMessageId,

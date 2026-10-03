@@ -127,9 +127,9 @@ const transitions: readonly SagaTransition[] = [
     commands: [{ type: 'ApproveTicket', order }],
   },
   {
-    state: sagaStates.REJECTING_TICKET,
+    state: { step: 'REJECTING_TICKET', order, rejectionReason: 'TICKET_CREATION_TIMED_OUT' },
     reply: { type: 'StepTimedOut' },
-    nextState: sagaStates.REJECTING_TICKET,
+    nextState: { step: 'REJECTING_TICKET', order, rejectionReason: 'TICKET_CREATION_TIMED_OUT' },
     commands: [{ type: 'RejectTicket', order }],
   },
 ];

@@ -7,7 +7,9 @@ import {
   buildPayment,
   orderId,
   paymentId,
+  unwrap,
 } from '../../../../test/support/payment.builder.ts';
+import { parsePaymentId } from '#domain/payment/payment-id.value-object.ts';
 import type { Clock } from '#application/ports/clock.port.ts';
 import type { IdGenerator } from '#application/ports/id-generator.port.ts';
 import type { AccountingReply } from '#application/ports/reply-sender.port.ts';
@@ -82,9 +84,14 @@ describe('AuthorizePaymentCommandHandler', () => {
 
   it('answers a repeated AuthorizePayment with the payment it already recorded, without charging again', async () => {
     const unitOfWork = new InMemoryUnitOfWork();
-    await unitOfWork.payments.save(buildPayment());
+    const recordedPaymentId = unwrap(parsePaymentId('0199a5d0-0000-7000-8000-0000000000ea'));
+    await unitOfWork.payments.save(buildPayment({ paymentId: recordedPaymentId }));
     const paymentGateway = new FakePaymentGateway();
-    const reply: AccountingReply = { type: 'PaymentAuthorized', orderId, paymentId };
+    const reply: AccountingReply = {
+      type: 'PaymentAuthorized',
+      orderId,
+      paymentId: recordedPaymentId,
+    };
 
     const outcome = await authorizePayment(unitOfWork, paymentGateway).execute(command);
 

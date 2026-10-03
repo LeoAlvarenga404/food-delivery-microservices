@@ -8,6 +8,7 @@ import { outboxMigrations } from './outbox-migrations.ts';
 const now = new Date('2026-10-03T12:00:00.000Z');
 const oneDayInMilliseconds = 86_400_000;
 const expiredMessageId = '0199a5d0-0000-7000-8000-000000000e01';
+const otherExpiredMessageId = '0199a5d0-0000-7000-8000-000000000e04';
 const oneDayOldMessageId = '0199a5d0-0000-7000-8000-000000000e02';
 const freshMessageId = '0199a5d0-0000-7000-8000-000000000e03';
 
@@ -45,6 +46,7 @@ afterAll(async () => {
 describe('deleteExpiredOutboxMessages', () => {
   it('deletes the messages older than one day and keeps the others', async () => {
     await insertOutboxMessage(expiredMessageId, oneDayInMilliseconds + 1);
+    await insertOutboxMessage(otherExpiredMessageId, oneDayInMilliseconds + 2);
     await insertOutboxMessage(oneDayOldMessageId, oneDayInMilliseconds);
     await insertOutboxMessage(freshMessageId, 1_000);
 
@@ -53,7 +55,7 @@ describe('deleteExpiredOutboxMessages', () => {
     const remaining = await sql<{ readonly id: string }>`select id from outbox order by id`.execute(
       database,
     );
-    expect(deletedCount).toBe(1);
+    expect(deletedCount).toBe(2);
     expect(remaining.rows.map((row) => row.id)).toEqual([oneDayOldMessageId, freshMessageId]);
   });
 });

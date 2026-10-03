@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { FakeIdGenerator } from '../../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
 import {
+  buildTicket,
   createTicketInput,
   orderId,
   ticketId,
@@ -67,6 +68,24 @@ describe('CreateTicketCommandHandler', () => {
       { reply, sagaId },
       { reply, sagaId },
     ]);
+  });
+
+  it('answers TicketCreated again for a rejected ticket without saving anything', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    const rejectedTicket = buildTicket();
+    unwrap(rejectedTicket.reject());
+    await unitOfWork.tickets.save(rejectedTicket);
+    const savedTicketSnapshot = (await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot();
+    const reply: KitchenReply = { type: 'TicketCreated', orderId, ticketId };
+
+    const outcome = await createTicket(unitOfWork).execute(command);
+
+    expect(outcome).toEqual(right(reply));
+    expect(unitOfWork.tickets.rows.size).toBe(1);
+    expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot()).toEqual(
+      savedTicketSnapshot,
+    );
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 
   it.each<{
