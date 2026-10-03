@@ -34,11 +34,13 @@ import { sagaTimeoutsInMilliseconds } from './support/place-order-saga.builder.t
 interface CommandRow {
   readonly sagaId: string;
   readonly correlationId: string;
+  readonly traceparent: string | null;
 }
 
 const repliesTopic = 'order.place-order-saga.replies';
 const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
+const replyTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
 const errorStatusCode = 2;
 const spans = recordSpans();
 const componentSagaTimeoutsInMilliseconds = {
@@ -69,7 +71,7 @@ async function waitFor<Result>(
 async function waitForCommand(messageType: string): Promise<CommandRow> {
   return waitFor(async () => {
     const result = await sql<CommandRow>`
-      select saga_id, correlation_id from outbox where message_type = ${messageType}
+      select saga_id, correlation_id, traceparent from outbox where message_type = ${messageType}
     `.execute(outboxReader);
     return result.rows[0];
   });
@@ -112,6 +114,7 @@ async function reply<Schema extends DescMessage>(
           'message-type': schema.typeName,
           'correlation-id': command.correlationId,
           'saga-id': command.sagaId,
+          traceparent: `00-${replyTraceId}-00f067aa0ba902b7-01`,
         },
       },
     ],
@@ -227,6 +230,13 @@ describe('order service', () => {
       return order.status === OrderStatus.APPROVED ? order : undefined;
     });
     expect(approved.totalInCents).toBe(9800n);
+    const createTicket = await waitForCommand('fooddelivery.kitchen.v1.CreateTicket');
+    expect(createTicket.traceparent).toMatch(new RegExp(`^00-${replyTraceId}-[0-9a-f]{16}-01$`));
+    expect(
+      spans
+        .spansNamed('process order.place-order-saga.replies')
+        .map((span) => span.attributes['fooddelivery.order.id']),
+    ).toContain(orderId);
   });
 
   it('answers a repeated placement with the same Idempotency-Key with the same order', async () => {
@@ -253,6 +263,14 @@ describe('order service', () => {
     });
 
     expect(rejected.rejectionReason).toBe(OrderRejectionReason.CONSUMER_VERIFICATION_TIMED_OUT);
+    const timeout = spans
+      .spansNamed('place order saga step timeout')
+      .find((span) => span.attributes['fooddelivery.order.id'] === orderId);
+    const sweep = spans
+      .spansNamed('place order saga deadlines')
+      .find((span) => span.spanContext().spanId === timeout?.parentSpanContext?.spanId);
+    expect(sweep).toBeDefined();
+    expect(sweep?.parentSpanContext).toBeUndefined();
   });
 
   it('answers its health endpoint', async () => {

@@ -1,5 +1,6 @@
 import { Writable } from 'node:stream';
-import { createLogger, type Logger } from '@fd/chassis-observability';
+import { createLogger, runInRootSpan, type Logger } from '@fd/chassis-observability';
+import { recordSpans, traceparentOf } from '@fd/chassis-testing';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
@@ -36,6 +37,7 @@ interface OutboxRow {
 
 const verificationDeadline = new Date('2026-10-02T12:00:10.000Z');
 const afterEveryDeadline = new Date('2026-10-02T12:05:00.000Z');
+const spans = recordSpans();
 
 let testDatabase: OrderTestDatabase;
 let unitOfWork: OrderUnitOfWork;
@@ -94,6 +96,13 @@ async function readOutbox(): Promise<readonly OutboxRow[]> {
   return result.rows;
 }
 
+async function readOutboxTraceparents(): Promise<readonly (string | null)[]> {
+  const result = await sql<{ readonly traceparent: string | null }>`
+    select traceparent from outbox order by id
+  `.execute(testDatabase.database);
+  return result.rows.map((row) => row.traceparent);
+}
+
 async function readSaga(sagaId: string) {
   return new PostgresPlaceOrderSagaRepository(testDatabase.database).findById(sagaId);
 }
@@ -106,6 +115,7 @@ beforeEach(async () => {
   await testDatabase.clearWrittenRows();
   logEntries = [];
   correlationCount = 0;
+  spans.reset();
   unitOfWork = createOrderUnitOfWork({
     database: testDatabase.database,
     generateMessageId: () => {
@@ -202,6 +212,28 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
       state: { step: 'REJECTING_TICKET', rejectionReason: 'TICKET_CREATION_TIMED_OUT' },
       deadlineAt: new Date('2026-10-02T12:05:40.000Z'),
     });
+  });
+
+  it('times out each saga in a span of the sweep that carries its ids and its commands', async () => {
+    const sagaId = '0199a5d0-0000-7000-8000-0000000002b2';
+    const order = buildSagaOrder();
+    await saveExpiredSaga(sagaId, {
+      step: 'CREATING_TICKET',
+      order,
+      paymentToken: 'tok_visa_4242',
+    });
+
+    await runInRootSpan('place order saga deadlines', () =>
+      workerAt(afterEveryDeadline).timeOutExpiredSteps(),
+    );
+
+    const [sweep] = spans.spansNamed('place order saga deadlines');
+    const [timeout] = spans.spansNamed('place order saga step timeout');
+    expect(timeout).toMatchObject({
+      parentSpanContext: { spanId: sweep?.spanContext().spanId },
+      attributes: { 'fooddelivery.order.id': order.orderId, 'fooddelivery.saga.id': sagaId },
+    });
+    expect(await readOutboxTraceparents()).toEqual([traceparentOf(timeout)]);
   });
 
   it('times out each saga once when two workers sweep at the same time', async () => {

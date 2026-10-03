@@ -1,6 +1,6 @@
 import type { TransactionalMessageHandler } from '@fd/chassis-inbox';
 import { PermanentMessageFailure, type InboundMessage } from '@fd/chassis-kafka';
-import { withCorrelation, type Logger } from '@fd/chassis-observability';
+import { annotateActiveSpan, withCorrelation, type Logger } from '@fd/chassis-observability';
 import { metadataCausedBy } from '@fd/chassis-outbox';
 import type { Transaction } from 'kysely';
 import type { ApplyPlaceOrderSagaReplyError } from '#application/commands/apply-place-order-saga-reply/apply-place-order-saga-reply.command.ts';
@@ -47,6 +47,7 @@ export function placeOrderSagaReplyConsumer(
   return async (message, transaction) => {
     const sagaId = readSagaId(message);
     const { orderId, reply } = toPlaceOrderSagaReply(message);
+    annotateActiveSpan({ orderId });
     const { messageId, correlationId, causationId } = message.headers;
     const logger = withCorrelation(settings.logger, {
       correlationId,

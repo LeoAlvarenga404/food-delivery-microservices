@@ -1,4 +1,10 @@
-import { withCorrelation, type Logger } from '@fd/chassis-observability';
+import {
+  annotateActiveSpan,
+  recordActiveSpanFailure,
+  runInSpan,
+  withCorrelation,
+  type Logger,
+} from '@fd/chassis-observability';
 import { runInTransaction } from '@fd/chassis-postgres';
 import type { Kysely, Transaction } from 'kysely';
 import { ApplyPlaceOrderSagaReplyCommandHandler } from '#application/commands/apply-place-order-saga-reply/apply-place-order-saga-reply.command-handler.ts';
@@ -45,13 +51,16 @@ export class PlaceOrderSagaDeadlineWorker {
     return runInTransaction(database, async (transaction) => {
       const sagas = new PostgresPlaceOrderSagaRepository(transaction);
       const expiredSagas = await sagas.lockExpiredSagas(clock.now(), expiredSagaBatchSize);
-      for (const expired of expiredSagas) await this.#timeOut(transaction, expired);
+      for (const expired of expiredSagas) {
+        await runInSpan('place order saga step timeout', () => this.#timeOut(transaction, expired));
+      }
       return expiredSagas.length;
     });
   }
 
   async #timeOut(transaction: Transaction<OrderDatabase>, expired: ExpiredSaga): Promise<void> {
     const { sagaId, orderId } = expired;
+    annotateActiveSpan({ orderId, sagaId });
     const correlationId = this.#settings.generateCorrelationId();
     const logger = withCorrelation(this.#settings.logger, { correlationId, sagaId }).child({
       orderId,
@@ -68,6 +77,7 @@ export class PlaceOrderSagaDeadlineWorker {
       }
       logger.warn({ failure: outcome.failure }, 'place order saga timeout ignored');
     } catch (error) {
+      recordActiveSpanFailure(error);
       logger.error({ err: error }, 'place order saga timeout failed');
     }
     await this.#postpone(transaction, sagaId);
