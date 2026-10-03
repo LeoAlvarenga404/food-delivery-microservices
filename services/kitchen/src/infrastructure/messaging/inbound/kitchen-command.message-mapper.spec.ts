@@ -43,6 +43,21 @@ describe('toKitchenCommand', () => {
     });
   });
 
+  it('reads the restaurant and menu item ids in canonical lowercase form', () => {
+    const message = buildCommandMessage(CreateTicketSchema, {
+      ...createTicket,
+      restaurantId: restaurantId.toUpperCase(),
+      lineItems: lineItems.map((lineItem) => ({
+        ...lineItem,
+        menuItemId: lineItem.menuItemId.toUpperCase(),
+      })),
+    });
+
+    expect(toKitchenCommand(message)).toMatchObject({
+      command: { restaurantId, lineItems },
+    });
+  });
+
   it.each([
     {
       problem: 'a message type the kitchen does not handle',
@@ -72,6 +87,13 @@ describe('toKitchenCommand', () => {
     {
       problem: 'a restaurant id that is not a uuid',
       message: buildCommandMessage(CreateTicketSchema, { ...createTicket, restaurantId: '' }),
+    },
+    {
+      problem: 'a menu item id that is not a uuid',
+      message: buildCommandMessage(CreateTicketSchema, {
+        ...createTicket,
+        lineItems: lineItems.map((lineItem) => ({ ...lineItem, menuItemId: 'pizza' })),
+      }),
     },
   ])('treats $problem as a permanent failure', ({ message }) => {
     expect(() => toKitchenCommand(message)).toThrow(PermanentMessageFailure);

@@ -25,10 +25,12 @@ import { PostgresTicketRepository } from '#infrastructure/persistence/postgres-t
 import { kitchenCommandConsumer } from './kitchen-command.consumer.ts';
 
 interface OutboxRow {
+  readonly topic: string;
   readonly aggregateId: string;
   readonly messageType: string;
   readonly payload: Uint8Array;
   readonly sagaId: string | null;
+  readonly correlationId: string;
   readonly causationId: string | null;
 }
 
@@ -45,7 +47,8 @@ let messageCount = 0;
 
 async function readOutbox(): Promise<readonly OutboxRow[]> {
   const result = await sql<OutboxRow>`
-    select aggregate_id, message_type, payload, saga_id, causation_id from outbox order by id
+    select topic, aggregate_id, message_type, payload, saga_id, correlation_id, causation_id
+    from outbox order by id
   `.execute(testDatabase.database);
   return result.rows;
 }
@@ -97,9 +100,11 @@ describe('kitchenCommandConsumer', () => {
     const [reply, ...others] = await readOutbox();
     expect(others).toEqual([]);
     expect(reply).toMatchObject({
+      topic: 'order.place-order-saga.replies',
       aggregateId: sagaId,
       messageType: 'fooddelivery.kitchen.v1.TicketCreated',
       sagaId,
+      correlationId: command.headers.correlationId,
       causationId: command.headers.messageId,
     });
     expect(fromBinary(TicketCreatedSchema, reply?.payload ?? new Uint8Array())).toMatchObject({
@@ -116,6 +121,10 @@ describe('kitchenCommandConsumer', () => {
     const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
     expect(ticket?.toSnapshot().status).toBe('AWAITING_ACCEPTANCE');
     const replies = await readOutbox();
+    expect(replies.map((row) => row.topic)).toEqual([
+      'order.place-order-saga.replies',
+      'order.place-order-saga.replies',
+    ]);
     expect(replies.map((row) => row.messageType)).toEqual([
       'fooddelivery.kitchen.v1.TicketCreated',
       'fooddelivery.kitchen.v1.TicketApproved',
@@ -132,6 +141,7 @@ describe('kitchenCommandConsumer', () => {
     await handleCommand(command);
 
     expect(await readOutbox()).toHaveLength(1);
+    expect(await countRows('tickets')).toBe(1);
   });
 
   it('rolls back the ticket, the reply and the inbox row when the inbox transaction fails', async () => {
@@ -152,6 +162,7 @@ describe('kitchenCommandConsumer', () => {
     await handleCommand(buildCommandMessage(ApproveTicketSchema, { orderId }));
 
     expect(await readOutbox()).toEqual([]);
+    expect(await countRows('inbox')).toBe(1);
   });
 
   it('dead-letters a command type the kitchen does not handle', async () => {

@@ -36,6 +36,25 @@ describe('Ticket', () => {
     );
   });
 
+  it('refuses a ticket whose later line item has an invalid quantity', () => {
+    const validLineItem = {
+      menuItemId: '0199a5d0-0000-7000-8000-000000000101',
+      name: 'Pizza',
+      quantity: 1,
+    };
+    const invalidLineItem = {
+      menuItemId: '0199a5d0-0000-7000-8000-000000000109',
+      name: 'Soda',
+      quantity: 0,
+    };
+
+    expect(
+      Ticket.create(createTicketInput({ lineItems: [validLineItem, invalidLineItem] })),
+    ).toEqual(
+      left({ type: 'InvalidQuantity', menuItemId: invalidLineItem.menuItemId, quantity: 0 }),
+    );
+  });
+
   it('moves to awaiting acceptance once the saga approves it', () => {
     const ticket = buildTicket();
 
