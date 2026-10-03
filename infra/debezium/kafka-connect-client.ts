@@ -30,13 +30,16 @@ function failureOf(name: string, components: readonly ComponentStatus[]): Error 
     : new Error(`connector ${name} FAILED:\n${traces.join('\n')}`);
 }
 
-async function waitUntil(condition: () => Promise<boolean>, failureMessage: string): Promise<void> {
+async function waitUntil(
+  condition: () => Promise<boolean>,
+  failureMessage: () => string,
+): Promise<void> {
   const deadline = Date.now() + stateTimeoutInMilliseconds;
   while (Date.now() < deadline) {
     if (await condition()) return;
     await setTimeout(pollIntervalInMilliseconds);
   }
-  throw new Error(failureMessage);
+  throw new Error(failureMessage());
 }
 
 export class KafkaConnectClient {
@@ -69,16 +72,26 @@ export class KafkaConnectClient {
 
   async waitForConnectorRunning(name: string): Promise<void> {
     let previousFailure: Error | undefined;
-    await waitUntil(async () => {
-      const components = await this.#readConnectorStatus(name);
-      const failure = failureOf(name, components);
-      if (failure !== undefined && previousFailure !== undefined) throw failure;
-      previousFailure = failure;
-      const [connector, ...tasks] = components;
-      const isEveryTaskRunning =
-        tasks.length > 0 && tasks.every((task) => task.state === 'RUNNING');
-      return connector?.state === 'RUNNING' && isEveryTaskRunning;
-    }, `connector ${name} is not RUNNING; see ${this.#baseUrl}/connectors/${name}/status`);
+    await waitUntil(
+      async () => {
+        const components = await this.#readConnectorStatus(name);
+        const failure = failureOf(name, components);
+        if (failure !== undefined && previousFailure !== undefined) throw failure;
+        previousFailure = failure;
+        const [connector, ...tasks] = components;
+        const isEveryTaskRunning =
+          tasks.length > 0 && tasks.every((task) => task.state === 'RUNNING');
+        return connector?.state === 'RUNNING' && isEveryTaskRunning;
+      },
+      () => {
+        const lastFailure =
+          previousFailure === undefined
+            ? ''
+            : `
+${previousFailure.message}`;
+        return `connector ${name} is not RUNNING; see ${this.#baseUrl}/connectors/${name}/status${lastFailure}`;
+      },
+    );
   }
 
   async removeConnectorAndOffsets(name: string): Promise<void> {
@@ -86,10 +99,13 @@ export class KafkaConnectClient {
     await connectorResponse.body?.cancel();
     if (connectorResponse.status === 404) return;
     await this.#request(`/connectors/${name}/stop`, { method: 'PUT' });
-    await waitUntil(async () => {
-      const [connector] = await this.#readConnectorStatus(name);
-      return connector?.state === 'STOPPED';
-    }, `connector ${name} did not stop`);
+    await waitUntil(
+      async () => {
+        const [connector] = await this.#readConnectorStatus(name);
+        return connector?.state === 'STOPPED';
+      },
+      () => `connector ${name} did not stop`,
+    );
     await this.#request(`/connectors/${name}/offsets`, { method: 'DELETE' });
     await this.#request(`/connectors/${name}`, { method: 'DELETE' });
   }
