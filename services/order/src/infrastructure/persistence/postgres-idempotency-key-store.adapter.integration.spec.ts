@@ -95,3 +95,32 @@ describe('postgres idempotency key store under concurrency', () => {
     expect(rows.map((row) => row.orderId)).toEqual([repeatedReservation.orderId]);
   });
 });
+
+describe('postgres idempotency key store cleanup', () => {
+  it('deletes the keys reserved more than one day ago and keeps the others', async () => {
+    const now = new Date('2026-10-03T12:00:00.000Z');
+    const store = new PostgresIdempotencyKeyStore(testDatabase.database);
+    const reserveAged = (idempotencyKey: string, ageInMilliseconds: number) =>
+      store.reserve({
+        ...firstReservation,
+        idempotencyKey,
+        createdAt: new Date(now.getTime() - ageInMilliseconds),
+      });
+    await reserveAged('checkout-expired', 86_400_001);
+    await reserveAged('checkout-one-day-old', 86_400_000);
+    await reserveAged('checkout-fresh', 1_000);
+
+    const deletedCount = await store.deleteExpired(now);
+
+    const remaining = await testDatabase.database
+      .selectFrom('idempotencyKeys')
+      .select('idempotencyKey')
+      .orderBy('idempotencyKey')
+      .execute();
+    expect(deletedCount).toBe(1);
+    expect(remaining.map((row) => row.idempotencyKey)).toEqual([
+      'checkout-fresh',
+      'checkout-one-day-old',
+    ]);
+  });
+});

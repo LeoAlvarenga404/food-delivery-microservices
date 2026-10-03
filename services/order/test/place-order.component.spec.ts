@@ -16,6 +16,7 @@ import {
   TicketApprovedSchema,
   TicketCreatedSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
+import { OrderRejectionReason } from '@fd/contracts/fooddelivery/order/v1/events_pb.js';
 import {
   OrderService,
   OrderStatus,
@@ -36,6 +37,10 @@ interface CommandRow {
 
 const repliesTopic = 'order.place-order-saga.replies';
 const waitLimitInMilliseconds = 30_000;
+const componentSagaTimeoutsInMilliseconds = {
+  ...sagaTimeoutsInMilliseconds,
+  VERIFYING_CONSUMER: 5_000,
+};
 
 let postgres: StartedPostgres;
 let kafka: StartedKafka;
@@ -154,7 +159,7 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
-    sagaTimeoutsInMilliseconds,
+    sagaTimeoutsInMilliseconds: componentSagaTimeoutsInMilliseconds,
   });
   stoppers.push(() => orderService.stop());
   client = createClient(
@@ -230,6 +235,19 @@ describe('order service', () => {
     await expect(client.placeOrder(different)).rejects.toMatchObject({
       code: Code.AlreadyExists,
     });
+  });
+
+  it('rejects an order whose consumer never answers once the verification step times out', async () => {
+    const { orderId } = await client.placeOrder(
+      buildPlaceOrderRequest('checkout-timeout-test', 'tok_visa_4242'),
+    );
+
+    const rejected = await waitFor(async () => {
+      const order = await client.getOrder({ orderId });
+      return order.status === OrderStatus.REJECTED ? order : undefined;
+    });
+
+    expect(rejected.rejectionReason).toBe(OrderRejectionReason.CONSUMER_VERIFICATION_TIMED_OUT);
   });
 
   it('answers its health endpoint', async () => {
