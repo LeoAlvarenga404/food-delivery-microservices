@@ -19,6 +19,7 @@ import {
   type ConsumerBffConfiguration,
 } from './consumer-bff.config.ts';
 import { problemDetails, sendProblemDetails } from './http/problem-details.adapter.ts';
+import { traceContextInterceptor } from './http/trace-context-interceptor.adapter.ts';
 import { orderRoutes } from './orders/order.routes.ts';
 
 export interface ConsumerBffSettings {
@@ -101,6 +102,7 @@ export async function startConsumerBff(
       httpVersion: '1.1',
       useBinaryFormat: true,
       defaultTimeoutMs: configuration.orderServiceTimeoutInMilliseconds,
+      interceptors: [traceContextInterceptor],
     }),
   );
   const server = await createConsumerBffServer({
