@@ -15,7 +15,7 @@
     "test:golden": "turbo run test:golden",
     "test:component": "turbo run test:component --concurrency=2",
     "lint:files": "node tooling/src/file-names/check-file-names.cli.ts",
-    "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra services --config .dependency-cruiser.cjs",
+    "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra services bffs --config .dependency-cruiser.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
