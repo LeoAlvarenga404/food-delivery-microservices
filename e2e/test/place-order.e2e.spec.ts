@@ -7,7 +7,7 @@ import {
 } from './support/http-consumer-api.adapter.ts';
 
 const consumerApi = new HttpConsumerApi();
-const minimumSlowCardExtraDelayInMilliseconds = 4_500;
+const minimumSlowCardExtraDelayInMilliseconds = 6_000;
 
 function placementHeaders(idempotencyKey: string): Record<string, string> {
   return { 'idempotency-key': idempotencyKey, 'x-consumer-id': walkingSkeletonConsumerId };
