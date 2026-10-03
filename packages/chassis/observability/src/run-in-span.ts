@@ -3,13 +3,13 @@ import {
   propagation,
   ROOT_CONTEXT,
   SpanKind,
-  SpanStatusCode,
   trace,
   type Attributes,
   type Context,
   type Span,
   type SpanOptions,
 } from '@opentelemetry/api';
+import { recordSpanFailure } from './active-span.ts';
 
 export interface SpanSettings {
   readonly name: string;
@@ -32,8 +32,7 @@ async function finishAfter<Result>(span: Span, work: () => Promise<Result>): Pro
   try {
     return await work();
   } catch (error) {
-    span.recordException(error instanceof Error ? error : String(error));
-    span.setStatus({ code: SpanStatusCode.ERROR });
+    recordSpanFailure(span, error);
     throw error;
   } finally {
     span.end();

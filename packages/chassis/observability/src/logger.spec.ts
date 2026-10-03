@@ -64,6 +64,7 @@ describe('createLogger', () => {
     });
     logger.info('idle');
 
+    expect(spans.finishedSpans()).toHaveLength(1);
     const creatingTicket = spans.finishedSpans()[0]?.spanContext();
     expect(entries[0]?.['trace_id']).toBe(creatingTicket?.traceId);
     expect(entries[0]?.['span_id']).toBe(creatingTicket?.spanId);

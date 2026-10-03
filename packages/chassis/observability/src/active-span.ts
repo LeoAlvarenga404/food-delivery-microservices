@@ -1,4 +1,4 @@
-import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
+import { context, propagation, SpanStatusCode, trace, type Span } from '@opentelemetry/api';
 
 export interface SpanIdentifiers {
   readonly orderId?: string | undefined;
@@ -20,8 +20,12 @@ export function annotateActiveSpan(identifiers: SpanIdentifiers): void {
   if (identifiers.sagaId !== undefined) span?.setAttribute(sagaIdAttribute, identifiers.sagaId);
 }
 
+export function recordSpanFailure(span: Span, error: unknown): void {
+  span.recordException(error instanceof Error ? error : String(error));
+  span.setStatus({ code: SpanStatusCode.ERROR });
+}
+
 export function recordActiveSpanFailure(error: unknown): void {
   const span = trace.getActiveSpan();
-  span?.recordException(error instanceof Error ? error : String(error));
-  span?.setStatus({ code: SpanStatusCode.ERROR });
+  if (span !== undefined) recordSpanFailure(span, error);
 }

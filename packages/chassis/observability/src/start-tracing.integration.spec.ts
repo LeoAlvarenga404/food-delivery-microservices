@@ -72,17 +72,13 @@ async function startReceiver(exportedSpans: ExportedSpan[]): Promise<string> {
   return `http://127.0.0.1:${String(typeof address === 'object' ? address?.port : 0)}`;
 }
 
-function runTracedRequests(exporterUrl: string): Promise<unknown> {
+function runTracedRequests(exporterVariables: NodeJS.ProcessEnv): Promise<unknown> {
   return runFile(
     process.execPath,
     ['--import', '@fd/chassis-observability/register', 'test/traced-http-requests.ts'],
     {
       cwd: packageDirectory,
-      env: {
-        ...process.env,
-        OTEL_SERVICE_NAME: 'traced-requests',
-        OTEL_EXPORTER_OTLP_ENDPOINT: exporterUrl,
-      },
+      env: { ...process.env, OTEL_SERVICE_NAME: 'traced-requests', ...exporterVariables },
     },
   );
 }
@@ -100,7 +96,9 @@ afterEach(() => {
 describe('the tracing registered through --import', () => {
   it('exports the spans of the instrumented requests before the process exits', async () => {
     const exportedSpans: ExportedSpan[] = [];
-    await runTracedRequests(await startReceiver(exportedSpans));
+    await runTracedRequests({
+      OTEL_EXPORTER_OTLP_ENDPOINT: await startReceiver(exportedSpans),
+    });
 
     const serverSpans = exportedSpans.filter((span) => span.kind === serverSpanKind);
     const clientSpans = exportedSpans.filter((span) => span.kind === clientSpanKind);
@@ -117,8 +115,19 @@ describe('the tracing registered through --import', () => {
     const unreachableUrl = await closedPortUrl();
     const startedAtInMilliseconds = Date.now();
 
-    await expect(runTracedRequests(unreachableUrl)).resolves.toMatchObject({ stderr: '' });
+    await expect(
+      runTracedRequests({ OTEL_EXPORTER_OTLP_ENDPOINT: unreachableUrl }),
+    ).resolves.toMatchObject({ stderr: '' });
 
     expect(Date.now() - startedAtInMilliseconds).toBeLessThan(maximumExitTimeInMilliseconds);
+  });
+
+  it('exports nothing when no endpoint is configured', async () => {
+    const exportedSpans: ExportedSpan[] = [];
+    const receiverUrl = await startReceiver(exportedSpans);
+
+    await runTracedRequests({ OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `${receiverUrl}/v1/traces` });
+
+    expect(exportedSpans).toEqual([]);
   });
 });

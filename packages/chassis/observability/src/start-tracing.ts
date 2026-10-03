@@ -37,7 +37,7 @@ export function readTracingSettings(environment: NodeJS.ProcessEnv): TracingSett
 function spanProcessors(exporterUrl: string | undefined): SpanProcessor[] {
   if (exporterUrl === undefined) return [];
   const exporter = new OTLPTraceExporter({
-    url: new URL('/v1/traces', exporterUrl).toString(),
+    url: `${exporterUrl.replace(/\/+$/, '')}/v1/traces`,
     timeoutMillis: exportTimeoutInMilliseconds,
     httpAgentOptions: { keepAlive: true, timeout: exportTimeoutInMilliseconds },
   });
@@ -57,7 +57,6 @@ export function startTracing(settings: TracingSettings): void {
       }),
       new FastifyOtelInstrumentation({
         registerOnInitialization: true,
-        ignorePaths: healthPath,
         instrumentHandler: false,
       }),
       new PgInstrumentation({ requireParentSpan: true }),

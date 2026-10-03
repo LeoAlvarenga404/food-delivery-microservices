@@ -32,7 +32,10 @@ describe('runInSpan', () => {
     await expect(failing).rejects.toThrow('database went away');
     const [failed] = spans.finishedSpans();
     expect(failed?.status.code).toBe(SpanStatusCode.ERROR);
-    expect(failed?.events.map((event) => event.name)).toEqual(['exception']);
+    expect(failed?.events.map((event) => event.attributes?.['exception.message'])).toEqual([
+      'database went away',
+    ]);
+    expect(failed?.events[0]?.attributes?.['exception.type']).toBe('Error');
   });
 });
 

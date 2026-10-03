@@ -70,4 +70,17 @@ describe('recordActiveSpanFailure', () => {
       'database went away',
     ]);
   });
+
+  it('records a thrown value that is not an Error by its text', async () => {
+    await runInRootSpan('handling', () => {
+      recordActiveSpanFailure('gateway timeout');
+      return Promise.resolve();
+    });
+
+    const [handling] = spans.finishedSpans();
+    expect(handling?.status.code).toBe(SpanStatusCode.ERROR);
+    expect(handling?.events.map((event) => event.attributes?.['exception.message'])).toEqual([
+      'gateway timeout',
+    ]);
+  });
 });
