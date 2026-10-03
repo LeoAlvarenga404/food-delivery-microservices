@@ -6,3 +6,13 @@ message PaymentAuthorized {
   string order_id = 1;
   string payment_id = 2;
 }
+
+enum PaymentFailureReason {
+  PAYMENT_FAILURE_REASON_UNSPECIFIED = 0;
+  PAYMENT_FAILURE_REASON_PAYMENT_DECLINED = 1;
+}
+
+message PaymentFailed {
+  string order_id = 1;
+  PaymentFailureReason reason = 2;
+}

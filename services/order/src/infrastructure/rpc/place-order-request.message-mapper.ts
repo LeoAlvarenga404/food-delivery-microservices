@@ -11,7 +11,7 @@ import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
 import { parseMenuItemId } from '#domain/menu/menu-item-id.value-object.ts';
 import { parseRestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import { parseConsumerId } from '#domain/order/consumer-id.value-object.ts';
-import type { RequestedLineItem } from '#domain/order/order.aggregate.ts';
+import type { RequestedLineItem } from '#domain/order/order-placement.policy.ts';
 
 export interface InvalidPlaceOrderRequest {
   readonly type: 'InvalidPlaceOrderRequest';

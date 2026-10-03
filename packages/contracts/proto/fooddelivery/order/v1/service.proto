@@ -55,4 +55,5 @@ message GetOrderResponse {
   repeated OrderLineItem line_items = 3;
   int64 total_in_cents = 4;
   string currency = 5;
+  OrderRejectionReason rejection_reason = 6;
 }

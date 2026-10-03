@@ -1,1 +1,1 @@
-export type TicketStatus = 'CREATE_PENDING' | 'AWAITING_ACCEPTANCE';
+export type TicketStatus = 'CREATE_PENDING' | 'AWAITING_ACCEPTANCE' | 'REJECTED';

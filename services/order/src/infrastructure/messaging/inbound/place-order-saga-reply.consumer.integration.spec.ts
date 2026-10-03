@@ -1,11 +1,21 @@
+import { Writable } from 'node:stream';
 import { withInbox, type InboxSettings, type TransactionalMessageHandler } from '@fd/chassis-inbox';
 import { PermanentMessageFailure, type MessageHandler } from '@fd/chassis-kafka';
-import { createLogger } from '@fd/chassis-observability';
-import { PaymentAuthorizedSchema } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
-import { ConsumerVerifiedSchema } from '@fd/contracts/fooddelivery/consumer/v1/replies_pb.js';
+import { createLogger, type Logger } from '@fd/chassis-observability';
+import {
+  PaymentAuthorizedSchema,
+  PaymentFailedSchema,
+  PaymentFailureReason,
+} from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
+import {
+  ConsumerVerificationFailedSchema,
+  ConsumerVerificationFailureReason,
+  ConsumerVerifiedSchema,
+} from '@fd/contracts/fooddelivery/consumer/v1/replies_pb.js';
 import {
   TicketApprovedSchema,
   TicketCreatedSchema,
+  TicketRejectedSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -17,6 +27,7 @@ import {
 } from '../../../../test/support/order-database.builder.ts';
 import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../../test/support/place-order-command.builder.ts';
+import { sagaTimeoutsInMilliseconds } from '../../../../test/support/place-order-saga.builder.ts';
 import { buildReplyMessage } from '../../../../test/support/reply-message.builder.ts';
 import type { DB as OrderDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
@@ -25,23 +36,36 @@ import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-or
 import { placeOrderSagaReplyConsumer } from './place-order-saga-reply.consumer.ts';
 
 interface OutboxRow {
+  readonly topic: string;
   readonly messageType: string;
   readonly causationId: string | null;
   readonly correlationId: string;
 }
 
 const orderId = '0199a5d0-0000-7000-8000-0000000000a1';
-const approvedAt = new Date('2026-10-02T12:00:30.000Z');
+const repliedAt = new Date('2026-10-02T12:00:30.000Z');
 
 let testDatabase: OrderTestDatabase;
 let handleReply: MessageHandler;
 let consumeReply: TransactionalMessageHandler<OrderDatabase>;
 let inboxSettings: InboxSettings<OrderDatabase>;
+let logEntries: Record<string, unknown>[];
 let messageCount = 0;
+
+function captureLogger(): Logger {
+  const destination = new Writable({
+    write(chunk: Buffer, encoding, callback) {
+      const parsed: unknown = JSON.parse(chunk.toString());
+      logEntries.push(typeof parsed === 'object' && parsed !== null ? { ...parsed } : {});
+      callback();
+    },
+  });
+  return createLogger({ serviceName: 'order-service', level: 'info' }, destination);
+}
 
 async function readOutbox(): Promise<readonly OutboxRow[]> {
   const result = await sql<OutboxRow>`
-    select message_type, causation_id, correlation_id from outbox order by id
+    select topic, message_type, causation_id, correlation_id from outbox order by id
   `.execute(testDatabase.database);
   return result.rows;
 }
@@ -53,35 +77,53 @@ async function countInboxRows(messageId: string): Promise<number> {
   return result.rows.length;
 }
 
+async function readSagaStatus(): Promise<string> {
+  const row = await testDatabase.database
+    .selectFrom('sagaInstances')
+    .select('status')
+    .executeTakeFirstOrThrow();
+  return row.status;
+}
+
+async function readOrderState() {
+  const order = await new PostgresOrderRepository(testDatabase.database).findById(
+    buildOrder().toSnapshot().orderId,
+  );
+  return order?.toSnapshot().state;
+}
+
 beforeAll(async () => {
   testDatabase = await startOrderTestDatabase();
 });
 
 beforeEach(async () => {
   await testDatabase.clearWrittenRows();
+  logEntries = [];
   const unitOfWork = createOrderUnitOfWork({
     database: testDatabase.database,
     generateMessageId: () => {
       messageCount += 1;
       return `0199a5d0-0000-7000-8000-${messageCount.toString(16).padStart(12, '0')}`;
     },
-    now: () => approvedAt,
+    now: () => repliedAt,
   });
-  const placeOrder = new PlaceOrderCommandHandler(
+  const placeOrder = new PlaceOrderCommandHandler({
     unitOfWork,
-    new FakeClock(),
-    new FakeIdGenerator(),
-  );
+    clock: new FakeClock(),
+    idGenerator: new FakeIdGenerator(),
+    sagaTimeoutsInMilliseconds,
+  });
   unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
   inboxSettings = {
     database: testDatabase.database,
     handlerName: 'place-order-saga-reply',
-    now: () => approvedAt,
+    now: () => repliedAt,
   };
   consumeReply = placeOrderSagaReplyConsumer({
     unitOfWork,
-    clock: new FakeClock(approvedAt),
-    logger: createLogger({ serviceName: 'order-service', level: 'silent' }),
+    clock: new FakeClock(repliedAt),
+    sagaTimeoutsInMilliseconds,
+    logger: captureLogger(),
   });
   handleReply = withInbox(inboxSettings, consumeReply);
 });
@@ -112,9 +154,75 @@ describe('placeOrderSagaReplyConsumer', () => {
     expect(outbox.slice(2).map((row) => row.correlationId)).toEqual(
       Array.from({ length: 4 }, () => consumerVerified.headers.correlationId),
     );
-    const orders = new PostgresOrderRepository(testDatabase.database);
-    const order = await orders.findById(buildOrder().toSnapshot().orderId);
-    expect(order?.toSnapshot().state).toEqual({ status: 'APPROVED', approvedAt });
+    expect(await readOrderState()).toEqual({ status: 'APPROVED', approvedAt: repliedAt });
+  });
+
+  it('compensates a declined payment: rejects the ticket first, then the order', async () => {
+    await handleReply(buildReplyMessage(ConsumerVerifiedSchema, { orderId }));
+    await handleReply(buildReplyMessage(TicketCreatedSchema, { orderId, ticketId: 'ticket-1' }));
+    const paymentFailed = buildReplyMessage(PaymentFailedSchema, {
+      orderId,
+      reason: PaymentFailureReason.PAYMENT_DECLINED,
+    });
+
+    await handleReply(paymentFailed);
+
+    expect((await readOutbox()).at(-1)).toMatchObject({
+      topic: 'kitchen.commands',
+      messageType: 'fooddelivery.kitchen.v1.RejectTicket',
+      causationId: paymentFailed.headers.messageId,
+    });
+    expect(await readOrderState()).toEqual({ status: 'APPROVAL_PENDING' });
+
+    await handleReply(buildReplyMessage(TicketRejectedSchema, { orderId }));
+
+    expect((await readOutbox()).at(-1)).toMatchObject({
+      topic: 'order.order.events',
+      messageType: 'fooddelivery.order.v1.OrderRejected',
+    });
+    expect(await readOrderState()).toEqual({
+      status: 'REJECTED',
+      rejectionReason: 'PAYMENT_DECLINED',
+      rejectedAt: repliedAt,
+    });
+    expect(await readSagaStatus()).toBe('COMPENSATED');
+  });
+
+  it('rejects the order at once when the consumer cannot be verified', async () => {
+    await handleReply(
+      buildReplyMessage(ConsumerVerificationFailedSchema, {
+        orderId,
+        reason: ConsumerVerificationFailureReason.CONSUMER_NOT_FOUND,
+      }),
+    );
+
+    expect((await readOutbox()).map((row) => row.messageType)).toEqual([
+      'fooddelivery.order.v1.OrderPlaced',
+      'fooddelivery.consumer.v1.VerifyConsumer',
+      'fooddelivery.order.v1.OrderRejected',
+    ]);
+    expect(await readOrderState()).toEqual({
+      status: 'REJECTED',
+      rejectionReason: 'CONSUMER_NOT_FOUND',
+      rejectedAt: repliedAt,
+    });
+    expect(await readSagaStatus()).toBe('COMPENSATED');
+  });
+
+  it('logs every applied reply with the order id it names', async () => {
+    const consumerVerified = buildReplyMessage(ConsumerVerifiedSchema, { orderId });
+
+    await handleReply(consumerVerified);
+
+    expect(logEntries).toContainEqual(
+      expect.objectContaining({
+        msg: 'place order saga reply applied',
+        orderId,
+        sagaId: consumerVerified.headers.sagaId,
+        messageId: consumerVerified.headers.messageId,
+        reply: { type: 'ConsumerVerified' },
+      }),
+    );
   });
 
   it('applies a redelivered reply only once', async () => {
@@ -152,6 +260,34 @@ describe('placeOrderSagaReplyConsumer', () => {
     await handleReply(buildReplyMessage(PaymentAuthorizedSchema, { orderId, paymentId: 'pay-1' }));
 
     expect(await readOutbox()).toHaveLength(2);
+  });
+
+  it('warns about a stray reply for a compensated saga and keeps its inbox row', async () => {
+    await handleReply(
+      buildReplyMessage(ConsumerVerificationFailedSchema, {
+        orderId,
+        reason: ConsumerVerificationFailureReason.CONSUMER_NOT_FOUND,
+      }),
+    );
+    const outboxBeforeStrayReply = await readOutbox();
+    const strayReply = buildReplyMessage(PaymentAuthorizedSchema, { orderId, paymentId: 'pay-1' });
+
+    await handleReply(strayReply);
+
+    expect(logEntries).toContainEqual(
+      expect.objectContaining({
+        level: 40,
+        msg: 'place order saga reply ignored',
+        failure: {
+          type: 'UnexpectedSagaReply',
+          step: 'COMPENSATED',
+          replyType: 'PaymentAuthorized',
+        },
+      }),
+    );
+    expect(await countInboxRows(strayReply.headers.messageId)).toBe(1);
+    expect(await readOutbox()).toEqual(outboxBeforeStrayReply);
+    expect(await readSagaStatus()).toBe('COMPENSATED');
   });
 
   it('dead-letters a reply for a saga that does not exist', async () => {

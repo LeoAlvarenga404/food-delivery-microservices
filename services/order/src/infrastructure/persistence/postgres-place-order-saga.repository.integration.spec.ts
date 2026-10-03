@@ -1,10 +1,18 @@
+import { readFile } from 'node:fs/promises';
+import { runInTransaction } from '@fd/chassis-postgres';
+import { sql } from 'kysely';
+import type { PlaceOrderSagaState } from '#application/sagas/place-order/place-order.saga-state.ts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { buildSagaInstance } from '../../../test/support/place-order-saga.builder.ts';
+import {
+  buildSagaInstance,
+  buildSagaOrder,
+} from '../../../test/support/place-order-saga.builder.ts';
 import {
   startOrderTestDatabase,
   type OrderTestDatabase,
 } from '../../../test/support/order-database.builder.ts';
 import { describePlaceOrderSagaRepositoryContract } from '../../../test/support/place-order-saga-repository.contract.ts';
+import { placeOrderSagaPersistenceMapper } from './place-order-saga.persistence-mapper.ts';
 import { PostgresPlaceOrderSagaRepository } from './postgres-place-order-saga.repository.ts';
 
 let testDatabase: OrderTestDatabase;
@@ -41,8 +49,187 @@ describe('postgres place order saga repository rows', () => {
 
     const stored = await sagas.findById(started.sagaId);
     if (stored === undefined) throw new Error('the saga was not stored');
-    await sagas.save({ ...stored, state: { ...stored.state, step: 'COMPLETED' } });
+    await sagas.save({
+      ...stored,
+      state: { step: 'COMPLETED', order: buildSagaOrder() },
+      deadlineAt: undefined,
+    });
 
     expect(await readRow()).toEqual({ step: 'COMPLETED', status: 'COMPLETED' });
+  });
+
+  it('stores a compensated saga with the COMPENSATED status', async () => {
+    const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
+    const started = buildSagaInstance();
+    await sagas.save(started);
+    const stored = await sagas.findById(started.sagaId);
+    if (stored === undefined) throw new Error('the saga was not stored');
+
+    await sagas.save({
+      ...stored,
+      state: { step: 'COMPENSATED', order: buildSagaOrder(), rejectionReason: 'CONSUMER_BLOCKED' },
+      deadlineAt: undefined,
+    });
+
+    const row = await testDatabase.database
+      .selectFrom('sagaInstances')
+      .select(['step', 'status'])
+      .executeTakeFirstOrThrow();
+    expect(row).toEqual({ step: 'COMPENSATED', status: 'COMPENSATED' });
+  });
+
+  it('keeps the payment token in the stored state only until the saga leaves the payment step', async () => {
+    const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
+    const started = buildSagaInstance();
+    const readStoredState = async () => {
+      const row = await testDatabase.database
+        .selectFrom('sagaInstances')
+        .select('state')
+        .executeTakeFirstOrThrow();
+      return JSON.stringify(row.state);
+    };
+
+    await sagas.save(started);
+    expect(await readStoredState()).toContain('tok_visa_4242');
+
+    const stored = await sagas.findById(started.sagaId);
+    if (stored === undefined) throw new Error('the saga was not stored');
+    await sagas.save({ ...stored, state: { step: 'APPROVING_TICKET', order: buildSagaOrder() } });
+
+    expect(await readStoredState()).not.toContain('tok_visa_4242');
+  });
+
+  it('moves the payment token of slice 1 rows out of the stored order', async () => {
+    const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
+    const insertSlice1Row = async (sagaId: string, state: PlaceOrderSagaState) => {
+      const row = placeOrderSagaPersistenceMapper.toPersistence({
+        ...buildSagaInstance(state),
+        sagaId,
+        version: 1,
+      });
+      await testDatabase.database
+        .insertInto('sagaInstances')
+        .values({ ...row, orderId: crypto.randomUUID() })
+        .execute();
+      await sql`update saga_instances
+        set state = jsonb_set(state #- '{paymentToken}', '{order,paymentToken}', '"tok_visa_4242"')
+        where saga_id = ${sagaId}`.execute(testDatabase.database);
+    };
+    const completedId = '0199a5d0-0000-7000-8000-0000000000c1';
+    const creatingTicketId = '0199a5d0-0000-7000-8000-0000000000c2';
+    await insertSlice1Row(completedId, {
+      step: 'COMPLETED',
+      order: buildSagaOrder(),
+    });
+    await insertSlice1Row(creatingTicketId, {
+      step: 'CREATING_TICKET',
+      order: buildSagaOrder(),
+      paymentToken: 'tok_visa_4242',
+    });
+    const migrationSql = await readFile(
+      new URL('./migrations/0008-move-payment-token-out-of-saga-order.sql', import.meta.url),
+      'utf8',
+    );
+
+    await sql.raw(migrationSql).execute(testDatabase.database);
+
+    const completedRow = await testDatabase.database
+      .selectFrom('sagaInstances')
+      .select('state')
+      .where('sagaId', '=', completedId)
+      .executeTakeFirstOrThrow();
+    expect(JSON.stringify(completedRow.state)).not.toContain('tok_visa_4242');
+    const creatingTicket = await sagas.findById(creatingTicketId);
+    expect(creatingTicket?.state).toMatchObject({
+      step: 'CREATING_TICKET',
+      paymentToken: 'tok_visa_4242',
+    });
+  });
+
+  it.each([
+    { problem: 'a running saga without a deadline', statusAndDeadline: `'RUNNING', null` },
+    { problem: 'a completed saga with a deadline', statusAndDeadline: `'COMPLETED', now()` },
+    { problem: 'a compensated saga with a deadline', statusAndDeadline: `'COMPENSATED', now()` },
+  ])('refuses $problem', async ({ statusAndDeadline }) => {
+    const insertion = sql`
+      insert into saga_instances (
+        saga_id, saga_type, order_id, step, state, version, status, deadline_at
+      ) values (
+        '0199a5d0-0000-7000-8000-0000000000b9', 'PlaceOrderSaga',
+        '0199a5d0-0000-7000-8000-0000000000a9', 'VERIFYING_CONSUMER', '{}', 1,
+        ${sql.raw(statusAndDeadline)}
+      )
+    `.execute(testDatabase.database);
+
+    await expect(insertion).rejects.toMatchObject({ code: '23514' });
+  });
+});
+
+describe('postgres place order saga repository deadlines', () => {
+  const now = new Date('2026-10-02T12:01:00.000Z');
+  const { orderId } = buildSagaOrder();
+
+  async function saveRunningSaga(sagaId: string, deadlineAt: Date): Promise<void> {
+    await new PostgresPlaceOrderSagaRepository(testDatabase.database).save({
+      ...buildSagaInstance(),
+      sagaId,
+      deadlineAt,
+    });
+  }
+
+  it('locks the sagas whose deadline passed, the earliest deadline first, up to the limit', async () => {
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b1',
+      new Date('2026-10-02T12:00:59.000Z'),
+    );
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b2',
+      new Date('2026-10-02T12:00:57.000Z'),
+    );
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b3',
+      new Date('2026-10-02T12:00:58.000Z'),
+    );
+    await saveRunningSaga('0199a5d0-0000-7000-8000-0000000001b4', now);
+
+    const expired = await runInTransaction(testDatabase.database, (transaction) =>
+      new PostgresPlaceOrderSagaRepository(transaction).lockExpiredSagas(now, 2),
+    );
+
+    expect(expired).toEqual([
+      { sagaId: '0199a5d0-0000-7000-8000-0000000001b2', orderId },
+      { sagaId: '0199a5d0-0000-7000-8000-0000000001b3', orderId },
+    ]);
+  });
+
+  it('skips the expired sagas another transaction has locked instead of waiting for them', async () => {
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b1',
+      new Date('2026-10-02T12:00:57.000Z'),
+    );
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b2',
+      new Date('2026-10-02T12:00:58.000Z'),
+    );
+    const firstLocked = Promise.withResolvers<undefined>();
+    const firstMayCommit = Promise.withResolvers<undefined>();
+    const first = runInTransaction(testDatabase.database, async (transaction) => {
+      await new PostgresPlaceOrderSagaRepository(transaction).lockExpiredSagas(now, 1);
+      firstLocked.resolve(undefined);
+      await firstMayCommit.promise;
+    });
+    await Promise.race([firstLocked.promise, first]);
+
+    const second = runInTransaction(testDatabase.database, async (transaction) => {
+      await sql`set local lock_timeout = '2s'`.execute(transaction);
+      return new PostgresPlaceOrderSagaRepository(transaction).lockExpiredSagas(now, 10);
+    }).finally(() => {
+      firstMayCommit.resolve(undefined);
+    });
+
+    await expect(second).resolves.toEqual([
+      { sagaId: '0199a5d0-0000-7000-8000-0000000001b2', orderId },
+    ]);
+    await first;
   });
 });

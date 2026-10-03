@@ -23,4 +23,4 @@ COPY --from=dependencies /repository /repository
 COPY --from=contracts /repository/packages/contracts/src/generated /repository/packages/contracts/src/generated
 USER node
 WORKDIR /repository/${PACKAGE_DIRECTORY}
-CMD ["node", "src/main.ts"]
+CMD ["node", "--import", "@fd/chassis-observability/register", "src/main.ts"]

@@ -5,7 +5,6 @@ import { orderInput, pizzeriaMenu } from './order.builder.ts';
 export const requestMetadata: MessageMetadata = {
   correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
   causationId: undefined,
-  traceparent: undefined,
   actorId: undefined,
   actorType: undefined,
 };

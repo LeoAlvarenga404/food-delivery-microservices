@@ -1,7 +1,5 @@
 import { AggregateRoot, left, right, type Either } from '@fd/domain';
-import type { MenuItemId } from '#domain/menu/menu-item-id.value-object.ts';
 import type { RestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
-import type { RestaurantMenu } from '#domain/menu/restaurant-menu.value-object.ts';
 import { Money, type Currency } from '#domain/money/money.value-object.ts';
 import type { ConsumerId } from './consumer-id.value-object.ts';
 import type { DeliveryAddress } from './delivery-address.value-object.ts';
@@ -10,23 +8,11 @@ import type { InvalidOrderTransition, OrderPlacementError } from './order.errors
 import type { OrderId } from './order-id.value-object.ts';
 import { OrderLineItem, type OrderLineItemSnapshot } from './order-line-item.entity.ts';
 import type { OrderPlaced } from './order-placed.event.ts';
-import type { OrderState } from './order.state.ts';
+import { orderPlacementPolicy, type PlaceOrderInput } from './order-placement.policy.ts';
+import type { OrderRejected } from './order-rejected.event.ts';
+import type { OrderRejectionReason, OrderState, OrderStatus } from './order.state.ts';
 
-export type OrderEvent = OrderPlaced | OrderApproved;
-
-export interface RequestedLineItem {
-  readonly menuItemId: MenuItemId;
-  readonly quantity: number;
-}
-
-export interface PlaceOrderInput {
-  readonly orderId: OrderId;
-  readonly consumerId: ConsumerId;
-  readonly menu: RestaurantMenu;
-  readonly requestedLineItems: readonly RequestedLineItem[];
-  readonly deliveryAddress: DeliveryAddress;
-  readonly placedAt: Date;
-}
+export type OrderEvent = OrderPlaced | OrderApproved | OrderRejected;
 
 export interface OrderSnapshot {
   readonly orderId: OrderId;
@@ -39,47 +25,6 @@ export interface OrderSnapshot {
   readonly placedAt: Date;
   readonly state: OrderState;
   readonly version: number;
-}
-
-function priceLineItem(
-  menu: RestaurantMenu,
-  requested: RequestedLineItem,
-): Either<OrderPlacementError, OrderLineItem> {
-  const { menuItemId, quantity } = requested;
-  if (!Number.isInteger(quantity) || quantity <= 0) {
-    return left({ type: 'InvalidQuantity', menuItemId, quantity });
-  }
-  const menuItem = menu.items.find((item) => item.menuItemId === menuItemId);
-  if (menuItem === undefined) return left({ type: 'UnknownMenuItem', menuItemId });
-  return right(OrderLineItem.fromMenuItem(menuItem, quantity));
-}
-
-function findRepeatedLineItem(lineItems: readonly OrderLineItem[]): OrderLineItem | undefined {
-  return lineItems.find((lineItem, index) =>
-    lineItems.slice(0, index).some((earlier) => earlier.hasSameIdentityAs(lineItem)),
-  );
-}
-
-function priceLineItems(
-  input: PlaceOrderInput,
-): Either<OrderPlacementError, readonly OrderLineItem[]> {
-  if (input.requestedLineItems.length === 0) return left({ type: 'EmptyOrder' });
-  const lineItems: OrderLineItem[] = [];
-  for (const requested of input.requestedLineItems) {
-    const priced = priceLineItem(input.menu, requested);
-    if (priced.isLeft()) return priced;
-    lineItems.push(priced.success);
-  }
-  const repeated = findRepeatedLineItem(lineItems);
-  if (repeated !== undefined) {
-    return left({ type: 'DuplicateMenuItem', menuItemId: repeated.toSnapshot().menuItemId });
-  }
-  return right(lineItems);
-}
-
-function isComplete(deliveryAddress: DeliveryAddress): boolean {
-  const { street, number, city, postalCode } = deliveryAddress;
-  return [street, number, city, postalCode].every((field) => field.trim().length > 0);
 }
 
 export class Order extends AggregateRoot<OrderEvent> {
@@ -109,9 +54,8 @@ export class Order extends AggregateRoot<OrderEvent> {
   }
 
   static place(input: PlaceOrderInput): Either<OrderPlacementError, Order> {
-    const lineItems = priceLineItems(input);
+    const lineItems = orderPlacementPolicy.evaluate(input);
     if (lineItems.isLeft()) return lineItems;
-    if (!isComplete(input.deliveryAddress)) return left({ type: 'IncompleteDeliveryAddress' });
     const order = new Order({
       orderId: input.orderId,
       consumerId: input.consumerId,
@@ -132,14 +76,29 @@ export class Order extends AggregateRoot<OrderEvent> {
   }
 
   approve(approvedAt: Date): Either<InvalidOrderTransition, void> {
-    if (this.#state.status !== 'APPROVAL_PENDING') {
-      return left({ type: 'InvalidOrderTransition', from: this.#state.status, to: 'APPROVED' });
-    }
+    const leaving = this.#leaveApprovalPending('APPROVED');
+    if (leaving.isLeft()) return leaving;
     this.#state = { status: 'APPROVED', approvedAt };
     this.recordEvent({
       eventType: 'OrderApproved',
       occurredAt: approvedAt,
       orderId: this.#orderId,
+    });
+    return right(undefined);
+  }
+
+  reject(
+    rejectionReason: OrderRejectionReason,
+    rejectedAt: Date,
+  ): Either<InvalidOrderTransition, void> {
+    const leaving = this.#leaveApprovalPending('REJECTED');
+    if (leaving.isLeft()) return leaving;
+    this.#state = { status: 'REJECTED', rejectionReason, rejectedAt };
+    this.recordEvent({
+      eventType: 'OrderRejected',
+      occurredAt: rejectedAt,
+      orderId: this.#orderId,
+      rejectionReason,
     });
     return right(undefined);
   }
@@ -161,6 +120,11 @@ export class Order extends AggregateRoot<OrderEvent> {
       state: this.#state,
       version: this.#version,
     };
+  }
+
+  #leaveApprovalPending(to: OrderStatus): Either<InvalidOrderTransition, void> {
+    if (this.#state.status === 'APPROVAL_PENDING') return right(undefined);
+    return left({ type: 'InvalidOrderTransition', from: this.#state.status, to });
   }
 
   #recordPlacement(): void {

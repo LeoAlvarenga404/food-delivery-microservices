@@ -4,3 +4,5 @@ export { startKafkaContainer } from './kafka-container.ts';
 export type { StartedKafka } from './kafka-container.ts';
 export { startPostgresContainer } from './postgres-container.ts';
 export type { StartedPostgres } from './postgres-container.ts';
+export { recordSpans, SpanKind, SpanStatusCode, traceparentOf } from './span-recorder.ts';
+export type { RecordedSpan, SpanRecorder } from './span-recorder.ts';

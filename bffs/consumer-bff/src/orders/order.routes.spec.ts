@@ -1,7 +1,8 @@
 import { Writable } from 'node:stream';
-import { create } from '@bufbuild/protobuf';
+import { create, fromJson } from '@bufbuild/protobuf';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { createLogger, type Logger } from '@fd/chassis-observability';
+import { OrderRejectionReason } from '@fd/contracts/fooddelivery/order/v1/events_pb.js';
 import {
   GetOrderResponseSchema,
   OrderStatus,
@@ -269,7 +270,6 @@ describe('GET /v1/orders/:orderId', () => {
   it.each([
     { status: OrderStatus.APPROVAL_PENDING, publicStatus: 'APPROVAL_PENDING' },
     { status: OrderStatus.APPROVED, publicStatus: 'APPROVED' },
-    { status: OrderStatus.REJECTED, publicStatus: 'REJECTED' },
   ])(
     'answers a $publicStatus order with its frozen line items and amounts in cents as strings',
     async ({ status, publicStatus }) => {
@@ -300,6 +300,80 @@ describe('GET /v1/orders/:orderId', () => {
       });
     },
   );
+
+  it.each([
+    { reason: OrderRejectionReason.CONSUMER_NOT_FOUND, publicReason: 'CONSUMER_NOT_FOUND' },
+    { reason: OrderRejectionReason.CONSUMER_BLOCKED, publicReason: 'CONSUMER_BLOCKED' },
+    { reason: OrderRejectionReason.TICKET_REFUSED, publicReason: 'TICKET_REFUSED' },
+    { reason: OrderRejectionReason.PAYMENT_DECLINED, publicReason: 'PAYMENT_DECLINED' },
+    {
+      reason: OrderRejectionReason.CONSUMER_VERIFICATION_TIMED_OUT,
+      publicReason: 'CONSUMER_VERIFICATION_TIMED_OUT',
+    },
+    {
+      reason: OrderRejectionReason.TICKET_CREATION_TIMED_OUT,
+      publicReason: 'TICKET_CREATION_TIMED_OUT',
+    },
+    {
+      reason: OrderRejectionReason.PAYMENT_AUTHORIZATION_TIMED_OUT,
+      publicReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    },
+  ])(
+    'answers an order rejected for $publicReason with that reason',
+    async ({ reason, publicReason }) => {
+      orderService.orders.set(
+        placedOrderId,
+        create(GetOrderResponseSchema, {
+          orderId: placedOrderId,
+          status: OrderStatus.REJECTED,
+          rejectionReason: reason,
+          totalInCents: 9000n,
+          currency: 'BRL',
+        }),
+      );
+
+      const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ status: 'REJECTED', rejectionReason: publicReason });
+    },
+  );
+
+  it('answers a rejected order without a reason as an internal error', async () => {
+    orderService.orders.set(
+      placedOrderId,
+      create(GetOrderResponseSchema, {
+        orderId: placedOrderId,
+        status: OrderStatus.REJECTED,
+        currency: 'BRL',
+      }),
+    );
+
+    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+    expect(response.statusCode).toBe(500);
+  });
+
+  it('answers a rejected order with an unknown reason as an internal error without echoing it', async () => {
+    orderService.orders.set(
+      placedOrderId,
+      fromJson(GetOrderResponseSchema, {
+        orderId: placedOrderId,
+        status: OrderStatus.REJECTED,
+        rejectionReason: 99,
+        currency: 'BRL',
+      }),
+    );
+
+    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+    });
+  });
 
   it('keeps an amount beyond 2^53 cents exact', async () => {
     orderService.orders.set(

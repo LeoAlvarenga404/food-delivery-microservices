@@ -40,5 +40,12 @@ export function describePaymentRepositoryContract(
 
       await expect(payments.save(buildPayment({ paymentId: otherPaymentId }))).rejects.toThrow();
     });
+
+    it('refuses a second payment with the same payment id for another order', async () => {
+      await payments.save(buildPayment());
+      const otherOrderId = unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000000af'));
+
+      await expect(payments.save(buildPayment({ orderId: otherOrderId }))).rejects.toThrow();
+    });
   });
 }

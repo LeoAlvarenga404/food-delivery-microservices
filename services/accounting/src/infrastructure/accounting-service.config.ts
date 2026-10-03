@@ -9,6 +9,7 @@ export interface AccountingServiceConfiguration {
   readonly port: number;
   readonly slowGatewayResponseInMilliseconds: number;
   readonly logLevel: LogLevel;
+  readonly housekeepingIntervalInMilliseconds: number;
 }
 
 const accountingServiceEnvironmentSchema = z.object({
@@ -24,6 +25,8 @@ const accountingServiceEnvironmentSchema = z.object({
   ACCOUNTING_SERVICE_HOST: environmentVariables.listenHost,
   ACCOUNTING_SERVICE_PORT: environmentVariables.listenPort.default(4004),
   LOG_LEVEL: environmentVariables.logLevel,
+  HOUSEKEEPING_INTERVAL_IN_MILLISECONDS:
+    environmentVariables.durationInMilliseconds.default(3_600_000),
 });
 
 export function readAccountingServiceConfiguration(
@@ -37,5 +40,6 @@ export function readAccountingServiceConfiguration(
     port: variables.ACCOUNTING_SERVICE_PORT,
     slowGatewayResponseInMilliseconds: variables.SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS,
     logLevel: variables.LOG_LEVEL,
+    housekeepingIntervalInMilliseconds: variables.HOUSEKEEPING_INTERVAL_IN_MILLISECONDS,
   };
 }

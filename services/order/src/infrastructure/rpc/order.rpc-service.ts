@@ -1,4 +1,5 @@
 import { Code, ConnectError, type HandlerContext, type ServiceImpl } from '@connectrpc/connect';
+import { annotateActiveSpan } from '@fd/chassis-observability';
 import {
   PlaceOrderFailureSchema,
   type OrderService,
@@ -51,7 +52,6 @@ function toRequestMetadata(context: HandlerContext): MessageMetadata {
   return {
     correlationId: context.values.get(correlationIdKey),
     causationId: undefined,
-    traceparent: undefined,
     actorId: undefined,
     actorType: undefined,
   };
@@ -73,12 +73,14 @@ export function createOrderRpcService(
         const { failure } = outcome;
         throw placeOrderFailure(JSON.stringify(failure), toConnectCode(failure), failure.type);
       }
+      annotateActiveSpan({ orderId: outcome.success.orderId });
       return { orderId: outcome.success.orderId };
     },
 
     async getOrder(request) {
       const orderId = parseOrderId(request.orderId);
       if (orderId.isLeft()) throw new ConnectError('order_id', Code.InvalidArgument);
+      annotateActiveSpan({ orderId: orderId.success });
       const outcome = await settings.getOrder.execute({ orderId: orderId.success });
       if (outcome.isLeft()) throw new ConnectError(request.orderId, Code.NotFound);
       return toGetOrderResponse(outcome.success);

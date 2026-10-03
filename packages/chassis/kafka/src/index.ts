@@ -1,6 +1,7 @@
 export { createKafka } from './create-kafka.ts';
 export type { KafkaSettings } from './create-kafka.ts';
 export { deadLetterTopic } from './dead-letter.ts';
+export { ExternalDependencyFailure } from './external-dependency-failure.ts';
 export type { InboundMessage, MessageHandler } from './inbound-message.ts';
 export { startConsumerRunner } from './kafka-consumer-runner.ts';
 export type { ConsumerRunnerSettings, RunningConsumer } from './kafka-consumer-runner.ts';

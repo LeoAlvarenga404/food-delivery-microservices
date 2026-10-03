@@ -8,6 +8,11 @@ import {
   type SagaInstanceRow,
 } from './place-order-saga.persistence-mapper.ts';
 
+export interface ExpiredSaga {
+  readonly sagaId: string;
+  readonly orderId: string;
+}
+
 export class PostgresPlaceOrderSagaRepository implements PlaceOrderSagaRepository {
   readonly #database: Kysely<OrderDatabase>;
 
@@ -36,11 +41,31 @@ export class PostgresPlaceOrderSagaRepository implements PlaceOrderSagaRepositor
     await this.#update(row);
   }
 
+  async lockExpiredSagas(now: Date, limit: number): Promise<readonly ExpiredSaga[]> {
+    return this.#database
+      .selectFrom('sagaInstances')
+      .select(['sagaId', 'orderId'])
+      .where('deadlineAt', '<', now)
+      .orderBy('deadlineAt')
+      .limit(limit)
+      .forUpdate()
+      .skipLocked()
+      .execute();
+  }
+
+  async postponeDeadline(sagaId: string, deadlineAt: Date): Promise<void> {
+    await this.#database
+      .updateTable('sagaInstances')
+      .set({ deadlineAt })
+      .where('sagaId', '=', sagaId)
+      .execute();
+  }
+
   async #update(row: SagaInstanceRow): Promise<void> {
-    const { sagaId, step, state, status, version } = row;
+    const { sagaId, step, state, status, deadlineAt, version } = row;
     const result = await this.#database
       .updateTable('sagaInstances')
-      .set({ step, state, status, version: version + 1 })
+      .set({ step, state, status, deadlineAt, version: version + 1 })
       .where('sagaId', '=', sagaId)
       .where('version', '=', version)
       .executeTakeFirst();

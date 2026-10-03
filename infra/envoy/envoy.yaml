@@ -9,6 +9,19 @@ static_resources:
               typed_config:
                 '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: edge
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      '@type': type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format:
+                          time: '%START_TIME%'
+                          method: '%REQ(:METHOD)%'
+                          path: '%REQ(:PATH)%'
+                          status: '%RESPONSE_CODE%'
+                          durationInMilliseconds: '%DURATION%'
+                          correlationId: '%RESP(X-CORRELATION-ID)%'
+                          traceparent: '%REQ(TRACEPARENT)%'
                 local_reply_config:
                   mappers:
                     - filter:

@@ -54,6 +54,17 @@ export function describeTicketRepositoryContract(
       expect({ status, version }).toEqual({ status: 'AWAITING_ACCEPTANCE', version: 2 });
     });
 
+    it('saves the rejection of a stored ticket and increments its version', async () => {
+      await tickets.save(buildTicket());
+      const stored = await findStoredTicket(tickets, orderId);
+      unwrap(stored.reject());
+
+      await tickets.save(stored);
+      const { status, version } = (await findStoredTicket(tickets, orderId)).toSnapshot();
+
+      expect({ status, version }).toEqual({ status: 'REJECTED', version: 2 });
+    });
+
     it('rejects a save based on a version another save already replaced', async () => {
       await tickets.save(buildTicket());
       const first = await findStoredTicket(tickets, orderId);

@@ -4,8 +4,9 @@ import { parseRestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import type { RestaurantMenu } from '#domain/menu/restaurant-menu.value-object.ts';
 import { Money } from '#domain/money/money.value-object.ts';
 import { parseConsumerId } from '#domain/order/consumer-id.value-object.ts';
-import { Order, type PlaceOrderInput } from '#domain/order/order.aggregate.ts';
+import { Order } from '#domain/order/order.aggregate.ts';
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
+import type { PlaceOrderInput } from '#domain/order/order-placement.policy.ts';
 
 export function unwrap<Success>(either: Either<unknown, Success>): Success {
   if (either.isLeft()) throw new Error(`expected a right, got ${JSON.stringify(either.failure)}`);

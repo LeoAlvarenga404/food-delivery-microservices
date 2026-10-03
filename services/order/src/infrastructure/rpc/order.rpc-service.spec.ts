@@ -14,18 +14,21 @@ import {
   PlaceOrderRequestSchema,
   type PlaceOrderRequest,
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
-import { createLogger } from '@fd/chassis-observability';
+import { createLogger, runInRootSpan } from '@fd/chassis-observability';
+import { recordSpans } from '@fd/chassis-testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../test/support/in-memory-unit-of-work.adapter.ts';
 import { guaranaId, margheritaId, pizzeriaMenu } from '../../../test/support/order.builder.ts';
+import { sagaTimeoutsInMilliseconds } from '../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
 import { createOrderRpcService } from './order.rpc-service.ts';
 import { createRpcCorrelation } from './rpc-correlation.adapter.ts';
 
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
+const spans = recordSpans();
 
 type PlaceOrderRequestInit = Exclude<
   MessageInitShape<typeof PlaceOrderRequestSchema>,
@@ -81,11 +84,12 @@ beforeEach(() => {
       service(
         OrderService,
         createOrderRpcService({
-          placeOrder: new PlaceOrderCommandHandler(
+          placeOrder: new PlaceOrderCommandHandler({
             unitOfWork,
-            new FakeClock(),
-            new FakeIdGenerator(),
-          ),
+            clock: new FakeClock(),
+            idGenerator: new FakeIdGenerator(),
+            sagaTimeoutsInMilliseconds,
+          }),
           getOrder: new GetOrderQueryHandler(unitOfWork.orders),
         }),
       );
@@ -101,6 +105,14 @@ describe('OrderService.PlaceOrder', () => {
 
     expect(response.orderId).toBe('0199a5d0-0000-7000-8000-0000000000a1');
     expect(unitOfWork.executedMetadata[0]?.correlationId).toBe(generatedCorrelationId);
+  });
+
+  it('adds the placed order id to the active span', async () => {
+    const response = await runInRootSpan('placing', () => client.placeOrder(placeOrderRequest()));
+
+    expect(spans.spansNamed('placing').at(-1)?.attributes).toEqual({
+      'fooddelivery.order.id': response.orderId,
+    });
   });
 
   it('keeps the correlation id sent by the caller', async () => {
@@ -362,6 +374,16 @@ describe('OrderService.GetOrder', () => {
       ],
       totalInCents: 9800n,
       currency: 'BRL',
+    });
+  });
+
+  it('adds the requested order id to the active span', async () => {
+    const { orderId } = await client.placeOrder(placeOrderRequest());
+
+    await runInRootSpan('tracking', () => client.getOrder({ orderId }));
+
+    expect(spans.spansNamed('tracking').at(-1)?.attributes).toEqual({
+      'fooddelivery.order.id': orderId,
     });
   });
 

@@ -5,6 +5,8 @@ import type {
 } from '#application/ports/idempotency-key-store.port.ts';
 import type { DB as OrderDatabase } from './generated/database.ts';
 
+const idempotencyKeyRetentionInMilliseconds = 86_400_000;
+
 export class PostgresIdempotencyKeyStore implements IdempotencyKeyStore {
   readonly #database: Kysely<OrderDatabase>;
 
@@ -24,5 +26,14 @@ export class PostgresIdempotencyKeyStore implements IdempotencyKeyStore {
       .where('consumerId', '=', reservation.consumerId)
       .where('idempotencyKey', '=', reservation.idempotencyKey)
       .executeTakeFirstOrThrow();
+  }
+
+  async deleteExpired(now: Date): Promise<number> {
+    const oldestKept = new Date(now.getTime() - idempotencyKeyRetentionInMilliseconds);
+    const result = await this.#database
+      .deleteFrom('idempotencyKeys')
+      .where('createdAt', '<', oldestKept)
+      .executeTakeFirst();
+    return Number(result.numDeletedRows);
   }
 }

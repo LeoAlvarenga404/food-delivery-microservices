@@ -59,4 +59,18 @@ describe('environmentVariables', () => {
     expect(environmentVariables.logLevel.parse(undefined)).toBe('info');
     expect(environmentVariables.logLevel.safeParse('verbose').success).toBe(false);
   });
+
+  it.each([
+    [' 1 ', 1],
+    ['2147483647', 2_147_483_647],
+  ])('reads the duration "%s" as %d milliseconds', (duration, milliseconds) => {
+    expect(environmentVariables.durationInMilliseconds.parse(duration)).toBe(milliseconds);
+  });
+
+  it.each(['', ' ', '0', '-5', '1.5', 'one hour', '2147483648'])(
+    'refuses the duration "%s"',
+    (duration) => {
+      expect(environmentVariables.durationInMilliseconds.safeParse(duration).success).toBe(false);
+    },
+  );
 });

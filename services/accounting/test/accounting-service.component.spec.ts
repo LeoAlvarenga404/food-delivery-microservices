@@ -3,8 +3,11 @@ import { create, toBinary } from '@bufbuild/protobuf';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
+  recordSpans,
+  SpanStatusCode,
   startKafkaContainer,
   startPostgresContainer,
+  traceparentOf,
   type StartedKafka,
   type StartedPostgres,
 } from '@fd/chassis-testing';
@@ -16,12 +19,16 @@ import { startAccountingService, type RunningAccountingService } from '../src/ma
 interface ReplyRow {
   readonly messageType: string;
   readonly sagaId: string | null;
+  readonly traceparent: string | null;
 }
 
 const commandsTopic = 'accounting.commands';
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const commandMessageId = '0199a5d0-0000-7000-8000-000000000d03';
 const waitLimitInMilliseconds = 30_000;
+const housekeepingIntervalInMilliseconds = 3_600_000;
+const commandTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+const spans = recordSpans();
 
 let postgres: StartedPostgres;
 let kafka: StartedKafka;
@@ -82,6 +89,7 @@ async function sendAuthorizePayment(): Promise<void> {
           'message-type': AuthorizePaymentSchema.typeName,
           'correlation-id': '0199a5d0-0000-7000-8000-0000000000e1',
           'saga-id': sagaId,
+          traceparent: `00-${commandTraceId}-00f067aa0ba902b7-01`,
         },
       },
     ],
@@ -129,6 +137,7 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
+    housekeepingIntervalInMilliseconds,
   });
   stoppers.push(() => accountingService.stop());
   outboxReader = createDatabase({
@@ -157,12 +166,23 @@ describe('accounting service', () => {
 
     const reply = await waitFor(async () => {
       const result = await sql<ReplyRow>`
-        select message_type, saga_id from outbox where causation_id = ${commandMessageId}
+        select message_type, saga_id, traceparent from outbox where causation_id = ${commandMessageId}
       `.execute(outboxReader);
       return result.rows[0];
     });
 
-    expect(reply).toEqual({ messageType: 'fooddelivery.accounting.v1.PaymentAuthorized', sagaId });
+    const handled = await waitFor(() =>
+      Promise.resolve(spans.spansNamed('process accounting.commands').at(0)),
+    );
+    expect(reply).toEqual({
+      messageType: 'fooddelivery.accounting.v1.PaymentAuthorized',
+      sagaId,
+      traceparent: traceparentOf(handled),
+    });
+    expect(handled.spanContext().traceId).toBe(commandTraceId);
+    expect(handled.attributes).toMatchObject({
+      'fooddelivery.order.id': '0199a5d0-0000-7000-8000-0000000000a1',
+    });
   });
 
   it('answers its health endpoint', async () => {
@@ -182,6 +202,7 @@ describe('accounting service', () => {
       host: '127.0.0.1',
       port: 0,
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow();
@@ -205,6 +226,7 @@ describe('accounting service', () => {
       host: '127.0.0.1',
       port: Number(new URL(accountingService.url).port),
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow('EADDRINUSE');
@@ -215,7 +237,7 @@ describe('accounting service', () => {
     expect(openConnections).toBe(0);
   });
 
-  it('stops answering its health endpoint and releases its database connections once stopped', async () => {
+  it('stops answering its health endpoint, running housekeeping and holding database connections once stopped', async () => {
     const databaseName = 'accounting_stopped';
     await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
     const databaseUrl = new URL(postgres.connectionUri);
@@ -227,11 +249,14 @@ describe('accounting service', () => {
       host: '127.0.0.1',
       port: 0,
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds: 100,
     });
     const healthUrl = `${stoppableService.url}/health`;
     expect((await fetch(healthUrl)).status).toBe(200);
+    await waitFor(() => Promise.resolve(spans.spansNamed('housekeeping').at(0)));
 
     await stoppableService.stop();
+    const housekeepingRuns = spans.spansNamed('housekeeping');
 
     await expect(fetch(healthUrl)).rejects.toThrow('fetch failed');
     const openConnections = await waitFor(async () => {
@@ -239,5 +264,9 @@ describe('accounting service', () => {
       return count === 0 ? count : undefined;
     }, 5_000);
     expect(openConnections).toBe(0);
+    await delay(500);
+    expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
+    expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
+    expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });

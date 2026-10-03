@@ -1,11 +1,13 @@
 import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
+import { recordSpans, traceparentOf } from '@fd/chassis-testing';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { startConsumerBff, type RunningConsumerBff } from '../src/main.ts';
 import { FakeOrderService, placedOrderId } from './support/order-service.fake.ts';
 
 const orderServiceTimeoutInMilliseconds = 300;
+const spans = recordSpans();
 
 let orderService: FakeOrderService;
 let orderServer: FastifyInstance;
@@ -64,6 +66,13 @@ describe('consumer bff', () => {
 
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ orderId: placedOrderId });
+  });
+
+  it('sends the span of each order service call as traceparent', async () => {
+    await placeOrder();
+
+    const call = spans.spansNamed('fooddelivery.order.v1.OrderService/PlaceOrder').at(-1);
+    expect(orderService.receivedTraceparents.at(-1)).toBe(traceparentOf(call));
   });
 
   it('answers a gateway timeout problem when the order service misses its deadline', async () => {

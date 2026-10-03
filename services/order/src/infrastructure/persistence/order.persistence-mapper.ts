@@ -6,7 +6,7 @@ import type { ConsumerId } from '#domain/order/consumer-id.value-object.ts';
 import { Order, type OrderSnapshot } from '#domain/order/order.aggregate.ts';
 import type { OrderId } from '#domain/order/order-id.value-object.ts';
 import type { OrderLineItemSnapshot } from '#domain/order/order-line-item.entity.ts';
-import type { OrderState } from '#domain/order/order.state.ts';
+import type { OrderRejectionReason, OrderState } from '#domain/order/order.state.ts';
 import type { OrderLineItems, Orders } from './generated/database.ts';
 
 export type OrderRow = Selectable<Orders>;
@@ -18,8 +18,14 @@ export interface OrderRows {
 }
 
 function toOrderState(order: OrderRow): OrderState {
-  if (order.approvedAt === null) return { status: 'APPROVAL_PENDING' };
-  return { status: 'APPROVED', approvedAt: order.approvedAt };
+  const { approvedAt, rejectedAt, rejectionReason } = order;
+  if (approvedAt !== null) return { status: 'APPROVED', approvedAt };
+  if (rejectedAt === null || rejectionReason === null) return { status: 'APPROVAL_PENDING' };
+  return {
+    status: 'REJECTED',
+    rejectionReason: rejectionReason as OrderRejectionReason,
+    rejectedAt,
+  };
 }
 
 function toLineItemSnapshot(lineItem: OrderLineItemRow): OrderLineItemSnapshot {
@@ -46,6 +52,8 @@ function toOrderRow(snapshot: OrderSnapshot): OrderRow {
     deliveryPostalCode: deliveryAddress.postalCode,
     placedAt: snapshot.placedAt,
     approvedAt: state.status === 'APPROVED' ? state.approvedAt : null,
+    rejectedAt: state.status === 'REJECTED' ? state.rejectedAt : null,
+    rejectionReason: state.status === 'REJECTED' ? state.rejectionReason : null,
     version: snapshot.version,
   };
 }

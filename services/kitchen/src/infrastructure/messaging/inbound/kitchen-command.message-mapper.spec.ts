@@ -2,6 +2,7 @@ import { PermanentMessageFailure } from '@fd/chassis-kafka';
 import {
   ApproveTicketSchema,
   CreateTicketSchema,
+  RejectTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { describe, expect, it } from 'vitest';
 import { buildCommandMessage } from '../../../../test/support/command-message.builder.ts';
@@ -26,7 +27,6 @@ describe('toKitchenCommand', () => {
         metadata: {
           correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
           causationId: message.headers.messageId,
-          traceparent: undefined,
           actorId: undefined,
           actorType: undefined,
         },
@@ -40,6 +40,24 @@ describe('toKitchenCommand', () => {
     expect(toKitchenCommand(message)).toMatchObject({
       type: 'ApproveTicket',
       command: { orderId, sagaId },
+    });
+  });
+
+  it('reads RejectTicket with the order id in canonical lowercase form', () => {
+    const message = buildCommandMessage(RejectTicketSchema, { orderId: orderId.toUpperCase() });
+
+    expect(toKitchenCommand(message)).toEqual({
+      type: 'RejectTicket',
+      command: {
+        orderId,
+        sagaId,
+        metadata: {
+          correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
+          causationId: message.headers.messageId,
+          actorId: undefined,
+          actorType: undefined,
+        },
+      },
     });
   });
 
@@ -65,7 +83,7 @@ describe('toKitchenCommand', () => {
         ApproveTicketSchema,
         { orderId },
         {
-          messageType: 'fooddelivery.kitchen.v1.RejectTicket',
+          messageType: 'fooddelivery.kitchen.v1.AcceptTicket',
         },
       ),
     },
@@ -83,6 +101,14 @@ describe('toKitchenCommand', () => {
     {
       problem: 'an order id that is not a uuid',
       message: buildCommandMessage(ApproveTicketSchema, { orderId: 'order-1' }),
+    },
+    {
+      problem: 'a CreateTicket order id that is not a uuid',
+      message: buildCommandMessage(CreateTicketSchema, { ...createTicket, orderId: 'order-1' }),
+    },
+    {
+      problem: 'a RejectTicket whose order id is not a uuid',
+      message: buildCommandMessage(RejectTicketSchema, { orderId: '' }),
     },
     {
       problem: 'a restaurant id that is not a uuid',

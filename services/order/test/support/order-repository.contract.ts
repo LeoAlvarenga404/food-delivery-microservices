@@ -6,6 +6,7 @@ import type { OrderRepository } from '#domain/order/order.repository.ts';
 import { buildOrder, unwrap } from './order.builder.ts';
 
 const approvedAt = new Date('2026-10-02T12:00:05.000Z');
+const rejectedAt = new Date('2026-10-02T12:00:07.000Z');
 
 async function findStoredOrder(orders: OrderRepository, orderId: OrderId): Promise<Order> {
   const order = await orders.findById(orderId);
@@ -51,6 +52,22 @@ export function describeOrderRepositoryContract(
       const { state, version } = (await findStoredOrder(orders, orderId)).toSnapshot();
 
       expect(state).toEqual({ status: 'APPROVED', approvedAt });
+      expect(version).toBe(2);
+    });
+
+    it('saves the rejection of a stored order with its reason', async () => {
+      await orders.save(buildOrder());
+      const stored = await findStoredOrder(orders, orderId);
+      unwrap(stored.reject('PAYMENT_DECLINED', rejectedAt));
+
+      await orders.save(stored);
+      const { state, version } = (await findStoredOrder(orders, orderId)).toSnapshot();
+
+      expect(state).toEqual({
+        status: 'REJECTED',
+        rejectionReason: 'PAYMENT_DECLINED',
+        rejectedAt,
+      });
       expect(version).toBe(2);
     });
 

@@ -21,14 +21,13 @@ export class ApproveTicketCommandHandler {
     const { orderId, sagaId } = command;
     const ticket = await scope.tickets.findByOrderId(orderId);
     if (ticket === undefined) return left({ type: 'TicketNotFound', orderId });
-    const approval = ticket.approve();
-    if (approval.isLeft()) return approval;
-    await scope.tickets.save(ticket);
-    const reply: KitchenReply = {
-      type: 'TicketApproved',
-      orderId,
-      ticketId: ticket.toSnapshot().ticketId,
-    };
+    const { ticketId, status } = ticket.toSnapshot();
+    if (status !== 'AWAITING_ACCEPTANCE') {
+      const approval = ticket.approve();
+      if (approval.isLeft()) return approval;
+      await scope.tickets.save(ticket);
+    }
+    const reply: KitchenReply = { type: 'TicketApproved', orderId, ticketId };
     scope.replies.send(reply, sagaId);
     return right(reply);
   }

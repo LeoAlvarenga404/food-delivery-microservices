@@ -1,10 +1,7 @@
 import type { TransactionalMessageHandler } from '@fd/chassis-inbox';
-import { withCorrelation, type Logger } from '@fd/chassis-observability';
+import { annotateActiveSpan, withCorrelation, type Logger } from '@fd/chassis-observability';
 import { VerifyConsumerCommandHandler } from '#application/commands/verify-consumer/verify-consumer.command-handler.ts';
-import {
-  joinTransaction,
-  type ConsumerUnitOfWork,
-} from '#infrastructure/persistence/consumer-unit-of-work.adapter.ts';
+import type { ConsumerUnitOfWork } from '#infrastructure/persistence/consumer-unit-of-work.adapter.ts';
 import type { DB as ConsumerDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { toVerifyConsumerCommand } from './verify-consumer.message-mapper.ts';
 
@@ -18,6 +15,7 @@ export function consumerCommandConsumer(
 ): TransactionalMessageHandler<ConsumerDatabase> {
   return async (message, transaction) => {
     const command = toVerifyConsumerCommand(message);
+    annotateActiveSpan({ orderId: command.orderId });
     const { messageId, correlationId, causationId } = message.headers;
     const logger = withCorrelation(settings.logger, {
       correlationId,
@@ -25,12 +23,8 @@ export function consumerCommandConsumer(
       sagaId: command.sagaId,
       messageId,
     });
-    const unitOfWork = joinTransaction(settings.unitOfWork, transaction);
+    const unitOfWork = settings.unitOfWork.joinedTo(transaction);
     const outcome = await new VerifyConsumerCommandHandler(unitOfWork).execute(command);
-    if (outcome.isLeft()) {
-      logger.warn({ failure: outcome.failure }, 'consumer not verified, no reply sent');
-      return;
-    }
-    logger.info({ consumerId: command.consumerId }, 'consumer verified');
+    if (outcome.isRight()) logger.info({ reply: outcome.success }, 'VerifyConsumer answered');
   };
 }

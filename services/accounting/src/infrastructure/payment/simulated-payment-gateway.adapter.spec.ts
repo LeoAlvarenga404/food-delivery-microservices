@@ -1,3 +1,4 @@
+import { ExternalDependencyFailure } from '@fd/chassis-kafka';
 import { left, right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import type { PaymentAuthorizationRequest } from '#application/ports/payment-gateway.port.ts';
@@ -67,11 +68,15 @@ describe('SimulatedPaymentGateway', () => {
     );
   });
 
-  it('times out for a card ending in 0005 with an error retried as transient', async () => {
+  it('times out for a card ending in 0005 as a failing external dependency', async () => {
     const authorization = simulatedGateway().authorize(request({ paymentToken: 'tok_visa_0005' }));
 
     await expect(authorization).rejects.toThrow(PaymentGatewayTimeoutError);
-    await expect(authorization).rejects.toMatchObject({ code: 'ETIMEDOUT' });
+    await expect(authorization).rejects.toThrow(ExternalDependencyFailure);
+    await expect(authorization).rejects.toMatchObject({
+      name: 'PaymentGatewayTimeoutError',
+      code: 'ETIMEDOUT',
+    });
   });
 
   it('answers slowly for a card ending in 0009', async () => {

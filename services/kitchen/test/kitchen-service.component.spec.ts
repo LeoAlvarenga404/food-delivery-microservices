@@ -9,8 +9,11 @@ import {
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
+  recordSpans,
+  SpanStatusCode,
   startKafkaContainer,
   startPostgresContainer,
+  traceparentOf,
   type StartedKafka,
   type StartedPostgres,
 } from '@fd/chassis-testing';
@@ -29,6 +32,7 @@ import { startKitchenService, type RunningKitchenService } from '../src/main.ts'
 interface ReplyRow {
   readonly messageType: string;
   readonly sagaId: string | null;
+  readonly traceparent: string | null;
   readonly payload: Uint8Array;
 }
 
@@ -36,6 +40,9 @@ const commandsTopic = 'kitchen.commands';
 const orderId = '0199a5d0-0000-7000-8000-0000000000a1';
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const waitLimitInMilliseconds = 30_000;
+const housekeepingIntervalInMilliseconds = 3_600_000;
+const commandTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+const spans = recordSpans();
 
 let postgres: StartedPostgres;
 let kafka: StartedKafka;
@@ -93,6 +100,7 @@ async function sendCommand<Schema extends DescMessage>(
           'message-type': schema.typeName,
           'correlation-id': '0199a5d0-0000-7000-8000-0000000000e1',
           'saga-id': sagaId,
+          traceparent: `00-${commandTraceId}-00f067aa0ba902b7-01`,
         },
       },
     ],
@@ -103,7 +111,7 @@ async function sendCommand<Schema extends DescMessage>(
 async function waitForReplyTo(messageId: string): Promise<ReplyRow> {
   return waitFor(async () => {
     const result = await sql<ReplyRow>`
-      select message_type, saga_id, payload from outbox where causation_id = ${messageId}
+      select message_type, saga_id, traceparent, payload from outbox where causation_id = ${messageId}
     `.execute(outboxReader);
     return result.rows[0];
   });
@@ -148,6 +156,7 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
+    housekeepingIntervalInMilliseconds,
   });
   stoppers.push(() => kitchenService.stop());
   outboxReader = createDatabase({
@@ -200,6 +209,18 @@ describe('kitchen service', () => {
     );
     expect(fromBinary(TicketApprovedSchema, ticketApproved.payload).ticketId).toBe(createdTicketId);
     expect(createdTicketId).not.toBe(orderId);
+    const handled = await waitFor(() =>
+      Promise.resolve(spans.spansNamed('process kitchen.commands').at(1)),
+    );
+    expect([ticketCreated.traceparent, ticketApproved.traceparent]).toEqual(
+      spans.spansNamed('process kitchen.commands').map(traceparentOf),
+    );
+    expect(handled.spanContext().traceId).toBe(commandTraceId);
+    expect(
+      spans
+        .spansNamed('process kitchen.commands')
+        .map((span) => span.attributes['fooddelivery.order.id']),
+    ).toEqual([orderId, orderId]);
   });
 
   it('answers its health endpoint', async () => {
@@ -218,6 +239,7 @@ describe('kitchen service', () => {
       host: '127.0.0.1',
       port: 0,
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow();
@@ -240,6 +262,7 @@ describe('kitchen service', () => {
       host: '127.0.0.1',
       port: Number(new URL(kitchenService.url).port),
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow('EADDRINUSE');
@@ -250,7 +273,7 @@ describe('kitchen service', () => {
     expect(openConnections).toBe(0);
   });
 
-  it('stops answering its health endpoint and releases its database connections once stopped', async () => {
+  it('stops answering its health endpoint, running housekeeping and holding database connections once stopped', async () => {
     const databaseName = 'kitchen_stopped';
     await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
     const databaseUrl = new URL(postgres.connectionUri);
@@ -261,11 +284,14 @@ describe('kitchen service', () => {
       host: '127.0.0.1',
       port: 0,
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds: 100,
     });
     const healthUrl = `${stoppableService.url}/health`;
     expect((await fetch(healthUrl)).status).toBe(200);
+    await waitFor(() => Promise.resolve(spans.spansNamed('housekeeping').at(0)));
 
     await stoppableService.stop();
+    const housekeepingRuns = spans.spansNamed('housekeeping');
 
     await expect(fetch(healthUrl)).rejects.toThrow('fetch failed');
     const openConnections = await waitFor(async () => {
@@ -273,5 +299,9 @@ describe('kitchen service', () => {
       return count === 0 ? count : undefined;
     }, 5_000);
     expect(openConnections).toBe(0);
+    await delay(500);
+    expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
+    expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
+    expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });

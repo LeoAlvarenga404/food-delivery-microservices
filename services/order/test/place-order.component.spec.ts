@@ -5,8 +5,11 @@ import { createConnectTransport } from '@connectrpc/connect-node';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
+  recordSpans,
+  SpanStatusCode,
   startKafkaContainer,
   startPostgresContainer,
+  traceparentOf,
   type StartedKafka,
   type StartedPostgres,
 } from '@fd/chassis-testing';
@@ -16,6 +19,7 @@ import {
   TicketApprovedSchema,
   TicketCreatedSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
+import { OrderRejectionReason } from '@fd/contracts/fooddelivery/order/v1/events_pb.js';
 import {
   OrderService,
   OrderStatus,
@@ -27,14 +31,23 @@ import { v7 as generateUuidV7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startOrderService, type RunningOrderService } from '../src/main.ts';
 import { guaranaId, margheritaId, pizzeriaMenu } from './support/order.builder.ts';
+import { sagaTimeoutsInMilliseconds } from './support/place-order-saga.builder.ts';
 
 interface CommandRow {
   readonly sagaId: string;
   readonly correlationId: string;
+  readonly traceparent: string | null;
 }
 
 const repliesTopic = 'order.place-order-saga.replies';
 const waitLimitInMilliseconds = 30_000;
+const housekeepingIntervalInMilliseconds = 3_600_000;
+const replyTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+const spans = recordSpans();
+const componentSagaTimeoutsInMilliseconds = {
+  ...sagaTimeoutsInMilliseconds,
+  VERIFYING_CONSUMER: 5_000,
+};
 
 let postgres: StartedPostgres;
 let kafka: StartedKafka;
@@ -59,7 +72,7 @@ async function waitFor<Result>(
 async function waitForCommand(messageType: string): Promise<CommandRow> {
   return waitFor(async () => {
     const result = await sql<CommandRow>`
-      select saga_id, correlation_id from outbox where message_type = ${messageType}
+      select saga_id, correlation_id, traceparent from outbox where message_type = ${messageType}
     `.execute(outboxReader);
     return result.rows[0];
   });
@@ -102,6 +115,7 @@ async function reply<Schema extends DescMessage>(
           'message-type': schema.typeName,
           'correlation-id': command.correlationId,
           'saga-id': command.sagaId,
+          traceparent: `00-${replyTraceId}-00f067aa0ba902b7-01`,
         },
       },
     ],
@@ -153,6 +167,8 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
+    housekeepingIntervalInMilliseconds,
+    sagaTimeoutsInMilliseconds: componentSagaTimeoutsInMilliseconds,
   });
   stoppers.push(() => orderService.stop());
   client = createClient(
@@ -215,6 +231,15 @@ describe('order service', () => {
       return order.status === OrderStatus.APPROVED ? order : undefined;
     });
     expect(approved.totalInCents).toBe(9800n);
+    const createTicket = await waitForCommand('fooddelivery.kitchen.v1.CreateTicket');
+    expect(spans.spansNamed('process order.place-order-saga.replies').map(traceparentOf)).toContain(
+      createTicket.traceparent,
+    );
+    expect(
+      spans
+        .spansNamed('process order.place-order-saga.replies')
+        .map((span) => span.attributes['fooddelivery.order.id']),
+    ).toContain(orderId);
   });
 
   it('answers a repeated placement with the same Idempotency-Key with the same order', async () => {
@@ -228,6 +253,27 @@ describe('order service', () => {
     await expect(client.placeOrder(different)).rejects.toMatchObject({
       code: Code.AlreadyExists,
     });
+  });
+
+  it('rejects an order whose consumer never answers once the verification step times out', async () => {
+    const { orderId } = await client.placeOrder(
+      buildPlaceOrderRequest('checkout-timeout-test', 'tok_visa_4242'),
+    );
+
+    const rejected = await waitFor(async () => {
+      const order = await client.getOrder({ orderId });
+      return order.status === OrderStatus.REJECTED ? order : undefined;
+    });
+
+    expect(rejected.rejectionReason).toBe(OrderRejectionReason.CONSUMER_VERIFICATION_TIMED_OUT);
+    const timeout = spans
+      .spansNamed('place order saga step timeout')
+      .find((span) => span.attributes['fooddelivery.order.id'] === orderId);
+    const sweep = spans
+      .spansNamed('place order saga deadlines')
+      .find((span) => span.spanContext().spanId === timeout?.parentSpanContext?.spanId);
+    expect(sweep).toBeDefined();
+    expect(sweep?.parentSpanContext).toBeUndefined();
   });
 
   it('answers its health endpoint', async () => {
@@ -248,6 +294,8 @@ describe('order service', () => {
       host: '127.0.0.1',
       port: Number(new URL(orderService.url).port),
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
+      sagaTimeoutsInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow();
@@ -256,5 +304,31 @@ describe('order service', () => {
       return count === 0 ? count : undefined;
     }, 5_000);
     expect(openConnections).toBe(0);
+  });
+
+  it('runs housekeeping in root spans and stops its periodic jobs when it stops', async () => {
+    await sql`create database order_stopped`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = '/order_stopped';
+    const stoppableService = await startOrderService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: 0,
+      logLevel: 'silent',
+      sagaTimeoutsInMilliseconds,
+      housekeepingIntervalInMilliseconds: 100,
+    });
+    await waitFor(() => Promise.resolve(spans.spansNamed('housekeeping').at(0)));
+
+    await stoppableService.stop();
+    const housekeepingRuns = spans.spansNamed('housekeeping');
+    await delay(1_500);
+
+    expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
+    expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
+    expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
+    const deadlineSweeps = spans.spansNamed('place order saga deadlines');
+    expect(deadlineSweeps.map((sweep) => sweep.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });

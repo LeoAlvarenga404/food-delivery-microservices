@@ -120,6 +120,44 @@ describe('consumer bff server', () => {
     });
   });
 
+  it('documents the rejection reason of an order as an optional enumeration', async () => {
+    const response = await server.inject({ method: 'GET', url: '/openapi.json' });
+
+    const document: unknown = response.json();
+    expect(document).toMatchObject({
+      paths: {
+        '/v1/orders/{orderId}': {
+          get: {
+            responses: {
+              200: {
+                content: {
+                  'application/json': {
+                    schema: {
+                      required: ['orderId', 'status', 'lineItems', 'totalInCents', 'currency'],
+                      properties: {
+                        rejectionReason: {
+                          enum: [
+                            'CONSUMER_NOT_FOUND',
+                            'CONSUMER_BLOCKED',
+                            'TICKET_REFUSED',
+                            'PAYMENT_DECLINED',
+                            'CONSUMER_VERIFICATION_TIMED_OUT',
+                            'TICKET_CREATION_TIMED_OUT',
+                            'PAYMENT_AUTHORIZATION_TIMED_OUT',
+                          ],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it('keeps operational routes out of the OpenAPI document', async () => {
     const response = await server.inject({ method: 'GET', url: '/openapi.json' });
 

@@ -50,6 +50,9 @@ x-kafka-clients: &kafka-clients
   KAFKA_BOOTSTRAP_SERVERS: kafka-1:29092,kafka-2:29092,kafka-3:29092
   LOG_LEVEL: info
 
+x-tracing: &tracing
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+
 x-health-timing: &health-timing
   interval: 5s
   timeout: 5s
@@ -177,9 +180,12 @@ services:
       <<: *application-build
       args: { PACKAGE_NAME: '@fd/order-service', PACKAGE_DIRECTORY: services/order }
     environment:
-      <<: *kafka-clients
+      <<: [*kafka-clients, *tracing]
+      OTEL_SERVICE_NAME: order-service
       ORDER_DATABASE_URL: postgresql://order_service:${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}@order-db:5432/order_service
       ORDER_SERVICE_HOST: 0.0.0.0
+      PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: 10000
+      PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS: 20000
     healthcheck:
       <<: *health-timing
       test:
@@ -197,7 +203,8 @@ services:
       <<: *application-build
       args: { PACKAGE_NAME: '@fd/consumer-service', PACKAGE_DIRECTORY: services/consumer }
     environment:
-      <<: *kafka-clients
+      <<: [*kafka-clients, *tracing]
+      OTEL_SERVICE_NAME: consumer-service
       CONSUMER_DATABASE_URL: postgresql://consumer_service:${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}@consumer-db:5432/consumer_service
       CONSUMER_SERVICE_HOST: 0.0.0.0
     healthcheck:
@@ -217,7 +224,8 @@ services:
       <<: *application-build
       args: { PACKAGE_NAME: '@fd/kitchen-service', PACKAGE_DIRECTORY: services/kitchen }
     environment:
-      <<: *kafka-clients
+      <<: [*kafka-clients, *tracing]
+      OTEL_SERVICE_NAME: kitchen-service
       KITCHEN_DATABASE_URL: postgresql://kitchen_service:${KITCHEN_DB_PASSWORD:?copy infra/.env.example to infra/.env}@kitchen-db:5432/kitchen_service
       KITCHEN_SERVICE_HOST: 0.0.0.0
     healthcheck:
@@ -237,7 +245,8 @@ services:
       <<: *application-build
       args: { PACKAGE_NAME: '@fd/accounting-service', PACKAGE_DIRECTORY: services/accounting }
     environment:
-      <<: *kafka-clients
+      <<: [*kafka-clients, *tracing]
+      OTEL_SERVICE_NAME: accounting-service
       ACCOUNTING_DATABASE_URL: postgresql://accounting_service:${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}@accounting-db:5432/accounting_service
       ACCOUNTING_SERVICE_HOST: 0.0.0.0
       SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: 9000
@@ -273,6 +282,8 @@ services:
       <<: *application-build
       args: { PACKAGE_NAME: '@fd/consumer-bff', PACKAGE_DIRECTORY: bffs/consumer-bff }
     environment:
+      <<: *tracing
+      OTEL_SERVICE_NAME: consumer-bff
       ORDER_SERVICE_URL: http://order-service:4001
       CONSUMER_BFF_HOST: 0.0.0.0
       LOG_LEVEL: info
@@ -294,6 +305,16 @@ services:
     depends_on:
       consumer-bff: { condition: service_healthy }
       outbox-connectors: { condition: service_completed_successfully }
+
+  otel-lgtm:
+    image: grafana/otel-lgtm:0.35.0
+    profiles: [observability]
+    restart: unless-stopped
+    ports: ['127.0.0.1:3000:3000', '127.0.0.1:3200:3200']
+    healthcheck:
+      <<: *health-timing
+      test: ['CMD', '/otel-lgtm/docker/healthcheck.sh']
+      start_period: 120s
 
 volumes:
   kafka-1-data:

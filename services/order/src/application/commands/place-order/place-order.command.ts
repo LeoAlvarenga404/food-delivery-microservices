@@ -2,8 +2,8 @@ import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
 import type { RestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import type { ConsumerId } from '#domain/order/consumer-id.value-object.ts';
 import type { DeliveryAddress } from '#domain/order/delivery-address.value-object.ts';
-import type { RequestedLineItem } from '#domain/order/order.aggregate.ts';
 import type { OrderPlacementError } from '#domain/order/order.errors.ts';
+import type { RequestedLineItem } from '#domain/order/order-placement.policy.ts';
 
 export interface PlaceOrderCommand {
   readonly idempotencyKey: string;

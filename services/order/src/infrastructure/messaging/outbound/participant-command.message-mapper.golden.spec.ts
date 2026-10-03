@@ -5,13 +5,18 @@ import { VerifyConsumerSchema } from '@fd/contracts/fooddelivery/consumer/v1/com
 import {
   ApproveTicketSchema,
   CreateTicketSchema,
+  RejectTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { describe, it } from 'vitest';
-import { buildSagaOrder } from '../../../../test/support/place-order-saga.builder.ts';
+import {
+  buildSagaOrder,
+  sagaPaymentToken,
+} from '../../../../test/support/place-order-saga.builder.ts';
 import {
   toApproveTicket,
   toAuthorizePayment,
   toCreateTicket,
+  toRejectTicket,
   toVerifyConsumer,
 } from './participant-command.message-mapper.ts';
 
@@ -36,7 +41,7 @@ describe('participant command golden samples', () => {
   it('produces the AuthorizePayment sample', async () => {
     await expectGoldenSample(
       { directory, topic: 'accounting.commands', schema: AuthorizePaymentSchema },
-      toAuthorizePayment(order),
+      toAuthorizePayment(order, sagaPaymentToken),
     );
   });
 
@@ -44,6 +49,13 @@ describe('participant command golden samples', () => {
     await expectGoldenSample(
       { directory, topic: 'kitchen.commands', schema: ApproveTicketSchema },
       toApproveTicket(order),
+    );
+  });
+
+  it('produces the RejectTicket sample', async () => {
+    await expectGoldenSample(
+      { directory, topic: 'kitchen.commands', schema: RejectTicketSchema },
+      toRejectTicket(order),
     );
   });
 });

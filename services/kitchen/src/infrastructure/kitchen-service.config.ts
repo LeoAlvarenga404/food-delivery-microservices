@@ -8,6 +8,7 @@ export interface KitchenServiceConfiguration {
   readonly host: string;
   readonly port: number;
   readonly logLevel: LogLevel;
+  readonly housekeepingIntervalInMilliseconds: number;
 }
 
 const kitchenServiceEnvironmentSchema = z.object({
@@ -16,6 +17,8 @@ const kitchenServiceEnvironmentSchema = z.object({
   KITCHEN_SERVICE_HOST: environmentVariables.listenHost,
   KITCHEN_SERVICE_PORT: environmentVariables.listenPort.default(4003),
   LOG_LEVEL: environmentVariables.logLevel,
+  HOUSEKEEPING_INTERVAL_IN_MILLISECONDS:
+    environmentVariables.durationInMilliseconds.default(3_600_000),
 });
 
 export function readKitchenServiceConfiguration(
@@ -28,5 +31,6 @@ export function readKitchenServiceConfiguration(
     host: variables.KITCHEN_SERVICE_HOST,
     port: variables.KITCHEN_SERVICE_PORT,
     logLevel: variables.LOG_LEVEL,
+    housekeepingIntervalInMilliseconds: variables.HOUSEKEEPING_INTERVAL_IN_MILLISECONDS,
   };
 }
