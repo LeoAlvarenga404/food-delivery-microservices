@@ -78,6 +78,22 @@ export function describePlaceOrderSagaRepositoryContract(
       });
     });
 
+    it('stores a compensating saga with the reason it will reject the order for', async () => {
+      await sagas.save(started);
+      const stored = await findStoredSaga(sagas, started.sagaId);
+
+      await sagas.save({
+        ...stored,
+        state: { step: 'REJECTING_TICKET', order, rejectionReason: 'PAYMENT_DECLINED' },
+      });
+
+      expect((await findStoredSaga(sagas, started.sagaId)).state).toStrictEqual({
+        step: 'REJECTING_TICKET',
+        order,
+        rejectionReason: 'PAYMENT_DECLINED',
+      });
+    });
+
     it('rejects a save based on a version another save already replaced', async () => {
       await sagas.save(started);
       const stored = await findStoredSaga(sagas, started.sagaId);

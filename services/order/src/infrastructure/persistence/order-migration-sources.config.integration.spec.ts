@@ -35,6 +35,7 @@ describe('orderMigrationSources', () => {
       'order/0004-create-idempotency-keys-table',
       'order/0005-create-saga-instances-table',
       'order/0006-add-order-rejection',
+      'order/0007-add-compensated-saga-status',
       'outbox/0001-create-outbox-table',
     ]);
   });

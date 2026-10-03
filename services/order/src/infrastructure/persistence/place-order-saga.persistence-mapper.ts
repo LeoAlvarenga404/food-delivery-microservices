@@ -2,6 +2,7 @@ import type { Selectable } from 'kysely';
 import type {
   AfterPivotSagaState,
   BeforePivotSagaState,
+  CompensationSagaState,
   PlaceOrderSagaInstance,
   PlaceOrderSagaOrder,
   PlaceOrderSagaState,
@@ -11,6 +12,7 @@ import type { RestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import type { Currency } from '#domain/money/money.value-object.ts';
 import type { ConsumerId } from '#domain/order/consumer-id.value-object.ts';
 import type { OrderId } from '#domain/order/order-id.value-object.ts';
+import type { OrderRejectionReason } from '#domain/order/order.state.ts';
 import type { JsonObject, SagaInstances } from './generated/database.ts';
 
 export type SagaInstanceRow = Selectable<SagaInstances>;
@@ -35,6 +37,7 @@ interface StoredSagaState {
   readonly step: string;
   readonly order: StoredSagaOrder;
   readonly paymentToken?: string;
+  readonly rejectionReason?: string;
 }
 
 const placeOrderSagaType = 'PlaceOrderSaga';
@@ -77,11 +80,20 @@ function toSagaOrder(stored: StoredSagaOrder): PlaceOrderSagaOrder {
 
 function toSagaState(stored: StoredSagaState): PlaceOrderSagaState {
   const order = toSagaOrder(stored.order);
-  if (stored.paymentToken === undefined) {
-    return { step: stored.step as AfterPivotSagaState['step'], order };
+  if (stored.paymentToken !== undefined) {
+    const step = stored.step as BeforePivotSagaState['step'];
+    return { step, order, paymentToken: stored.paymentToken };
   }
-  const step = stored.step as BeforePivotSagaState['step'];
-  return { step, order, paymentToken: stored.paymentToken };
+  if (stored.rejectionReason !== undefined) {
+    const step = stored.step as CompensationSagaState['step'];
+    return { step, order, rejectionReason: stored.rejectionReason as OrderRejectionReason };
+  }
+  return { step: stored.step as AfterPivotSagaState['step'], order };
+}
+
+function toSagaStatus(state: PlaceOrderSagaState): string {
+  if (state.step === 'COMPLETED' || state.step === 'COMPENSATED') return state.step;
+  return 'RUNNING';
 }
 
 export const placeOrderSagaPersistenceMapper = {
@@ -101,7 +113,7 @@ export const placeOrderSagaPersistenceMapper = {
       orderId: state.order.orderId,
       step: state.step,
       state: toStoredState(state),
-      status: state.step === 'COMPLETED' ? 'COMPLETED' : 'RUNNING',
+      status: toSagaStatus(state),
       deadlineAt: null,
       version: instance.version,
     };

@@ -20,13 +20,19 @@ const sagaStates: Readonly<Record<PlaceOrderSagaStep, PlaceOrderSagaState>> = {
   AUTHORIZING_PAYMENT: { step: 'AUTHORIZING_PAYMENT', order, paymentToken },
   APPROVING_TICKET: { step: 'APPROVING_TICKET', order },
   COMPLETED: { step: 'COMPLETED', order },
+  REJECTING_TICKET: { step: 'REJECTING_TICKET', order, rejectionReason: 'PAYMENT_DECLINED' },
+  COMPENSATED: { step: 'COMPENSATED', order, rejectionReason: 'PAYMENT_DECLINED' },
 };
 
 const replies: readonly PlaceOrderSagaReply[] = [
   { type: 'ConsumerVerified' },
+  { type: 'ConsumerVerificationFailed', rejectionReason: 'CONSUMER_NOT_FOUND' },
   { type: 'TicketCreated' },
+  { type: 'TicketCreationFailed', rejectionReason: 'TICKET_REFUSED' },
   { type: 'PaymentAuthorized' },
+  { type: 'PaymentFailed', rejectionReason: 'PAYMENT_DECLINED' },
   { type: 'TicketApproved' },
+  { type: 'TicketRejected' },
 ];
 
 interface SagaTransition {
@@ -44,10 +50,22 @@ const transitions: readonly SagaTransition[] = [
     commands: [{ type: 'CreateTicket', order }],
   },
   {
+    state: sagaStates.VERIFYING_CONSUMER,
+    reply: { type: 'ConsumerVerificationFailed', rejectionReason: 'CONSUMER_NOT_FOUND' },
+    nextState: { step: 'COMPENSATED', order, rejectionReason: 'CONSUMER_NOT_FOUND' },
+    commands: [{ type: 'RejectOrder', order, rejectionReason: 'CONSUMER_NOT_FOUND' }],
+  },
+  {
     state: sagaStates.CREATING_TICKET,
     reply: { type: 'TicketCreated' },
     nextState: sagaStates.AUTHORIZING_PAYMENT,
     commands: [{ type: 'AuthorizePayment', order, paymentToken }],
+  },
+  {
+    state: sagaStates.CREATING_TICKET,
+    reply: { type: 'TicketCreationFailed', rejectionReason: 'TICKET_REFUSED' },
+    nextState: { step: 'COMPENSATED', order, rejectionReason: 'TICKET_REFUSED' },
+    commands: [{ type: 'RejectOrder', order, rejectionReason: 'TICKET_REFUSED' }],
   },
   {
     state: sagaStates.AUTHORIZING_PAYMENT,
@@ -56,10 +74,22 @@ const transitions: readonly SagaTransition[] = [
     commands: [{ type: 'ApproveTicket', order }],
   },
   {
+    state: sagaStates.AUTHORIZING_PAYMENT,
+    reply: { type: 'PaymentFailed', rejectionReason: 'PAYMENT_DECLINED' },
+    nextState: sagaStates.REJECTING_TICKET,
+    commands: [{ type: 'RejectTicket', order }],
+  },
+  {
     state: sagaStates.APPROVING_TICKET,
     reply: { type: 'TicketApproved' },
     nextState: sagaStates.COMPLETED,
     commands: [{ type: 'ApproveOrder', order }],
+  },
+  {
+    state: sagaStates.REJECTING_TICKET,
+    reply: { type: 'TicketRejected' },
+    nextState: sagaStates.COMPENSATED,
+    commands: [{ type: 'RejectOrder', order, rejectionReason: 'PAYMENT_DECLINED' }],
   },
 ];
 
@@ -93,18 +123,30 @@ describe('placeOrderSaga transitions', () => {
     },
   );
 
-  it('forgets the payment token once the payment is authorized', () => {
-    const nextState = placeOrderSaga.evolve(sagaStates.AUTHORIZING_PAYMENT, {
-      type: 'PaymentAuthorized',
-    });
+  it.each<PlaceOrderSagaReply>([
+    { type: 'PaymentAuthorized' },
+    { type: 'PaymentFailed', rejectionReason: 'PAYMENT_DECLINED' },
+  ])('forgets the payment token once $type answers the payment step', (reply) => {
+    const nextState = placeOrderSaga.evolve(sagaStates.AUTHORIZING_PAYMENT, reply);
 
     expect(nextState).not.toHaveProperty('paymentToken');
+  });
+
+  it('rejects the order with the reason of the failed payment once the ticket is rejected', () => {
+    const compensating = placeOrderSaga.evolve(sagaStates.AUTHORIZING_PAYMENT, {
+      type: 'PaymentFailed',
+      rejectionReason: 'PAYMENT_DECLINED',
+    });
+
+    expect(placeOrderSaga.decide(compensating, { type: 'TicketRejected' })).toEqual(
+      right([{ type: 'RejectOrder', order, rejectionReason: 'PAYMENT_DECLINED' }]),
+    );
   });
 });
 
 describe('placeOrderSaga with a reply it is not waiting for', () => {
   it('covers every pair outside the transitions', () => {
-    expect(unexpectedPairs).toHaveLength(16);
+    expect(unexpectedPairs).toHaveLength(48);
   });
 
   it.each(unexpectedPairs)('in %s, rejects %o and keeps its state', (step, reply) => {

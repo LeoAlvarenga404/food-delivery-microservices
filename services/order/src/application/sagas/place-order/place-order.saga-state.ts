@@ -3,6 +3,7 @@ import type { Currency } from '#domain/money/money.value-object.ts';
 import type { ConsumerId } from '#domain/order/consumer-id.value-object.ts';
 import type { OrderId } from '#domain/order/order-id.value-object.ts';
 import type { OrderLineItemSnapshot } from '#domain/order/order-line-item.entity.ts';
+import type { OrderRejectionReason } from '#domain/order/order.state.ts';
 
 export interface PlaceOrderSagaOrder {
   readonly orderId: OrderId;
@@ -24,7 +25,14 @@ export interface AfterPivotSagaState {
   readonly order: PlaceOrderSagaOrder;
 }
 
-export type PlaceOrderSagaState = BeforePivotSagaState | AfterPivotSagaState;
+export interface CompensationSagaState {
+  readonly step: 'REJECTING_TICKET' | 'COMPENSATED';
+  readonly order: PlaceOrderSagaOrder;
+  readonly rejectionReason: OrderRejectionReason;
+}
+
+export type PlaceOrderSagaState =
+  BeforePivotSagaState | AfterPivotSagaState | CompensationSagaState;
 
 export type PlaceOrderSagaStep = PlaceOrderSagaState['step'];
 

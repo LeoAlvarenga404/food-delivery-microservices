@@ -8,12 +8,12 @@ import {
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import type {
   PlaceOrderSagaReply,
-  PlaceOrderSagaReplyType,
+  SuccessReply,
 } from '#application/sagas/place-order/place-order.saga.ts';
 
 interface ReplyContract {
   readonly schema: DescMessage;
-  readonly replyType: PlaceOrderSagaReplyType;
+  readonly replyType: SuccessReply['type'];
 }
 
 const replyContracts: readonly ReplyContract[] = [

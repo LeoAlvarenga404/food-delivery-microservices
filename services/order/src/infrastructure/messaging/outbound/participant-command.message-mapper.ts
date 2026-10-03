@@ -11,8 +11,10 @@ import {
 import {
   ApproveTicketSchema,
   CreateTicketSchema,
+  RejectTicketSchema,
   type ApproveTicket,
   type CreateTicket,
+  type RejectTicket,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga.ts';
 import type { PlaceOrderSagaOrder } from '#application/sagas/place-order/place-order.saga-state.ts';
@@ -51,6 +53,10 @@ export function toApproveTicket(order: PlaceOrderSagaOrder): ApproveTicket {
   return create(ApproveTicketSchema, { orderId: order.orderId });
 }
 
+export function toRejectTicket(order: PlaceOrderSagaOrder): RejectTicket {
+  return create(RejectTicketSchema, { orderId: order.orderId });
+}
+
 function commandTopicOf(commandType: ParticipantCommand['type']): string {
   switch (commandType) {
     case 'VerifyConsumer':
@@ -59,6 +65,7 @@ function commandTopicOf(commandType: ParticipantCommand['type']): string {
       return 'accounting.commands';
     case 'CreateTicket':
     case 'ApproveTicket':
+    case 'RejectTicket':
       return 'kitchen.commands';
   }
 }
@@ -82,5 +89,7 @@ export function toParticipantCommandMessage(
       );
     case 'ApproveTicket':
       return toOutboxMessage(ApproveTicketSchema, toApproveTicket(order), routing);
+    case 'RejectTicket':
+      return toOutboxMessage(RejectTicketSchema, toRejectTicket(order), routing);
   }
 }

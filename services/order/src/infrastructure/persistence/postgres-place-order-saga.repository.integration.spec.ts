@@ -49,6 +49,25 @@ describe('postgres place order saga repository rows', () => {
     expect(await readRow()).toEqual({ step: 'COMPLETED', status: 'COMPLETED' });
   });
 
+  it('stores a compensated saga with the COMPENSATED status', async () => {
+    const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
+    const started = buildSagaInstance();
+    await sagas.save(started);
+    const stored = await sagas.findById(started.sagaId);
+    if (stored === undefined) throw new Error('the saga was not stored');
+
+    await sagas.save({
+      ...stored,
+      state: { step: 'COMPENSATED', order: buildSagaOrder(), rejectionReason: 'CONSUMER_BLOCKED' },
+    });
+
+    const row = await testDatabase.database
+      .selectFrom('sagaInstances')
+      .select(['step', 'status'])
+      .executeTakeFirstOrThrow();
+    expect(row).toEqual({ step: 'COMPENSATED', status: 'COMPENSATED' });
+  });
+
   it('keeps the payment token in the stored state only until the saga leaves the payment step', async () => {
     const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
     const started = buildSagaInstance();

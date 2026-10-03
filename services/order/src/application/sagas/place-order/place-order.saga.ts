@@ -1,21 +1,35 @@
 import { left, right, type Either } from '@fd/domain';
+import type { OrderRejectionReason } from '#domain/order/order.state.ts';
 import type {
   AfterPivotSagaState,
   BeforePivotSagaState,
+  CompensationSagaState,
   PlaceOrderSagaOrder,
   PlaceOrderSagaState,
   PlaceOrderSagaStep,
 } from './place-order.saga-state.ts';
 
-export interface PlaceOrderSagaReply {
-  readonly type: 'ConsumerVerified' | 'TicketCreated' | 'PaymentAuthorized' | 'TicketApproved';
+export interface SuccessReply {
+  readonly type:
+    | 'ConsumerVerified'
+    | 'TicketCreated'
+    | 'PaymentAuthorized'
+    | 'TicketApproved'
+    | 'TicketRejected';
 }
+
+export interface FailureReply {
+  readonly type: 'ConsumerVerificationFailed' | 'TicketCreationFailed' | 'PaymentFailed';
+  readonly rejectionReason: OrderRejectionReason;
+}
+
+export type PlaceOrderSagaReply = SuccessReply | FailureReply;
 
 export type PlaceOrderSagaReplyType = PlaceOrderSagaReply['type'];
 
 export type ParticipantCommand =
   | {
-      readonly type: 'VerifyConsumer' | 'CreateTicket' | 'ApproveTicket';
+      readonly type: 'VerifyConsumer' | 'CreateTicket' | 'ApproveTicket' | 'RejectTicket';
       readonly order: PlaceOrderSagaOrder;
     }
   | {
@@ -25,7 +39,13 @@ export type ParticipantCommand =
     };
 
 export type PlaceOrderSagaCommand =
-  ParticipantCommand | { readonly type: 'ApproveOrder'; readonly order: PlaceOrderSagaOrder };
+  | ParticipantCommand
+  | { readonly type: 'ApproveOrder'; readonly order: PlaceOrderSagaOrder }
+  | {
+      readonly type: 'RejectOrder';
+      readonly order: PlaceOrderSagaOrder;
+      readonly rejectionReason: OrderRejectionReason;
+    };
 
 export interface UnexpectedSagaReply {
   readonly type: 'UnexpectedSagaReply';
@@ -43,10 +63,21 @@ interface SagaTransition {
   readonly commands: readonly PlaceOrderSagaCommand[];
 }
 
+function rejectOrder(
+  order: PlaceOrderSagaOrder,
+  rejectionReason: OrderRejectionReason,
+): SagaTransition {
+  return {
+    state: { step: 'COMPENSATED', order, rejectionReason },
+    commands: [{ type: 'RejectOrder', order, rejectionReason }],
+  };
+}
+
 function afterConsumerVerification(
   { order, paymentToken }: BeforePivotSagaState,
   reply: PlaceOrderSagaReply,
 ): SagaTransition | undefined {
+  if (reply.type === 'ConsumerVerificationFailed') return rejectOrder(order, reply.rejectionReason);
   if (reply.type !== 'ConsumerVerified') return undefined;
   return {
     state: { step: 'CREATING_TICKET', order, paymentToken },
@@ -58,6 +89,7 @@ function afterTicketCreation(
   { order, paymentToken }: BeforePivotSagaState,
   reply: PlaceOrderSagaReply,
 ): SagaTransition | undefined {
+  if (reply.type === 'TicketCreationFailed') return rejectOrder(order, reply.rejectionReason);
   if (reply.type !== 'TicketCreated') return undefined;
   return {
     state: { step: 'AUTHORIZING_PAYMENT', order, paymentToken },
@@ -69,6 +101,13 @@ function afterPaymentAuthorization(
   { order }: BeforePivotSagaState,
   reply: PlaceOrderSagaReply,
 ): SagaTransition | undefined {
+  if (reply.type === 'PaymentFailed') {
+    const { rejectionReason } = reply;
+    return {
+      state: { step: 'REJECTING_TICKET', order, rejectionReason },
+      commands: [{ type: 'RejectTicket', order }],
+    };
+  }
   if (reply.type !== 'PaymentAuthorized') return undefined;
   return {
     state: { step: 'APPROVING_TICKET', order },
@@ -84,6 +123,14 @@ function afterTicketApproval(
   return { state: { step: 'COMPLETED', order }, commands: [{ type: 'ApproveOrder', order }] };
 }
 
+function afterTicketRejection(
+  { order, rejectionReason }: CompensationSagaState,
+  reply: PlaceOrderSagaReply,
+): SagaTransition | undefined {
+  if (reply.type !== 'TicketRejected') return undefined;
+  return rejectOrder(order, rejectionReason);
+}
+
 function transition(
   state: PlaceOrderSagaState,
   reply: PlaceOrderSagaReply,
@@ -97,7 +144,10 @@ function transition(
       return afterPaymentAuthorization(state, reply);
     case 'APPROVING_TICKET':
       return afterTicketApproval(state, reply);
+    case 'REJECTING_TICKET':
+      return afterTicketRejection(state, reply);
     case 'COMPLETED':
+    case 'COMPENSATED':
       return undefined;
   }
 }

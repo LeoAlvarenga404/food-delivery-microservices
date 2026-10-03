@@ -5,12 +5,15 @@ import {
   placeOrderSaga,
   type PlaceOrderSagaCommand,
 } from '#application/sagas/place-order/place-order.saga.ts';
+import type { Order } from '#domain/order/order.aggregate.ts';
 import type { OrderId } from '#domain/order/order-id.value-object.ts';
 import type { InvalidOrderTransition } from '#domain/order/order.errors.ts';
 import type {
   ApplyPlaceOrderSagaReplyCommand,
   ApplyPlaceOrderSagaReplyError,
 } from './apply-place-order-saga-reply.command.ts';
+
+type OrderChange = (order: Order, now: Date) => Either<InvalidOrderTransition, void>;
 
 export class ApplyPlaceOrderSagaReplyCommandHandler {
   readonly #unitOfWork: UnitOfWork;
@@ -49,21 +52,27 @@ export class ApplyPlaceOrderSagaReplyCommandHandler {
     sagaCommand: PlaceOrderSagaCommand,
     sagaId: string,
   ): Promise<Either<InvalidOrderTransition, undefined>> {
+    const { orderId } = sagaCommand.order;
     if (sagaCommand.type === 'ApproveOrder') {
-      return this.#approveOrder(scope, sagaCommand.order.orderId);
+      return this.#changeOrder(scope, orderId, (order, now) => order.approve(now));
+    }
+    if (sagaCommand.type === 'RejectOrder') {
+      const { rejectionReason } = sagaCommand;
+      return this.#changeOrder(scope, orderId, (order, now) => order.reject(rejectionReason, now));
     }
     scope.commands.send(sagaCommand, sagaId);
     return right(undefined);
   }
 
-  async #approveOrder(
+  async #changeOrder(
     scope: TransactionScope,
     orderId: OrderId,
+    change: OrderChange,
   ): Promise<Either<InvalidOrderTransition, undefined>> {
     const order = await scope.orders.findById(orderId);
     if (order === undefined) throw new Error(`place order saga refers to missing order ${orderId}`);
-    const approval = order.approve(this.#clock.now());
-    if (approval.isLeft()) return approval;
+    const changed = change(order, this.#clock.now());
+    if (changed.isLeft()) return changed;
     await scope.orders.save(order);
     return right(undefined);
   }

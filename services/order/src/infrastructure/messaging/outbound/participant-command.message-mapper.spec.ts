@@ -40,6 +40,11 @@ describe('toParticipantCommandMessage', () => {
       topic: 'kitchen.commands',
       messageType: 'fooddelivery.kitchen.v1.ApproveTicket',
     },
+    {
+      command: { type: 'RejectTicket', order },
+      topic: 'kitchen.commands',
+      messageType: 'fooddelivery.kitchen.v1.RejectTicket',
+    },
   ])('sends $command.type to $topic keyed by the order id', ({ command, topic, messageType }) => {
     const message = toParticipantCommandMessage(command, sagaId);
 

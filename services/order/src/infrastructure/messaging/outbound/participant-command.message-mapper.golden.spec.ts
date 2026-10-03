@@ -5,6 +5,7 @@ import { VerifyConsumerSchema } from '@fd/contracts/fooddelivery/consumer/v1/com
 import {
   ApproveTicketSchema,
   CreateTicketSchema,
+  RejectTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { describe, it } from 'vitest';
 import {
@@ -15,6 +16,7 @@ import {
   toApproveTicket,
   toAuthorizePayment,
   toCreateTicket,
+  toRejectTicket,
   toVerifyConsumer,
 } from './participant-command.message-mapper.ts';
 
@@ -47,6 +49,13 @@ describe('participant command golden samples', () => {
     await expectGoldenSample(
       { directory, topic: 'kitchen.commands', schema: ApproveTicketSchema },
       toApproveTicket(order),
+    );
+  });
+
+  it('produces the RejectTicket sample', async () => {
+    await expectGoldenSample(
+      { directory, topic: 'kitchen.commands', schema: RejectTicketSchema },
+      toRejectTicket(order),
     );
   });
 });
