@@ -53,6 +53,14 @@ export class PostgresPlaceOrderSagaRepository implements PlaceOrderSagaRepositor
       .execute();
   }
 
+  async postponeDeadline(sagaId: string, deadlineAt: Date): Promise<void> {
+    await this.#database
+      .updateTable('sagaInstances')
+      .set({ deadlineAt })
+      .where('sagaId', '=', sagaId)
+      .execute();
+  }
+
   async #update(row: SagaInstanceRow): Promise<void> {
     const { sagaId, step, state, status, deadlineAt, version } = row;
     const result = await this.#database

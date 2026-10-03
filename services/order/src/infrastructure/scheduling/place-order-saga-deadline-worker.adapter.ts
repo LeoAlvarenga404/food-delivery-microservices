@@ -22,6 +22,7 @@ export interface PlaceOrderSagaDeadlineWorkerSettings {
 }
 
 const expiredSagaBatchSize = 100;
+const failedTimeoutRetryDelayInMilliseconds = 60_000;
 
 function timeoutMetadata(correlationId: string): MessageMetadata {
   return {
@@ -62,14 +63,22 @@ export class PlaceOrderSagaDeadlineWorker {
         reply: { type: 'StepTimedOut' },
         metadata: timeoutMetadata(correlationId),
       });
-      if (outcome.isLeft()) {
-        logger.warn({ failure: outcome.failure }, 'place order saga timeout ignored');
+      if (outcome.isRight()) {
+        logger.info('place order saga step timed out');
         return;
       }
-      logger.info('place order saga step timed out');
+      logger.warn({ failure: outcome.failure }, 'place order saga timeout ignored');
     } catch (error) {
       logger.error({ err: error }, 'place order saga timeout failed');
     }
+    await this.#postpone(transaction, sagaId);
+  }
+
+  async #postpone(transaction: Transaction<OrderDatabase>, sagaId: string): Promise<void> {
+    const retryAt = new Date(
+      this.#settings.clock.now().getTime() + failedTimeoutRetryDelayInMilliseconds,
+    );
+    await new PostgresPlaceOrderSagaRepository(transaction).postponeDeadline(sagaId, retryAt);
   }
 
   #replyHandler(transaction: Transaction<OrderDatabase>): ApplyPlaceOrderSagaReplyCommandHandler {

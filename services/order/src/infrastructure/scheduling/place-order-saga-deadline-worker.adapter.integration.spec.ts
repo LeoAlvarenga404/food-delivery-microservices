@@ -34,7 +34,6 @@ interface OutboxRow {
   readonly causationId: string | null;
 }
 
-const timeoutCorrelationId = '0199a5d0-0000-7000-8000-0000000000e7';
 const verificationDeadline = new Date('2026-10-02T12:00:10.000Z');
 const afterEveryDeadline = new Date('2026-10-02T12:05:00.000Z');
 
@@ -42,6 +41,11 @@ let testDatabase: OrderTestDatabase;
 let unitOfWork: OrderUnitOfWork;
 let logEntries: Record<string, unknown>[];
 let messageCount = 0;
+let correlationCount = 0;
+
+function timeoutCorrelationId(sequence: number): string {
+  return `0199a5d0-0000-7000-8000-${sequence.toString(16).padStart(12, '0')}`;
+}
 
 function captureLogger(): Logger {
   const destination = new Writable({
@@ -60,16 +64,25 @@ function workerAt(now: Date): PlaceOrderSagaDeadlineWorker {
     unitOfWork,
     clock: new FakeClock(now),
     sagaTimeoutsInMilliseconds,
-    generateCorrelationId: () => timeoutCorrelationId,
+    generateCorrelationId: () => {
+      correlationCount += 1;
+      return timeoutCorrelationId(correlationCount);
+    },
     logger: captureLogger(),
   });
 }
 
-async function saveExpiredSaga(sagaId: string, state: PlaceOrderSagaState): Promise<void> {
+const defaultExpiredDeadline = new Date('2026-10-02T12:01:00.000Z');
+
+async function saveExpiredSaga(
+  sagaId: string,
+  state: PlaceOrderSagaState,
+  deadlineAt: Date = defaultExpiredDeadline,
+): Promise<void> {
   await new PostgresPlaceOrderSagaRepository(testDatabase.database).save({
     ...buildSagaInstance(state),
     sagaId,
-    deadlineAt: new Date('2026-10-02T12:01:00.000Z'),
+    deadlineAt,
   });
 }
 
@@ -92,6 +105,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await testDatabase.clearWrittenRows();
   logEntries = [];
+  correlationCount = 0;
   unitOfWork = createOrderUnitOfWork({
     database: testDatabase.database,
     generateMessageId: () => {
@@ -134,7 +148,7 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
     expect((await readOutbox()).at(-1)).toMatchObject({
       topic: 'order.order.events',
       messageType: 'fooddelivery.order.v1.OrderRejected',
-      correlationId: timeoutCorrelationId,
+      correlationId: timeoutCorrelationId(1),
       causationId: null,
     });
     expect(logEntries).toContainEqual(
@@ -142,7 +156,7 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
         msg: 'place order saga step timed out',
         sagaId: '0199a5d0-0000-7000-8000-0000000000b1',
         orderId,
-        correlationId: timeoutCorrelationId,
+        correlationId: timeoutCorrelationId(1),
       }),
     );
   });
@@ -239,5 +253,70 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
         sagaId: orphanSagaId,
       }),
     );
+  });
+
+  it('gives each saga timed out in one sweep its own correlation id', async () => {
+    const sagaIds = [
+      '0199a5d0-0000-7000-8000-0000000005b1',
+      '0199a5d0-0000-7000-8000-0000000005b2',
+    ];
+    for (const sagaId of sagaIds) {
+      await saveExpiredSaga(sagaId, { step: 'APPROVING_TICKET', order: buildSagaOrder() });
+    }
+
+    await workerAt(afterEveryDeadline).timeOutExpiredSteps();
+
+    const correlationIds = (await readOutbox()).map((row) => row.correlationId);
+    expect(new Set(correlationIds).size).toBe(2);
+  });
+
+  it('postpones a saga whose timeout is ignored and logs the ignored timeout', async () => {
+    const sagaId = '0199a5d0-0000-7000-8000-0000000006b1';
+    const order = buildOrder();
+    order.reject('CONSUMER_VERIFICATION_TIMED_OUT', new Date('2026-10-02T12:00:30.000Z'));
+    await new PostgresOrderRepository(testDatabase.database).save(order);
+    await saveExpiredSaga(sagaId, {
+      step: 'VERIFYING_CONSUMER',
+      order: buildSagaOrder(),
+      paymentToken: 'tok_visa_4242',
+    });
+
+    await workerAt(afterEveryDeadline).timeOutExpiredSteps();
+
+    expect(logEntries).toContainEqual(
+      expect.objectContaining({ level: 40, msg: 'place order saga timeout ignored', sagaId }),
+    );
+    expect((await readSaga(sagaId))?.deadlineAt).toEqual(
+      new Date(afterEveryDeadline.getTime() + 60_000),
+    );
+  });
+
+  it('keeps expiring healthy sagas behind a hundred sagas whose timeout keeps failing', async () => {
+    const failingSagaIds = Array.from(
+      { length: 100 },
+      (unused, index) => `0199a5d0-0000-7000-8000-0000000007${index.toString(16).padStart(2, '0')}`,
+    );
+    const healthySagaId = '0199a5d0-0000-7000-8000-0000000008b1';
+    for (const sagaId of failingSagaIds) {
+      await saveExpiredSaga(sagaId, {
+        step: 'VERIFYING_CONSUMER',
+        order: buildSagaOrder(),
+        paymentToken: 'tok_visa_4242',
+      });
+    }
+    await saveExpiredSaga(
+      healthySagaId,
+      { step: 'CREATING_TICKET', order: buildSagaOrder(), paymentToken: 'tok_visa_4242' },
+      new Date('2026-10-02T12:02:00.000Z'),
+    );
+
+    await workerAt(afterEveryDeadline).timeOutExpiredSteps();
+    await workerAt(afterEveryDeadline).timeOutExpiredSteps();
+
+    expect((await readSaga(healthySagaId))?.state.step).toBe('REJECTING_TICKET');
+    const postponedDeadline = new Date(afterEveryDeadline.getTime() + 60_000);
+    for (const sagaId of failingSagaIds) {
+      expect((await readSaga(sagaId))?.deadlineAt).toEqual(postponedDeadline);
+    }
   });
 });
