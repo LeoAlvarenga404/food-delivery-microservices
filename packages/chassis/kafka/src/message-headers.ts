@@ -13,7 +13,7 @@ export interface MessageHeaders {
 
 const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function readHeader(rawHeaders: KafkaJS.IHeaders, name: string): string | undefined {
+export function readHeader(rawHeaders: KafkaJS.IHeaders, name: string): string | undefined {
   const header = rawHeaders[name];
   const text = Array.isArray(header) ? header.map(String).join(',') : header?.toString();
   return text === undefined || text.length === 0 ? undefined : text;

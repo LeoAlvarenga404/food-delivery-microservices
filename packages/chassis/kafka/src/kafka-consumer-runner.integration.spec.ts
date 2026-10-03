@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
-import { createLogger } from '@fd/chassis-observability';
-import { startKafkaContainer, type StartedKafka } from '@fd/chassis-testing';
+import { activeTraceparent, createLogger } from '@fd/chassis-observability';
+import {
+  recordSpans,
+  startKafkaContainer,
+  traceparentOf,
+  type StartedKafka,
+} from '@fd/chassis-testing';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { createKafka } from './create-kafka.ts';
 import { ExternalDependencyFailure } from './external-dependency-failure.ts';
@@ -10,6 +15,11 @@ import type { InboundMessage, MessageHandler } from './inbound-message.ts';
 import { startConsumerRunner, type RunningConsumer } from './kafka-consumer-runner.ts';
 
 const silentLogger = createLogger({ serviceName: 'runner-test', level: 'silent' });
+const spans = recordSpans();
+const consumerSpanKind = 4;
+const errorStatusCode = 2;
+const producerTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+const producerSpanId = '00f067aa0ba902b7';
 
 let kafkaContainer: StartedKafka;
 let kafka: KafkaJS.Kafka;
@@ -338,5 +348,61 @@ describe('startConsumerRunner', () => {
 
     expect(attemptCount).toBe(1);
     expect(await committedOffset(scenario.groupId, scenario.topic)).not.toBe('1');
+  });
+
+  it('handles each message in a consumer span that continues the trace of its traceparent header', async () => {
+    const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
+    const traceparentsSeenByHandler: (string | undefined)[] = [];
+    const scenario = await runScenario(
+      'traced',
+      () => {
+        traceparentsSeenByHandler.push(activeTraceparent());
+        return Promise.resolve();
+      },
+      [
+        {
+          key: 'order-1',
+          value: 'm0',
+          headers: {
+            ...headersFor('Sample'),
+            'saga-id': sagaId,
+            traceparent: `00-${producerTraceId}-${producerSpanId}-01`,
+          },
+        },
+      ],
+    );
+
+    await waitUntil(() => traceparentsSeenByHandler.length === 1);
+    await scenario.runner.stop();
+
+    const [consumed] = spans.spansNamed('process traced.commands');
+    expect(consumed?.kind).toBe(consumerSpanKind);
+    expect(consumed?.spanContext().traceId).toBe(producerTraceId);
+    expect(consumed?.parentSpanContext?.spanId).toBe(producerSpanId);
+    expect(consumed?.attributes).toEqual({
+      'messaging.system': 'kafka',
+      'messaging.operation.name': 'process',
+      'messaging.destination.name': 'traced.commands',
+      'messaging.destination.partition.id': '0',
+      'messaging.consumer.group.name': 'traced-service',
+      'messaging.kafka.offset': 0,
+      'fooddelivery.saga.id': sagaId,
+    });
+    expect(traceparentsSeenByHandler).toEqual([traceparentOf(consumed)]);
+  });
+
+  it('marks the consumer span of a dead-lettered message as failed', async () => {
+    const scenario = await runScenario('failed', () => Promise.resolve(), [
+      { key: 'order-1', value: 'broken', headers: { 'message-id': randomUUID() } },
+    ]);
+
+    await readFirstMessage(`${scenario.topic}.${scenario.groupId}.dlq`);
+    await scenario.runner.stop();
+
+    const [consumed] = spans.spansNamed('process failed.commands');
+    expect(consumed?.status.code).toBe(errorStatusCode);
+    expect(consumed?.events.map((event) => event.attributes?.['exception.message'])).toEqual([
+      'missing required header message-type',
+    ]);
   });
 });

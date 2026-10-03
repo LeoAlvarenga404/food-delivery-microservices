@@ -1,8 +1,15 @@
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
-import type { Logger } from '@fd/chassis-observability';
+import {
+  annotateActiveSpan,
+  recordActiveSpanFailure,
+  runInConsumerSpan,
+  type ConsumerSpanSettings,
+  type Logger,
+} from '@fd/chassis-observability';
 import { deadLetterRecord, deadLetterTopic } from './dead-letter.ts';
 import { classifyFailure, decideFailureHandling } from './failure-handling.ts';
 import { toInboundMessage, type MessageHandler } from './inbound-message.ts';
+import { readHeader } from './message-headers.ts';
 
 export interface ConsumerRunnerSettings {
   readonly kafka: KafkaJS.Kafka;
@@ -64,6 +71,7 @@ async function handleFailure(
 ): Promise<void> {
   const attemptCount = (parts.attemptCounts.get(deliveryKey(delivery)) ?? 0) + 1;
   parts.attemptCounts.set(deliveryKey(delivery), attemptCount);
+  recordActiveSpanFailure(error);
   const failureClass = classifyFailure(error);
   const handling = decideFailureHandling(failureClass, attemptCount);
   const context = { topic: delivery.topic, partition: delivery.partition, attemptCount };
@@ -80,12 +88,40 @@ async function handleFailure(
   await commitDelivery(parts, delivery);
 }
 
+function consumerSpanSettings(
+  parts: RunnerParts,
+  delivery: KafkaJS.EachMessagePayload,
+): ConsumerSpanSettings {
+  const { topic, partition, message } = delivery;
+  return {
+    name: `process ${topic}`,
+    traceparent: readHeader(message.headers ?? {}, 'traceparent'),
+    attributes: {
+      'messaging.system': 'kafka',
+      'messaging.operation.name': 'process',
+      'messaging.destination.name': topic,
+      'messaging.destination.partition.id': String(partition),
+      'messaging.consumer.group.name': parts.settings.groupId,
+      'messaging.kafka.offset': Number(message.offset),
+    },
+  };
+}
+
+async function handleDelivery(
+  parts: RunnerParts,
+  delivery: KafkaJS.EachMessagePayload,
+): Promise<void> {
+  const message = toInboundMessage(delivery);
+  annotateActiveSpan({ sagaId: message.headers.sagaId });
+  await parts.settings.handle(message);
+}
+
 async function processDelivery(
   parts: RunnerParts,
   delivery: KafkaJS.EachMessagePayload,
 ): Promise<void> {
   try {
-    await parts.settings.handle(toInboundMessage(delivery));
+    await handleDelivery(parts, delivery);
   } catch (error) {
     await handleFailure(parts, delivery, error);
     return;
@@ -139,6 +175,11 @@ export async function startConsumerRunner(
   await parts.producer.connect();
   await parts.consumer.connect();
   await parts.consumer.subscribe({ topics: [...settings.topics] });
-  await parts.consumer.run({ eachMessage: (delivery) => processDelivery(parts, delivery) });
+  await parts.consumer.run({
+    eachMessage: (delivery) =>
+      runInConsumerSpan(consumerSpanSettings(parts, delivery), () =>
+        processDelivery(parts, delivery),
+      ),
+  });
   return { stop: () => stopRunner(parts) };
 }
