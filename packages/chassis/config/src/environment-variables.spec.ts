@@ -9,6 +9,12 @@ describe('environmentVariables', () => {
     },
   );
 
+  it('refuses a database url that only mentions a postgres url after another prefix', () => {
+    expect(environmentVariables.postgresUrl.safeParse('http://proxy?postgres://db').success).toBe(
+      false,
+    );
+  });
+
   it('refuses a database url of another kind', () => {
     expect(environmentVariables.postgresUrl.safeParse('mysql://order@db/order').success).toBe(
       false,
@@ -30,6 +36,10 @@ describe('environmentVariables', () => {
     expect(environmentVariables.listenHost.parse('0.0.0.0')).toBe('0.0.0.0');
   });
 
+  it('refuses an empty listen host', () => {
+    expect(environmentVariables.listenHost.safeParse('').success).toBe(false);
+  });
+
   it('reads a listen port from text', () => {
     expect(environmentVariables.listenPort.parse('4001')).toBe(4001);
   });
@@ -37,6 +47,13 @@ describe('environmentVariables', () => {
   it.each(['', '0', '65536', '40.5'])('refuses the listen port "%s"', (port) => {
     expect(environmentVariables.listenPort.safeParse(port).success).toBe(false);
   });
+
+  it.each(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])(
+    'accepts the log level %s',
+    (level) => {
+      expect(environmentVariables.logLevel.parse(level)).toBe(level);
+    },
+  );
 
   it('defaults the log level to info and refuses unknown levels', () => {
     expect(environmentVariables.logLevel.parse(undefined)).toBe('info');
