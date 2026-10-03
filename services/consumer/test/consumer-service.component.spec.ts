@@ -3,6 +3,7 @@ import { create, toBinary } from '@bufbuild/protobuf';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
+  recordSpans,
   startKafkaContainer,
   startPostgresContainer,
   type StartedKafka,
@@ -22,6 +23,8 @@ const commandsTopic = 'consumer.commands';
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const commandMessageId = '0199a5d0-0000-7000-8000-000000000d01';
 const waitLimitInMilliseconds = 30_000;
+const housekeepingIntervalInMilliseconds = 3_600_000;
+const spans = recordSpans();
 
 let postgres: StartedPostgres;
 let kafka: StartedKafka;
@@ -125,6 +128,7 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
+    housekeepingIntervalInMilliseconds,
   });
   stoppers.push(() => consumerService.stop());
   outboxReader = createDatabase({
@@ -177,6 +181,7 @@ describe('consumer service', () => {
       host: '127.0.0.1',
       port: 0,
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow();
@@ -199,6 +204,7 @@ describe('consumer service', () => {
       host: '127.0.0.1',
       port: Number(new URL(consumerService.url).port),
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow('EADDRINUSE');
@@ -209,7 +215,7 @@ describe('consumer service', () => {
     expect(openConnections).toBe(0);
   });
 
-  it('stops answering its health endpoint and releases its database connections once stopped', async () => {
+  it('stops answering its health endpoint, running housekeeping and holding database connections once stopped', async () => {
     const databaseName = 'consumer_stopped';
     await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
     const databaseUrl = new URL(postgres.connectionUri);
@@ -220,11 +226,14 @@ describe('consumer service', () => {
       host: '127.0.0.1',
       port: 0,
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds: 100,
     });
     const healthUrl = `${stoppableService.url}/health`;
     expect((await fetch(healthUrl)).status).toBe(200);
+    await waitFor(() => Promise.resolve(spans.spansNamed('housekeeping').at(0)));
 
     await stoppableService.stop();
+    const housekeepingRuns = spans.spansNamed('housekeeping');
 
     await expect(fetch(healthUrl)).rejects.toThrow('fetch failed');
     const openConnections = await waitFor(async () => {
@@ -232,5 +241,8 @@ describe('consumer service', () => {
       return count === 0 ? count : undefined;
     }, 5_000);
     expect(openConnections).toBe(0);
+    await delay(500);
+    expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
+    expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
   });
 });

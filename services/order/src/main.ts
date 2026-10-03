@@ -56,7 +56,6 @@ interface RunningHttpServer {
 
 const placeOrderSagaRepliesTopic = 'order.place-order-saga.replies';
 const sagaDeadlineSweepIntervalInMilliseconds = 1_000;
-const housekeepingIntervalInMilliseconds = 3_600_000;
 
 async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpServer> {
   const { configuration, logger, database, unitOfWork, clock } = parts;
@@ -170,7 +169,7 @@ async function startResources(parts: OrderServiceParts, started: StartedParts): 
   started.add(() => sagaDeadlineWorker.stop());
   const housekeeping = startPeriodicJob({
     name: 'housekeeping',
-    intervalInMilliseconds: housekeepingIntervalInMilliseconds,
+    intervalInMilliseconds: parts.configuration.housekeepingIntervalInMilliseconds,
     run: () => deleteExpiredRows(parts),
     logger: parts.logger,
   });

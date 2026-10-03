@@ -14,6 +14,7 @@ describe('readConsumerServiceConfiguration', () => {
       host: '127.0.0.1',
       port: 4002,
       logLevel: 'info',
+      housekeepingIntervalInMilliseconds: 3_600_000,
     });
   });
 
@@ -24,6 +25,7 @@ describe('readConsumerServiceConfiguration', () => {
       CONSUMER_SERVICE_HOST: '0.0.0.0',
       CONSUMER_SERVICE_PORT: '5002',
       LOG_LEVEL: 'debug',
+      HOUSEKEEPING_INTERVAL_IN_MILLISECONDS: '60000',
     });
 
     expect(configuration).toEqual({
@@ -32,6 +34,7 @@ describe('readConsumerServiceConfiguration', () => {
       host: '0.0.0.0',
       port: 5002,
       logLevel: 'debug',
+      housekeepingIntervalInMilliseconds: 60_000,
     });
   });
 
@@ -50,6 +53,10 @@ describe('readConsumerServiceConfiguration', () => {
       variables: { ...requiredVariables, CONSUMER_SERVICE_PORT: '70000' },
     },
     { problem: 'an unknown log level', variables: { ...requiredVariables, LOG_LEVEL: 'verbose' } },
+    {
+      problem: 'a housekeeping interval of zero',
+      variables: { ...requiredVariables, HOUSEKEEPING_INTERVAL_IN_MILLISECONDS: '0' },
+    },
   ])('refuses $problem', ({ variables }) => {
     expect(() => readConsumerServiceConfiguration(variables)).toThrow('invalid environment');
   });

@@ -42,8 +42,6 @@ interface AccountingServiceParts {
   readonly clock: Clock;
 }
 
-const housekeepingIntervalInMilliseconds = 3_600_000;
-
 function openDatabase(
   configuration: AccountingServiceConfiguration,
   logger: Logger,
@@ -91,10 +89,10 @@ function startCommandConsumer(parts: AccountingServiceParts): Promise<RunningCon
 }
 
 function startHousekeeping(parts: AccountingServiceParts): RunningPeriodicJob {
-  const { logger, database, clock } = parts;
+  const { configuration, logger, database, clock } = parts;
   return startPeriodicJob({
     name: 'housekeeping',
-    intervalInMilliseconds: housekeepingIntervalInMilliseconds,
+    intervalInMilliseconds: configuration.housekeepingIntervalInMilliseconds,
     run: async () => {
       const deletedOutboxMessageCount = await deleteExpiredOutboxMessages(database, clock.now());
       const deletedInboxEntryCount = await deleteExpiredInboxEntries(database, clock.now());

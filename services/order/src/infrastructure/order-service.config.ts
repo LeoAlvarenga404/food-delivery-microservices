@@ -10,14 +10,8 @@ export interface OrderServiceConfiguration {
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds;
+  readonly housekeepingIntervalInMilliseconds: number;
 }
-
-const timeoutInMilliseconds = z
-  .string()
-  .trim()
-  .min(1)
-  .transform(Number)
-  .pipe(z.number().int().min(1).max(2_147_483_647));
 
 const orderServiceEnvironmentSchema = z.object({
   ORDER_DATABASE_URL: environmentVariables.postgresUrl,
@@ -25,8 +19,12 @@ const orderServiceEnvironmentSchema = z.object({
   ORDER_SERVICE_HOST: environmentVariables.listenHost,
   ORDER_SERVICE_PORT: environmentVariables.listenPort.default(4001),
   LOG_LEVEL: environmentVariables.logLevel,
-  PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: timeoutInMilliseconds.default(30_000),
-  PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS: timeoutInMilliseconds.default(60_000),
+  PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS:
+    environmentVariables.durationInMilliseconds.default(30_000),
+  PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS:
+    environmentVariables.durationInMilliseconds.default(60_000),
+  HOUSEKEEPING_INTERVAL_IN_MILLISECONDS:
+    environmentVariables.durationInMilliseconds.default(3_600_000),
 });
 
 function toSagaTimeouts(
@@ -56,5 +54,6 @@ export function readOrderServiceConfiguration(
       variables.PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS,
       variables.PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS,
     ),
+    housekeepingIntervalInMilliseconds: variables.HOUSEKEEPING_INTERVAL_IN_MILLISECONDS,
   };
 }

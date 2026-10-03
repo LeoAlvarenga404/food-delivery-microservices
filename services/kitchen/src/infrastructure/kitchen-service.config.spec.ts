@@ -14,6 +14,7 @@ describe('readKitchenServiceConfiguration', () => {
       host: '127.0.0.1',
       port: 4003,
       logLevel: 'info',
+      housekeepingIntervalInMilliseconds: 3_600_000,
     });
   });
 
@@ -24,6 +25,7 @@ describe('readKitchenServiceConfiguration', () => {
       KITCHEN_SERVICE_HOST: '0.0.0.0',
       KITCHEN_SERVICE_PORT: '5003',
       LOG_LEVEL: 'debug',
+      HOUSEKEEPING_INTERVAL_IN_MILLISECONDS: '60000',
     });
 
     expect(configuration).toEqual({
@@ -32,6 +34,7 @@ describe('readKitchenServiceConfiguration', () => {
       host: '0.0.0.0',
       port: 5003,
       logLevel: 'debug',
+      housekeepingIntervalInMilliseconds: 60_000,
     });
   });
 
@@ -50,6 +53,10 @@ describe('readKitchenServiceConfiguration', () => {
       variables: { ...requiredVariables, KITCHEN_SERVICE_PORT: '70000' },
     },
     { problem: 'an unknown log level', variables: { ...requiredVariables, LOG_LEVEL: 'verbose' } },
+    {
+      problem: 'a housekeeping interval of zero',
+      variables: { ...requiredVariables, HOUSEKEEPING_INTERVAL_IN_MILLISECONDS: '0' },
+    },
   ])('refuses $problem', ({ variables }) => {
     expect(() => readKitchenServiceConfiguration(variables)).toThrow('invalid environment');
   });

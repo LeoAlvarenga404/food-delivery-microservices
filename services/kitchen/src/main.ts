@@ -34,7 +34,6 @@ interface KitchenServiceParts {
 }
 
 const now = (): Date => new Date();
-const housekeepingIntervalInMilliseconds = 3_600_000;
 
 function openDatabase(
   configuration: KitchenServiceConfiguration,
@@ -68,10 +67,10 @@ function startCommandConsumer(parts: KitchenServiceParts): Promise<RunningConsum
 }
 
 function startHousekeeping(parts: KitchenServiceParts): RunningPeriodicJob {
-  const { logger, database } = parts;
+  const { configuration, logger, database } = parts;
   return startPeriodicJob({
     name: 'housekeeping',
-    intervalInMilliseconds: housekeepingIntervalInMilliseconds,
+    intervalInMilliseconds: configuration.housekeepingIntervalInMilliseconds,
     run: async () => {
       const deletedOutboxMessageCount = await deleteExpiredOutboxMessages(database, now());
       const deletedInboxEntryCount = await deleteExpiredInboxEntries(database, now());

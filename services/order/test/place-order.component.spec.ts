@@ -5,6 +5,7 @@ import { createConnectTransport } from '@connectrpc/connect-node';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
+  recordSpans,
   startKafkaContainer,
   startPostgresContainer,
   type StartedKafka,
@@ -37,6 +38,9 @@ interface CommandRow {
 
 const repliesTopic = 'order.place-order-saga.replies';
 const waitLimitInMilliseconds = 30_000;
+const housekeepingIntervalInMilliseconds = 3_600_000;
+const errorStatusCode = 2;
+const spans = recordSpans();
 const componentSagaTimeoutsInMilliseconds = {
   ...sagaTimeoutsInMilliseconds,
   VERIFYING_CONSUMER: 5_000,
@@ -159,6 +163,7 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
+    housekeepingIntervalInMilliseconds,
     sagaTimeoutsInMilliseconds: componentSagaTimeoutsInMilliseconds,
   });
   stoppers.push(() => orderService.stop());
@@ -268,6 +273,7 @@ describe('order service', () => {
       host: '127.0.0.1',
       port: Number(new URL(orderService.url).port),
       logLevel: 'silent',
+      housekeepingIntervalInMilliseconds,
       sagaTimeoutsInMilliseconds,
     });
 
@@ -277,5 +283,31 @@ describe('order service', () => {
       return count === 0 ? count : undefined;
     }, 5_000);
     expect(openConnections).toBe(0);
+  });
+
+  it('runs housekeeping in root spans every interval until it stops', async () => {
+    await sql`create database order_stopped`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = '/order_stopped';
+    const stoppableService = await startOrderService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: 0,
+      logLevel: 'silent',
+      sagaTimeoutsInMilliseconds,
+      housekeepingIntervalInMilliseconds: 100,
+    });
+    await waitFor(() => Promise.resolve(spans.spansNamed('housekeeping').at(0)));
+
+    await stoppableService.stop();
+    const housekeepingRuns = spans.spansNamed('housekeeping');
+    await delay(1_500);
+
+    expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
+    expect(housekeepingRuns.every((run) => run.parentSpanContext === undefined)).toBe(true);
+    const deadlineSweeps = spans.spansNamed('place order saga deadlines');
+    expect(deadlineSweeps.length).toBeGreaterThan(0);
+    expect(deadlineSweeps.map((sweep) => sweep.status.code)).not.toContain(errorStatusCode);
   });
 });

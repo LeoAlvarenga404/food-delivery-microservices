@@ -21,6 +21,7 @@ describe('readOrderServiceConfiguration', () => {
         APPROVING_TICKET: 30_000,
         REJECTING_TICKET: 30_000,
       },
+      housekeepingIntervalInMilliseconds: 3_600_000,
     });
   });
 
@@ -38,6 +39,15 @@ describe('readOrderServiceConfiguration', () => {
       APPROVING_TICKET: 10_000,
       REJECTING_TICKET: 10_000,
     });
+  });
+
+  it('reads the housekeeping interval', () => {
+    const configuration = readOrderServiceConfiguration({
+      ...requiredVariables,
+      HOUSEKEEPING_INTERVAL_IN_MILLISECONDS: '60000',
+    });
+
+    expect(configuration.housekeepingIntervalInMilliseconds).toBe(60_000);
   });
 
   it('accepts the postgresql scheme and trims the bootstrap servers, dropping empty entries', () => {
@@ -80,6 +90,10 @@ describe('readOrderServiceConfiguration', () => {
     {
       problem: 'a step timeout that is not a whole number of milliseconds',
       variables: { ...requiredVariables, PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: '1.5' },
+    },
+    {
+      problem: 'a housekeeping interval of zero',
+      variables: { ...requiredVariables, HOUSEKEEPING_INTERVAL_IN_MILLISECONDS: '0' },
     },
   ])('refuses $problem', ({ variables }) => {
     expect(() => readOrderServiceConfiguration(variables)).toThrow('invalid environment');
