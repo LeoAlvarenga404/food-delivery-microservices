@@ -3,7 +3,6 @@ export type { HealthServerAddress, RunningHealthServer } from './start-health-se
 export { startPeriodicJob } from './start-periodic-job.ts';
 export type { PeriodicJobSettings, RunningPeriodicJob } from './start-periodic-job.ts';
 export { StartedParts } from './started-parts.ts';
-export { stopInOrder } from './stop-in-order.ts';
 export type { Stopper } from './stop-in-order.ts';
 export { stopOnSignals } from './stop-on-signals.ts';
 export type { StoppableService } from './stop-on-signals.ts';

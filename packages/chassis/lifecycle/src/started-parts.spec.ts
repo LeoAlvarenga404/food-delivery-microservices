@@ -21,6 +21,22 @@ describe('StartedParts', () => {
     expect(stopped).toEqual(['http', 'consumer', 'database']);
   });
 
+  it('waits for a later part to finish stopping before it stops the earlier part', async () => {
+    const stopped: string[] = [];
+    const httpStop = Promise.withResolvers<undefined>();
+    const started = new StartedParts();
+    started.add(recordingStop(stopped, 'database'));
+    started.add(() => httpStop.promise);
+
+    const stopping = started.stopAll();
+    await Promise.resolve();
+    expect(stopped).toEqual([]);
+    httpStop.resolve(undefined);
+    await stopping;
+
+    expect(stopped).toEqual(['database']);
+  });
+
   it('stops the earlier parts even when a later part fails to stop', async () => {
     const stopped: string[] = [];
     const failure = new Error('consumer did not stop');
