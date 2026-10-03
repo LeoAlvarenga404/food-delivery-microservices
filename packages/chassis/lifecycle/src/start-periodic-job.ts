@@ -1,4 +1,4 @@
-import type { Logger } from '@fd/chassis-observability';
+import { recordActiveSpanFailure, runInRootSpan, type Logger } from '@fd/chassis-observability';
 
 export interface PeriodicJobSettings {
   readonly name: string;
@@ -23,13 +23,14 @@ async function runOnce(state: PeriodicJobState): Promise<void> {
   try {
     await run();
   } catch (error) {
+    recordActiveSpanFailure(error);
     logger.error({ err: error, jobName: name }, 'periodic job failed');
   }
 }
 
 function scheduleNextRun(state: PeriodicJobState): void {
   state.nextRunTimer = setTimeout(() => {
-    state.currentRun = runOnce(state).then(() => {
+    state.currentRun = runInRootSpan(state.settings.name, () => runOnce(state)).then(() => {
       if (!state.isStopRequested) scheduleNextRun(state);
     });
   }, state.settings.intervalInMilliseconds);

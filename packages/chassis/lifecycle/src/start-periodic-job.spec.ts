@@ -1,9 +1,12 @@
 import { Writable } from 'node:stream';
-import { createLogger, type Logger } from '@fd/chassis-observability';
+import { createLogger, runInRootSpan, type Logger } from '@fd/chassis-observability';
+import { recordSpans } from '@fd/chassis-testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startPeriodicJob } from './start-periodic-job.ts';
 
 const intervalInMilliseconds = 1_000;
+const errorStatusCode = 2;
+const spans = recordSpans();
 
 let logEntries: Record<string, unknown>[];
 
@@ -21,6 +24,7 @@ function captureLogger(): Logger {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  spans.reset();
 });
 
 afterEach(() => {
@@ -94,6 +98,40 @@ describe('startPeriodicJob', () => {
       },
     ]);
     await job.stop();
+  });
+
+  it('runs every run in its own root span named after the job', async () => {
+    const job = startPeriodicJob({
+      name: 'housekeeping',
+      intervalInMilliseconds,
+      run: () => Promise.resolve(),
+      logger: captureLogger(),
+    });
+
+    await runInRootSpan('advancing the clock', () =>
+      vi.advanceTimersByTimeAsync(2 * intervalInMilliseconds),
+    );
+    await job.stop();
+
+    const runs = spans.spansNamed('housekeeping');
+    expect(runs.map((run) => run.parentSpanContext)).toEqual([undefined, undefined]);
+    expect(runs[0]?.spanContext().traceId).not.toBe(runs[1]?.spanContext().traceId);
+  });
+
+  it('marks the span of a failed run as failed and logs the failure with its trace id', async () => {
+    const job = startPeriodicJob({
+      name: 'failing',
+      intervalInMilliseconds,
+      run: () => Promise.reject(new Error('database down')),
+      logger: captureLogger(),
+    });
+
+    await vi.advanceTimersByTimeAsync(intervalInMilliseconds);
+    await job.stop();
+
+    const failedRun = spans.spansNamed('failing')[0];
+    expect(failedRun?.status.code).toBe(errorStatusCode);
+    expect(logEntries[0]?.['trace_id']).toBe(failedRun?.spanContext().traceId);
   });
 
   it('waits for the run in progress when it stops and never runs again', async () => {
