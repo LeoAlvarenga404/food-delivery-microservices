@@ -1,12 +1,13 @@
 import { execFile } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { setTimeout } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
 const runFile = promisify(execFile);
-const composeFile = fileURLToPath(new URL('../../../infra/compose.yaml', import.meta.url));
-const electionDeadlineMilliseconds = 90_000;
-const electionRetryPauseMilliseconds = 2_000;
+const composeFilePath = fileURLToPath(new URL('../../../infra/compose.yaml', import.meta.url));
+const electionDeadlineInMilliseconds = 90_000;
+const electionRetryPauseInMilliseconds = 2_000;
+const electionAttemptTimeoutInMilliseconds = 30_000;
 const electionCommand = [
   'exec',
   '-T',
@@ -19,6 +20,14 @@ const electionCommand = [
   '--all-topic-partitions',
 ];
 
+function describeFailure(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const output = 'stdout' in error && typeof error.stdout === 'string' ? error.stdout : '';
+  return output === '' ? error.message : `${error.message}\n${output}`;
+}
+
 export class DockerComposeStack {
   async stopService(serviceName: string): Promise<void> {
     await this.#compose(['stop', serviceName]);
@@ -29,30 +38,34 @@ export class DockerComposeStack {
   }
 
   async electPreferredLeaders(): Promise<void> {
-    const deadlineTimestampMilliseconds = Date.now() + electionDeadlineMilliseconds;
+    const deadlineInMilliseconds = Date.now() + electionDeadlineInMilliseconds;
     let lastFailure = 'no attempt was made';
-    while (Date.now() < deadlineTimestampMilliseconds) {
+    while (Date.now() < deadlineInMilliseconds) {
       try {
-        await this.#compose(electionCommand);
+        await this.#compose(electionCommand, electionAttemptTimeoutInMilliseconds);
         return;
       } catch (error) {
-        lastFailure = error instanceof Error ? error.message : String(error);
-        await setTimeout(electionRetryPauseMilliseconds);
+        lastFailure = describeFailure(error);
+        await delay(electionRetryPauseInMilliseconds);
       }
     }
     throw new Error(`preferred leader election did not succeed: ${lastFailure}`);
   }
 
-  async #compose(commandArguments: readonly string[]): Promise<void> {
-    await runFile('docker', [
-      'compose',
-      '--file',
-      composeFile,
-      '--profile',
-      'core',
-      '--profile',
-      'apps',
-      ...commandArguments,
-    ]);
+  async #compose(commandArguments: readonly string[], timeoutInMilliseconds = 0): Promise<void> {
+    await runFile(
+      'docker',
+      [
+        'compose',
+        '--file',
+        composeFilePath,
+        '--profile',
+        'core',
+        '--profile',
+        'apps',
+        ...commandArguments,
+      ],
+      { timeout: timeoutInMilliseconds },
+    );
   }
 }

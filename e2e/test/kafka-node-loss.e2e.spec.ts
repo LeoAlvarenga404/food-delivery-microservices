@@ -19,7 +19,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await stack.startService(stoppedKafkaNode);
   await stack.electPreferredLeaders();
-}, 180_000);
+});
 
 describe('placing an order while one Kafka node is stopped', () => {
   it('still approves the order with the two remaining nodes', async () => {
