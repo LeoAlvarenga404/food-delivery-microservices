@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { z } from 'zod';
 
 const runFile = promisify(execFile);
 const composeFilePath = fileURLToPath(new URL('../../../infra/compose.yaml', import.meta.url));
@@ -37,6 +38,22 @@ export class DockerComposeStack {
     await this.#compose(['up', '--detach', '--wait', serviceName]);
   }
 
+  async readTicketStatus(orderId: string): Promise<string> {
+    const query = `select status from tickets where order_id = '${z.uuid().parse(orderId)}'`;
+    const output = await this.#compose([
+      'exec',
+      '-T',
+      'kitchen-db',
+      'psql',
+      '--username=kitchen_service',
+      '--dbname=kitchen_service',
+      '--tuples-only',
+      '--no-align',
+      `--command=${query}`,
+    ]);
+    return output.trim();
+  }
+
   async electPreferredLeaders(): Promise<void> {
     const deadlineInMilliseconds = Date.now() + electionDeadlineInMilliseconds;
     let lastFailure = 'no attempt was made';
@@ -52,8 +69,8 @@ export class DockerComposeStack {
     throw new Error(`preferred leader election did not succeed: ${lastFailure}`);
   }
 
-  async #compose(commandArguments: readonly string[], timeoutInMilliseconds = 0): Promise<void> {
-    await runFile(
+  async #compose(commandArguments: readonly string[], timeoutInMilliseconds = 0): Promise<string> {
+    const { stdout } = await runFile(
       'docker',
       [
         'compose',
@@ -67,5 +84,6 @@ export class DockerComposeStack {
       ],
       { timeout: timeoutInMilliseconds },
     );
+    return stdout;
   }
 }

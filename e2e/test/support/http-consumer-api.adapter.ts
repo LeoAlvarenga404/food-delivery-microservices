@@ -6,6 +6,7 @@ const placedOrderSchema = z.object({ orderId: z.uuid() });
 const orderViewSchema = z.object({
   orderId: z.uuid(),
   status: z.string(),
+  rejectionReason: z.string().optional(),
   totalInCents: z.string(),
   currency: z.string(),
 });
