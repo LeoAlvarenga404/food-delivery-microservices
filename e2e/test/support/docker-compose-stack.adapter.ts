@@ -116,6 +116,21 @@ export class DockerComposeStack {
     throw new Error(`preferred leader election did not succeed: ${lastFailure}`);
   }
 
+  async readLogLinesSince(
+    serviceNames: readonly string[],
+    since: Date,
+  ): Promise<readonly string[]> {
+    const output = await this.#compose([
+      'logs',
+      '--no-color',
+      '--no-log-prefix',
+      '--since',
+      since.toISOString(),
+      ...serviceNames,
+    ]);
+    return output.split('\n');
+  }
+
   async #queryDatabase(serviceName: string, databaseName: string, query: string): Promise<string> {
     const output = await this.#compose([
       'exec',
