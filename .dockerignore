@@ -12,3 +12,9 @@
 .superpowers
 docs
 packages/contracts/src/generated
+**/dist
+**/*.tsbuildinfo
+**/*.log
+.idea
+.vscode
+**/.DS_Store
