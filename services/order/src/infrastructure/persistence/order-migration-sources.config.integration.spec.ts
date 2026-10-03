@@ -37,6 +37,7 @@ describe('orderMigrationSources', () => {
       'order/0006-add-order-rejection',
       'order/0007-add-compensated-saga-status',
       'order/0008-move-payment-token-out-of-saga-order',
+      'order/0009-add-timeout-rejection-reasons',
       'outbox/0001-create-outbox-table',
     ]);
   });

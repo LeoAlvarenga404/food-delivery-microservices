@@ -306,6 +306,18 @@ describe('GET /v1/orders/:orderId', () => {
     { reason: OrderRejectionReason.CONSUMER_BLOCKED, publicReason: 'CONSUMER_BLOCKED' },
     { reason: OrderRejectionReason.TICKET_REFUSED, publicReason: 'TICKET_REFUSED' },
     { reason: OrderRejectionReason.PAYMENT_DECLINED, publicReason: 'PAYMENT_DECLINED' },
+    {
+      reason: OrderRejectionReason.CONSUMER_VERIFICATION_TIMED_OUT,
+      publicReason: 'CONSUMER_VERIFICATION_TIMED_OUT',
+    },
+    {
+      reason: OrderRejectionReason.TICKET_CREATION_TIMED_OUT,
+      publicReason: 'TICKET_CREATION_TIMED_OUT',
+    },
+    {
+      reason: OrderRejectionReason.PAYMENT_AUTHORIZATION_TIMED_OUT,
+      publicReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    },
   ])(
     'answers an order rejected for $publicReason with that reason',
     async ({ reason, publicReason }) => {

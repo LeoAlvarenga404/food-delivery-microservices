@@ -11,7 +11,15 @@ export const orderViewSchema = z.object({
   orderId: z.uuid(),
   status: z.enum(['APPROVAL_PENDING', 'APPROVED', 'REJECTED']),
   rejectionReason: z
-    .enum(['CONSUMER_NOT_FOUND', 'CONSUMER_BLOCKED', 'TICKET_REFUSED', 'PAYMENT_DECLINED'])
+    .enum([
+      'CONSUMER_NOT_FOUND',
+      'CONSUMER_BLOCKED',
+      'TICKET_REFUSED',
+      'PAYMENT_DECLINED',
+      'CONSUMER_VERIFICATION_TIMED_OUT',
+      'TICKET_CREATION_TIMED_OUT',
+      'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    ])
     .optional(),
   lineItems: z.array(
     z.object({
@@ -42,20 +50,23 @@ function toStatusName(status: OrderStatus): OrderView['status'] {
   }
 }
 
+const rejectionReasonNames = new Map<OrderRejectionReason, RejectionReasonName>([
+  [OrderRejectionReason.CONSUMER_NOT_FOUND, 'CONSUMER_NOT_FOUND'],
+  [OrderRejectionReason.CONSUMER_BLOCKED, 'CONSUMER_BLOCKED'],
+  [OrderRejectionReason.TICKET_REFUSED, 'TICKET_REFUSED'],
+  [OrderRejectionReason.PAYMENT_DECLINED, 'PAYMENT_DECLINED'],
+  [OrderRejectionReason.CONSUMER_VERIFICATION_TIMED_OUT, 'CONSUMER_VERIFICATION_TIMED_OUT'],
+  [OrderRejectionReason.TICKET_CREATION_TIMED_OUT, 'TICKET_CREATION_TIMED_OUT'],
+  [OrderRejectionReason.PAYMENT_AUTHORIZATION_TIMED_OUT, 'PAYMENT_AUTHORIZATION_TIMED_OUT'],
+]);
+
 function toRejectionReasonName(reason: OrderRejectionReason): RejectionReasonName {
-  switch (reason) {
-    case OrderRejectionReason.CONSUMER_NOT_FOUND:
-      return 'CONSUMER_NOT_FOUND';
-    case OrderRejectionReason.CONSUMER_BLOCKED:
-      return 'CONSUMER_BLOCKED';
-    case OrderRejectionReason.TICKET_REFUSED:
-      return 'TICKET_REFUSED';
-    case OrderRejectionReason.PAYMENT_DECLINED:
-      return 'PAYMENT_DECLINED';
-    case OrderRejectionReason.UNSPECIFIED:
-      throw new Error('the order service answered a rejected order without a reason');
+  if (reason === OrderRejectionReason.UNSPECIFIED) {
+    throw new Error('the order service answered a rejected order without a reason');
   }
-  throw new Error('the order service answered an unknown rejection reason');
+  const name = rejectionReasonNames.get(reason);
+  if (name === undefined) throw new Error('the order service answered an unknown rejection reason');
+  return name;
 }
 
 export function toOrderView(order: GetOrderResponse): OrderView {

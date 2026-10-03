@@ -82,6 +82,9 @@ describe('toContractRejectionReason', () => {
     ['CONSUMER_BLOCKED', ContractRejectionReason.CONSUMER_BLOCKED],
     ['TICKET_REFUSED', ContractRejectionReason.TICKET_REFUSED],
     ['PAYMENT_DECLINED', ContractRejectionReason.PAYMENT_DECLINED],
+    ['CONSUMER_VERIFICATION_TIMED_OUT', ContractRejectionReason.CONSUMER_VERIFICATION_TIMED_OUT],
+    ['TICKET_CREATION_TIMED_OUT', ContractRejectionReason.TICKET_CREATION_TIMED_OUT],
+    ['PAYMENT_AUTHORIZATION_TIMED_OUT', ContractRejectionReason.PAYMENT_AUTHORIZATION_TIMED_OUT],
   ])('maps %s to its contract value', (reason, contractReason) => {
     expect(toContractRejectionReason(reason)).toBe(contractReason);
   });

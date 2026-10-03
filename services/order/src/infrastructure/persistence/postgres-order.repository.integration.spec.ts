@@ -6,6 +6,7 @@ import {
   type OrderTestDatabase,
 } from '../../../test/support/order-database.builder.ts';
 import { describeOrderRepositoryContract } from '../../../test/support/order-repository.contract.ts';
+import type { OrderRejectionReason } from '#domain/order/order.state.ts';
 import { PostgresOrderRepository } from './postgres-order.repository.ts';
 
 let testDatabase: OrderTestDatabase;
@@ -67,6 +68,29 @@ describe('postgres order repository rows', () => {
       rejectedAt,
       rejectionReason: 'CONSUMER_BLOCKED',
       version: 2,
+    });
+  });
+
+  it.each<OrderRejectionReason>([
+    'CONSUMER_VERIFICATION_TIMED_OUT',
+    'TICKET_CREATION_TIMED_OUT',
+    'PAYMENT_AUTHORIZATION_TIMED_OUT',
+  ])('stores an order rejected for %s', async (rejectionReason) => {
+    const repository = new PostgresOrderRepository(testDatabase.database);
+    const placed = buildOrder();
+    await repository.save(placed);
+    const stored = await repository.findById(placed.toSnapshot().orderId);
+    if (stored === undefined) throw new Error('the placed order was not stored');
+    const rejectedAt = new Date('2026-10-02T12:00:07.000Z');
+    unwrap(stored.reject(rejectionReason, rejectedAt));
+
+    await repository.save(stored);
+
+    const rejected = await repository.findById(placed.toSnapshot().orderId);
+    expect(rejected?.toSnapshot().state).toEqual({
+      status: 'REJECTED',
+      rejectionReason,
+      rejectedAt,
     });
   });
 
