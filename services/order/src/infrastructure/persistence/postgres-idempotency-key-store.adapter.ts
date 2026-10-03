@@ -2,6 +2,7 @@ import type { Kysely } from 'kysely';
 import type {
   IdempotencyKeyReservation,
   IdempotencyKeyStore,
+  ReservationOutcome,
 } from '#application/ports/idempotency-key-store.port.ts';
 import type { DB as OrderDatabase } from './generated/database.ts';
 
@@ -14,18 +15,21 @@ export class PostgresIdempotencyKeyStore implements IdempotencyKeyStore {
     this.#database = database;
   }
 
-  async reserve(reservation: IdempotencyKeyReservation): Promise<IdempotencyKeyReservation> {
-    await this.#database
+  async reserve(reservation: IdempotencyKeyReservation): Promise<ReservationOutcome> {
+    const inserted = await this.#database
       .insertInto('idempotencyKeys')
       .values(reservation)
       .onConflict((conflict) => conflict.columns(['consumerId', 'idempotencyKey']).doNothing())
-      .execute();
-    return this.#database
+      .returningAll()
+      .executeTakeFirst();
+    if (inserted !== undefined) return { wasInserted: true, reservation: inserted };
+    const stored = await this.#database
       .selectFrom('idempotencyKeys')
       .selectAll()
       .where('consumerId', '=', reservation.consumerId)
       .where('idempotencyKey', '=', reservation.idempotencyKey)
       .executeTakeFirstOrThrow();
+    return { wasInserted: false, reservation: stored };
   }
 
   async deleteExpired(now: Date): Promise<number> {

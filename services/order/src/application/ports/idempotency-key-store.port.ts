@@ -6,6 +6,11 @@ export interface IdempotencyKeyReservation {
   readonly createdAt: Date;
 }
 
+export interface ReservationOutcome {
+  readonly wasInserted: boolean;
+  readonly reservation: IdempotencyKeyReservation;
+}
+
 export interface IdempotencyKeyStore {
-  reserve(reservation: IdempotencyKeyReservation): Promise<IdempotencyKeyReservation>;
+  reserve(reservation: IdempotencyKeyReservation): Promise<ReservationOutcome>;
 }

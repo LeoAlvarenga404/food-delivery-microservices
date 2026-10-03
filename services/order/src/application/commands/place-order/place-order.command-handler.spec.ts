@@ -14,6 +14,7 @@ import {
   sagaTimeoutsInMilliseconds,
 } from '../../../../test/support/place-order-saga.builder.ts';
 import { parseRestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
+import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { PlaceOrderCommandHandler } from './place-order.command-handler.ts';
 
 const firstOrderId = '0199a5d0-0000-7000-8000-0000000000a1';
@@ -59,6 +60,24 @@ describe('PlaceOrderCommandHandler', () => {
 
     expect(repeated).toEqual(right({ orderId: firstOrderId }));
     expect(unitOfWork.orders.rows.size).toBe(1);
+    expect(unitOfWork.commands.sentCommands).toHaveLength(1);
+  });
+
+  it('decides a replay from the reservation it found, even when the order id would repeat', async () => {
+    const repeatingPlaceOrder = new PlaceOrderCommandHandler({
+      unitOfWork,
+      clock: new FakeClock(),
+      idGenerator: {
+        generateOrderId: () => unwrap(parseOrderId(firstOrderId)),
+        generateSagaId: () => firstSagaId,
+      },
+      sagaTimeoutsInMilliseconds,
+    });
+    await repeatingPlaceOrder.execute(buildPlaceOrderCommand());
+
+    const repeated = await repeatingPlaceOrder.execute(buildPlaceOrderCommand());
+
+    expect(repeated).toEqual(right({ orderId: firstOrderId }));
     expect(unitOfWork.commands.sentCommands).toHaveLength(1);
   });
 

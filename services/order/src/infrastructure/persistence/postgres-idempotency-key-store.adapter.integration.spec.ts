@@ -67,8 +67,8 @@ describe('postgres idempotency key store under concurrency', () => {
     expect(isSecondSettled).toBe(false);
     firstMayCommit.resolve(undefined);
 
-    expect(await first).toEqual(firstReservation);
-    expect(await second).toEqual(firstReservation);
+    expect(await first).toEqual({ wasInserted: true, reservation: firstReservation });
+    expect(await second).toEqual({ wasInserted: false, reservation: firstReservation });
   });
 
   it('lets a racing reservation take over the key when the first transaction rolls back', async () => {
@@ -90,7 +90,7 @@ describe('postgres idempotency key store under concurrency', () => {
     firstMayRollBack.resolve(undefined);
 
     await firstOutcome;
-    expect(await second).toEqual(repeatedReservation);
+    expect(await second).toEqual({ wasInserted: true, reservation: repeatedReservation });
     const rows = await testDatabase.database.selectFrom('idempotencyKeys').selectAll().execute();
     expect(rows.map((row) => row.orderId)).toEqual([repeatedReservation.orderId]);
   });

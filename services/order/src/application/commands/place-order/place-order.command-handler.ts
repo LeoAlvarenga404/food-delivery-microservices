@@ -57,14 +57,14 @@ export class PlaceOrderCommandHandler {
     const { unitOfWork, clock, idGenerator } = this.#dependencies;
     const placement = { orderId: idGenerator.generateOrderId(), placedAt: clock.now() };
     return unitOfWork.execute(command.metadata, async (scope) => {
-      const reservation = await scope.idempotencyKeys.reserve({
+      const reserved = await scope.idempotencyKeys.reserve({
         consumerId: command.consumerId,
         idempotencyKey: command.idempotencyKey,
         requestHash: command.requestHash,
         orderId: placement.orderId,
         createdAt: placement.placedAt,
       });
-      if (reservation.orderId !== placement.orderId) return replayPlacement(reservation, command);
+      if (!reserved.wasInserted) return replayPlacement(reserved.reservation, command);
       return this.#placeOrder(scope, command, placement);
     });
   }

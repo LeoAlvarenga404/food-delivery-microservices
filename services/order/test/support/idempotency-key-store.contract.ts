@@ -30,14 +30,20 @@ export function describeIdempotencyKeyStoreContract(
       store = createStore();
     });
 
-    it('reserves a key nobody used before', async () => {
-      expect(await store.reserve(firstReservation)).toEqual(firstReservation);
+    it('reserves a key nobody used before and reports the insertion', async () => {
+      expect(await store.reserve(firstReservation)).toEqual({
+        wasInserted: true,
+        reservation: firstReservation,
+      });
     });
 
     it('keeps the first reservation when the same consumer reuses the key', async () => {
       await store.reserve(firstReservation);
 
-      expect(await store.reserve(repeatedReservation)).toEqual(firstReservation);
+      expect(await store.reserve(repeatedReservation)).toEqual({
+        wasInserted: false,
+        reservation: firstReservation,
+      });
     });
 
     it('scopes keys per consumer', async () => {
@@ -47,7 +53,10 @@ export function describeIdempotencyKeyStoreContract(
       };
       await store.reserve(firstReservation);
 
-      expect(await store.reserve(otherConsumerReservation)).toEqual(otherConsumerReservation);
+      expect(await store.reserve(otherConsumerReservation)).toEqual({
+        wasInserted: true,
+        reservation: otherConsumerReservation,
+      });
     });
   });
 }
