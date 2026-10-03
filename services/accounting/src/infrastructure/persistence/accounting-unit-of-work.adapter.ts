@@ -1,6 +1,6 @@
 import { PostgresUnitOfWork, type UnitOfWorkContext } from '@fd/chassis-outbox';
-import type { Kysely, Transaction } from 'kysely';
-import type { TransactionScope, UnitOfWork } from '#application/ports/unit-of-work.port.ts';
+import type { Kysely } from 'kysely';
+import type { TransactionScope } from '#application/ports/unit-of-work.port.ts';
 import { OutboxReplySender } from '#infrastructure/messaging/outbound/outbox-reply-sender.adapter.ts';
 import type { DB as AccountingDatabase } from './generated/database.ts';
 import { PostgresPaymentRepository } from './postgres-payment.repository.ts';
@@ -30,13 +30,4 @@ export function createAccountingUnitOfWork(
     createRepositories: createTransactionScope,
     toOutboxMessages: () => [],
   });
-}
-
-export function joinTransaction(
-  unitOfWork: AccountingUnitOfWork,
-  transaction: Transaction<AccountingDatabase>,
-): UnitOfWork {
-  return {
-    execute: (metadata, work) => unitOfWork.executeWithin(transaction, metadata, work),
-  };
 }

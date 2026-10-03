@@ -342,3 +342,54 @@ describe('PostgresUnitOfWork.executeWithin', () => {
     expect(await countRows('markers')).toBe(0);
   });
 });
+
+describe('PostgresUnitOfWork.joinedTo', () => {
+  it('commits the work with the transaction it joined', async () => {
+    const outboxRowsSeenFromOutside = await runInTransaction(database, async (transaction) => {
+      const outcome = await postgresUnitOfWork()
+        .joinedTo(transaction)
+        .execute(metadata, async (tabs) => {
+          await renameTab(tabs, 'Friday dinner');
+          return right('renamed');
+        });
+      expect(outcome).toEqual(right('renamed'));
+      return countRows('outbox');
+    });
+
+    expect(outboxRowsSeenFromOutside).toBe(0);
+    expect(await countRows('tabs')).toBe(1);
+    expect(await countRows('outbox')).toBe(1);
+  });
+
+  it('rolls the work back with the transaction it joined', async () => {
+    const failing = runInTransaction(database, async (transaction) => {
+      await postgresUnitOfWork()
+        .joinedTo(transaction)
+        .execute(metadata, async (tabs) => {
+          await renameTab(tabs, 'Friday dinner');
+          return right('renamed');
+        });
+      throw new Error('the joined transaction failed');
+    });
+
+    await expect(failing).rejects.toThrow('the joined transaction failed');
+    expect(await countRows('tabs')).toBe(0);
+    expect(await countRows('outbox')).toBe(0);
+  });
+
+  it('discards only its own writes on a left and keeps the joined transaction usable', async () => {
+    await runInTransaction(database, async (transaction) => {
+      await transaction.insertInto('markers').values({ markerId: 'marker-1' }).execute();
+      return postgresUnitOfWork()
+        .joinedTo(transaction)
+        .execute(metadata, async (tabs) => {
+          await renameTab(tabs, 'Friday dinner');
+          return left({ type: 'TabLocked' });
+        });
+    });
+
+    expect(await countRows('markers')).toBe(1);
+    expect(await countRows('tabs')).toBe(0);
+    expect(await countRows('outbox')).toBe(0);
+  });
+});

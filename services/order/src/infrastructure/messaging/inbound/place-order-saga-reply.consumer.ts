@@ -6,10 +6,7 @@ import type { ApplyPlaceOrderSagaReplyError } from '#application/commands/apply-
 import { ApplyPlaceOrderSagaReplyCommandHandler } from '#application/commands/apply-place-order-saga-reply/apply-place-order-saga-reply.command-handler.ts';
 import type { Clock } from '#application/ports/clock.port.ts';
 import type { DB as OrderDatabase } from '#infrastructure/persistence/generated/database.ts';
-import {
-  joinTransaction,
-  type OrderUnitOfWork,
-} from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
+import type { OrderUnitOfWork } from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
 import { toPlaceOrderSagaReply } from './place-order-saga-reply.message-mapper.ts';
 
 export interface PlaceOrderSagaReplyConsumerSettings {
@@ -43,7 +40,7 @@ export function placeOrderSagaReplyConsumer(
       sagaId,
       messageId,
     }).child({ orderId });
-    const unitOfWork = joinTransaction(settings.unitOfWork, transaction);
+    const unitOfWork = settings.unitOfWork.joinedTo(transaction);
     const handler = new ApplyPlaceOrderSagaReplyCommandHandler(unitOfWork, settings.clock);
     const outcome = await handler.execute({
       sagaId,

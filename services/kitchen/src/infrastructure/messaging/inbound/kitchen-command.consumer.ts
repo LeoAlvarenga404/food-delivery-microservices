@@ -10,10 +10,7 @@ import type { IdGenerator } from '#application/ports/id-generator.port.ts';
 import type { KitchenReply } from '#application/ports/reply-sender.port.ts';
 import type { UnitOfWork } from '#application/ports/unit-of-work.port.ts';
 import type { DB as KitchenDatabase } from '#infrastructure/persistence/generated/database.ts';
-import {
-  joinTransaction,
-  type KitchenUnitOfWork,
-} from '#infrastructure/persistence/kitchen-unit-of-work.adapter.ts';
+import type { KitchenUnitOfWork } from '#infrastructure/persistence/kitchen-unit-of-work.adapter.ts';
 import { toKitchenCommand, type KitchenCommand } from './kitchen-command.message-mapper.ts';
 
 export interface KitchenCommandConsumerSettings {
@@ -51,7 +48,7 @@ export function kitchenCommandConsumer(
       sagaId: kitchenCommand.command.sagaId,
       messageId,
     });
-    const unitOfWork = joinTransaction(settings.unitOfWork, transaction);
+    const unitOfWork = settings.unitOfWork.joinedTo(transaction);
     const outcome = await carryOut(kitchenCommand, unitOfWork, settings.idGenerator);
     if (outcome.isLeft()) {
       logger.warn({ failure: outcome.failure }, `${kitchenCommand.type} refused, no reply sent`);

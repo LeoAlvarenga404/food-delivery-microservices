@@ -1,6 +1,6 @@
 import { PostgresUnitOfWork, type UnitOfWorkContext } from '@fd/chassis-outbox';
-import type { Kysely, Transaction } from 'kysely';
-import type { TransactionScope, UnitOfWork } from '#application/ports/unit-of-work.port.ts';
+import type { Kysely } from 'kysely';
+import type { TransactionScope } from '#application/ports/unit-of-work.port.ts';
 import type { OrderEvent } from '#domain/order/order.aggregate.ts';
 import type { OrderRepository } from '#domain/order/order.repository.ts';
 import { OutboxCommandSender } from '#infrastructure/messaging/outbound/outbox-command-sender.adapter.ts';
@@ -51,13 +51,4 @@ export function createOrderUnitOfWork(settings: OrderUnitOfWorkSettings): OrderU
     createRepositories: createTransactionScope,
     toOutboxMessages: toOrderEventMessages,
   });
-}
-
-export function joinTransaction(
-  unitOfWork: OrderUnitOfWork,
-  transaction: Transaction<OrderDatabase>,
-): UnitOfWork {
-  return {
-    execute: (metadata, work) => unitOfWork.executeWithin(transaction, metadata, work),
-  };
 }

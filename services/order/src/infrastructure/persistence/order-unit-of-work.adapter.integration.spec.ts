@@ -16,11 +16,7 @@ import {
 } from '../../../test/support/place-order-command.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { UnitOfWork } from '#application/ports/unit-of-work.port.ts';
-import {
-  createOrderUnitOfWork,
-  joinTransaction,
-  type OrderUnitOfWork,
-} from './order-unit-of-work.adapter.ts';
+import { createOrderUnitOfWork, type OrderUnitOfWork } from './order-unit-of-work.adapter.ts';
 
 interface OutboxRow {
   readonly topic: string;
@@ -116,7 +112,7 @@ describe('order unit of work', () => {
 
   it('commits or rolls back with the transaction it joined', async () => {
     const rollback = runInTransaction(testDatabase.database, async (transaction) => {
-      const placement = await placeOrderWith(joinTransaction(unitOfWork, transaction)).execute(
+      const placement = await placeOrderWith(unitOfWork.joinedTo(transaction)).execute(
         buildPlaceOrderCommand(),
       );
       expect(placement.isRight()).toBe(true);

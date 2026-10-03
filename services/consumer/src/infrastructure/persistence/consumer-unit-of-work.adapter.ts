@@ -1,6 +1,6 @@
 import { PostgresUnitOfWork, type UnitOfWorkContext } from '@fd/chassis-outbox';
-import type { Kysely, Transaction } from 'kysely';
-import type { TransactionScope, UnitOfWork } from '#application/ports/unit-of-work.port.ts';
+import type { Kysely } from 'kysely';
+import type { TransactionScope } from '#application/ports/unit-of-work.port.ts';
 import { OutboxReplySender } from '#infrastructure/messaging/outbound/outbox-reply-sender.adapter.ts';
 import type { DB as ConsumerDatabase } from './generated/database.ts';
 import { PostgresConsumerRepository } from './postgres-consumer.repository.ts';
@@ -28,13 +28,4 @@ export function createConsumerUnitOfWork(settings: ConsumerUnitOfWorkSettings): 
     createRepositories: createTransactionScope,
     toOutboxMessages: () => [],
   });
-}
-
-export function joinTransaction(
-  unitOfWork: ConsumerUnitOfWork,
-  transaction: Transaction<ConsumerDatabase>,
-): UnitOfWork {
-  return {
-    execute: (metadata, work) => unitOfWork.executeWithin(transaction, metadata, work),
-  };
 }
