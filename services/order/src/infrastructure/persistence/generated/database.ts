@@ -49,6 +49,8 @@ export interface Orders {
   deliveryStreet: string;
   orderId: string;
   placedAt: Timestamp;
+  rejectedAt: Timestamp | null;
+  rejectionReason: string | null;
   restaurantId: string;
   status: string;
   totalInCents: bigint;
