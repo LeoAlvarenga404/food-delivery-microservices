@@ -9,6 +9,7 @@ const composeFilePath = fileURLToPath(new URL('../../../infra/compose.yaml', imp
 const electionDeadlineInMilliseconds = 90_000;
 const electionRetryPauseInMilliseconds = 2_000;
 const electionAttemptTimeoutInMilliseconds = 30_000;
+const sagaStepPollIntervalInMilliseconds = 500;
 const kafkaToolPrefix = ['exec', '-T', 'kafka-1'];
 const kafkaBootstrapServer = ['--bootstrap-server', 'kafka-1:29092'];
 const electionCommand = [
@@ -34,24 +35,50 @@ export class DockerComposeStack {
     await this.#compose(['stop', serviceName]);
   }
 
+  async killService(serviceName: string): Promise<void> {
+    await this.#compose(['kill', serviceName]);
+  }
+
   async startService(serviceName: string): Promise<void> {
     await this.#compose(['up', '--detach', '--wait', serviceName]);
   }
 
   async readTicketStatus(orderId: string): Promise<string> {
     const query = `select status from tickets where order_id = '${z.uuid().parse(orderId)}'`;
+    return this.#queryDatabase('kitchen-db', 'kitchen_service', query);
+  }
+
+  async waitForSagaStep(
+    orderId: string,
+    step: string,
+    limitInMilliseconds = 60_000,
+  ): Promise<void> {
+    const query = `select step from saga_instances where order_id = '${z.uuid().parse(orderId)}'`;
+    const deadlineInMilliseconds = Date.now() + limitInMilliseconds;
+    let lastStep = 'no saga';
+    while (Date.now() < deadlineInMilliseconds) {
+      lastStep = await this.#queryDatabase('order-db', 'order_service', query);
+      if (lastStep === step) return;
+      await delay(sagaStepPollIntervalInMilliseconds);
+    }
+    throw new Error(
+      `saga of order ${orderId} did not reach ${step} in time; last seen ${lastStep}`,
+    );
+  }
+
+  async findActiveKafkaController(): Promise<string> {
     const output = await this.#compose([
-      'exec',
-      '-T',
-      'kitchen-db',
-      'psql',
-      '--username=kitchen_service',
-      '--dbname=kitchen_service',
-      '--tuples-only',
-      '--no-align',
-      `--command=${query}`,
+      ...kafkaToolPrefix,
+      '/opt/kafka/bin/kafka-metadata-quorum.sh',
+      ...kafkaBootstrapServer,
+      'describe',
+      '--status',
     ]);
-    return output.trim();
+    const leaderId = /^LeaderId:\s+(\d+)$/m.exec(output)?.[1];
+    if (leaderId === undefined)
+      throw new Error(`no active Kafka controller in:
+${output}`);
+    return `kafka-${leaderId}`;
   }
 
   async readPartitionsByKey(topic: string): Promise<ReadonlyMap<string, number>> {
@@ -88,6 +115,21 @@ export class DockerComposeStack {
       }
     }
     throw new Error(`preferred leader election did not succeed: ${lastFailure}`);
+  }
+
+  async #queryDatabase(serviceName: string, databaseName: string, query: string): Promise<string> {
+    const output = await this.#compose([
+      'exec',
+      '-T',
+      serviceName,
+      'psql',
+      `--username=${databaseName}`,
+      `--dbname=${databaseName}`,
+      '--tuples-only',
+      '--no-align',
+      `--command=${query}`,
+    ]);
+    return output.trim();
   }
 
   async #compose(commandArguments: readonly string[], timeoutInMilliseconds = 0): Promise<string> {

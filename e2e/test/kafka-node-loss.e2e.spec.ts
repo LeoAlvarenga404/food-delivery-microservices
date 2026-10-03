@@ -9,10 +9,11 @@ import {
 
 const consumerApi = new HttpConsumerApi();
 const stack = new DockerComposeStack();
-const stoppedKafkaNode = 'kafka-1';
+let stoppedKafkaNode = 'no node';
 
 beforeAll(async () => {
   await consumerApi.waitUntilReachable();
+  stoppedKafkaNode = await stack.findActiveKafkaController();
   await stack.stopService(stoppedKafkaNode);
 });
 
@@ -21,7 +22,7 @@ afterAll(async () => {
   await stack.electPreferredLeaders();
 });
 
-describe('placing an order while one Kafka node is stopped', () => {
+describe('placing an order while the active Kafka controller is stopped', () => {
   it('still approves the order with the two remaining nodes', async () => {
     const response = await consumerApi.placeOrder(pizzeriaOrder, {
       'idempotency-key': randomUUID(),
