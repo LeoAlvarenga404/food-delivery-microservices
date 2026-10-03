@@ -1,5 +1,6 @@
 import { createLogger } from '@fd/chassis-observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fakeOrderServiceAccess } from '../test/support/order-service-access.fake.ts';
 import { FakeOrderService } from '../test/support/order-service.fake.ts';
 import { createConsumerBffServer, type ConsumerBffServer } from './main.ts';
 
@@ -10,6 +11,7 @@ let server: ConsumerBffServer;
 beforeEach(async () => {
   server = await createConsumerBffServer({
     orderService: new FakeOrderService().client(),
+    orderServiceAccess: fakeOrderServiceAccess,
     logger: createLogger({ serviceName: 'consumer-bff', level: 'silent' }),
     generateCorrelationId: () => generatedCorrelationId,
   });
@@ -36,7 +38,7 @@ describe('consumer bff server', () => {
     const response = await server.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer consumer-token' },
       payload: '{"restaurantId":',
     });
 
@@ -74,7 +76,12 @@ describe('consumer bff server', () => {
   });
 
   it('echoes the correlation id on a problem', async () => {
-    const response = await server.inject({ method: 'POST', url: '/v1/orders', payload: {} });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/orders',
+      headers: { authorization: 'Bearer consumer-token' },
+      payload: {},
+    });
 
     expect(response.statusCode).toBe(400);
     expect(response.headers['x-correlation-id']).toBe(generatedCorrelationId);
@@ -90,10 +97,7 @@ describe('consumer bff server', () => {
       paths: {
         '/v1/orders': {
           post: {
-            parameters: [
-              { in: 'header', name: 'idempotency-key', required: true },
-              { in: 'header', name: 'x-consumer-id', required: true },
-            ],
+            parameters: [{ in: 'header', name: 'idempotency-key', required: true }],
             requestBody: {
               content: {
                 'application/json': {

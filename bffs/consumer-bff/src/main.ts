@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient, type Client } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
 import fastifySwagger from '@fastify/swagger';
+import { createAccessTokenVerifier, createTokenExchange } from '@fd/chassis-auth';
 import { stopOnSignals } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
@@ -18,12 +19,17 @@ import {
   readConsumerBffConfiguration,
   type ConsumerBffConfiguration,
 } from './consumer-bff.config.ts';
+import {
+  createOrderServiceAccess,
+  type OrderServiceAccess,
+} from './http/order-service-access.adapter.ts';
 import { problemDetails, sendProblemDetails } from './http/problem-details.adapter.ts';
 import { traceContextInterceptor } from './http/trace-context-interceptor.adapter.ts';
 import { orderRoutes } from './orders/order.routes.ts';
 
 export interface ConsumerBffSettings {
   readonly orderService: Client<typeof OrderService>;
+  readonly orderServiceAccess: OrderServiceAccess;
   readonly logger: Logger;
   readonly generateCorrelationId: () => string;
 }
@@ -42,6 +48,7 @@ export interface RunningConsumerBff {
 }
 
 const correlationIdHeader = 'x-correlation-id';
+const consumerBffClientId = 'consumer-bff';
 
 function resolveCorrelationId(
   header: string | string[] | undefined,
@@ -85,10 +92,30 @@ export async function createConsumerBffServer(
     openapi: { info: { title: 'Consumer API', version: '1.0.0' } },
     transform: jsonSchemaTransform,
   });
-  await server.register(orderRoutes, { orderService: settings.orderService });
+  await server.register(orderRoutes, {
+    orderService: settings.orderService,
+    orderServiceAccess: settings.orderServiceAccess,
+  });
   server.get('/health', { schema: { hide: true } }, () => ({ status: 'ok' }));
   server.get('/openapi.json', { schema: { hide: true } }, () => server.swagger());
   return server;
+}
+
+function createConfiguredOrderServiceAccess(
+  configuration: ConsumerBffConfiguration,
+): OrderServiceAccess {
+  return createOrderServiceAccess({
+    verify: createAccessTokenVerifier({
+      issuer: configuration.accessTokenIssuer,
+      audience: consumerBffClientId,
+      jwksUrl: configuration.accessTokenJwksUrl,
+    }),
+    exchange: createTokenExchange({
+      tokenUrl: configuration.tokenExchangeUrl,
+      clientId: consumerBffClientId,
+      clientSecret: configuration.clientSecret,
+    }),
+  });
 }
 
 export async function startConsumerBff(
@@ -107,6 +134,7 @@ export async function startConsumerBff(
   );
   const server = await createConsumerBffServer({
     orderService,
+    orderServiceAccess: createConfiguredOrderServiceAccess(configuration),
     logger,
     generateCorrelationId: generateUuidV7,
   });

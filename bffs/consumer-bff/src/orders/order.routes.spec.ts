@@ -10,16 +10,17 @@ import {
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fakeOrderServiceAccess } from '../../test/support/order-service-access.fake.ts';
 import { FakeOrderService, placedOrderId } from '../../test/support/order-service.fake.ts';
 import { createConsumerBffServer, type ConsumerBffServer } from '../main.ts';
 
-const consumerId = '0199a5d0-0000-7000-8000-0000000000c1';
 const idempotencyKey = '0199a5d0-0000-4000-8000-0000000000f1';
 const restaurantId = '0199a5d0-0000-7000-8000-0000000000b1';
 const margheritaId = '0199a5d0-0000-7000-8000-0000000000d1';
 const callerCorrelationId = '0199a5d0-0000-7000-8000-0000000000e2';
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
-const placementHeaders = { 'idempotency-key': idempotencyKey, 'x-consumer-id': consumerId };
+const consumerAuthorization = { authorization: 'Bearer consumer-token' };
+const placementHeaders = { 'idempotency-key': idempotencyKey, ...consumerAuthorization };
 
 let orderService: FakeOrderService;
 let server: ConsumerBffServer;
@@ -63,6 +64,7 @@ beforeEach(async () => {
   logEntries = [];
   server = await createConsumerBffServer({
     orderService: orderService.client(),
+    orderServiceAccess: fakeOrderServiceAccess,
     logger: captureLogger(),
     generateCorrelationId: () => generatedCorrelationId,
   });
@@ -71,16 +73,16 @@ beforeEach(async () => {
 afterEach(() => server.close());
 
 describe('POST /v1/orders', () => {
-  it('places the order for the consumer named by X-Consumer-Id and answers with its location', async () => {
+  it('places the order with the order service token of the consumer and answers with its location', async () => {
     const response = await placeOrder(placementHeaders);
 
     expect(response.statusCode).toBe(201);
+    expect(orderService.receivedAuthorizations).toEqual(['Bearer order-service-token']);
     expect(response.headers.location).toBe(`/v1/orders/${placedOrderId}`);
     expect(response.json()).toEqual({ orderId: placedOrderId });
     expect(orderService.placeOrderRequests).toMatchObject([
       {
         idempotencyKey,
-        consumerId,
         restaurantId,
         lineItems: [{ menuItemId: margheritaId, quantity: 2 }],
         deliveryAddress: {
@@ -93,6 +95,30 @@ describe('POST /v1/orders', () => {
       },
     ]);
   });
+
+  it.each([
+    { scenario: 'without a token', headers: { 'idempotency-key': idempotencyKey }, status: 401 },
+    {
+      scenario: 'with a token it cannot exchange',
+      headers: { 'idempotency-key': idempotencyKey, authorization: 'Bearer expired-token' },
+      status: 401,
+    },
+    {
+      scenario: 'with the token of a caller who is not a consumer',
+      headers: { 'idempotency-key': idempotencyKey, authorization: 'Bearer staff-token' },
+      status: 403,
+    },
+  ])(
+    'answers a placement $scenario with a $status problem before validating it',
+    async ({ headers, status }) => {
+      const response = await placeOrder(headers, placeOrderBody({ restaurantId: 'pizzeria' }));
+
+      expect(response.statusCode).toBe(status);
+      expect(response.headers['content-type']).toBe('application/problem+json; charset=utf-8');
+      expect(response.json()).toMatchObject({ type: 'about:blank', status });
+      expect(orderService.receivedCorrelationIds).toHaveLength(0);
+    },
+  );
 
   it('forwards an uppercase Idempotency-Key to the order service in lowercase', async () => {
     await placeOrder({ ...placementHeaders, 'idempotency-key': idempotencyKey.toUpperCase() });
@@ -137,7 +163,7 @@ describe('POST /v1/orders', () => {
   it.each([
     {
       invalidPart: 'a missing Idempotency-Key',
-      headers: { 'x-consumer-id': consumerId },
+      headers: consumerAuthorization,
       body: placeOrderBody(),
     },
     {
@@ -148,16 +174,6 @@ describe('POST /v1/orders', () => {
     {
       invalidPart: 'an Idempotency-Key longer than a uuid',
       headers: { ...placementHeaders, 'idempotency-key': `${idempotencyKey}0` },
-      body: placeOrderBody(),
-    },
-    {
-      invalidPart: 'a missing X-Consumer-Id',
-      headers: { 'idempotency-key': idempotencyKey },
-      body: placeOrderBody(),
-    },
-    {
-      invalidPart: 'a consumer id that is not a uuid',
-      headers: { ...placementHeaders, 'x-consumer-id': 'consumer-1' },
       body: placeOrderBody(),
     },
     {
@@ -231,6 +247,8 @@ describe('POST /v1/orders', () => {
   );
 
   it.each([
+    { code: Code.Unauthenticated, status: 401 },
+    { code: Code.PermissionDenied, status: 403 },
     { code: Code.Unavailable, status: 503 },
     { code: Code.DeadlineExceeded, status: 504 },
     { code: Code.Internal, status: 500 },
@@ -286,7 +304,11 @@ describe('GET /v1/orders/:orderId', () => {
         }),
       );
 
-      const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+      const response = await server.inject({
+        method: 'GET',
+        headers: consumerAuthorization,
+        url: `/v1/orders/${placedOrderId}`,
+      });
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({
@@ -332,7 +354,11 @@ describe('GET /v1/orders/:orderId', () => {
         }),
       );
 
-      const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+      const response = await server.inject({
+        method: 'GET',
+        headers: consumerAuthorization,
+        url: `/v1/orders/${placedOrderId}`,
+      });
 
       expect(response.statusCode).toBe(200);
       expect(response.json()).toMatchObject({ status: 'REJECTED', rejectionReason: publicReason });
@@ -349,7 +375,11 @@ describe('GET /v1/orders/:orderId', () => {
       }),
     );
 
-    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+    const response = await server.inject({
+      method: 'GET',
+      headers: consumerAuthorization,
+      url: `/v1/orders/${placedOrderId}`,
+    });
 
     expect(response.statusCode).toBe(500);
   });
@@ -365,7 +395,11 @@ describe('GET /v1/orders/:orderId', () => {
       }),
     );
 
-    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+    const response = await server.inject({
+      method: 'GET',
+      headers: consumerAuthorization,
+      url: `/v1/orders/${placedOrderId}`,
+    });
 
     expect(response.statusCode).toBe(500);
     expect(response.json()).toEqual({
@@ -386,7 +420,11 @@ describe('GET /v1/orders/:orderId', () => {
       }),
     );
 
-    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+    const response = await server.inject({
+      method: 'GET',
+      headers: consumerAuthorization,
+      url: `/v1/orders/${placedOrderId}`,
+    });
 
     expect(response.json()).toMatchObject({
       status: 'APPROVAL_PENDING',
@@ -395,7 +433,11 @@ describe('GET /v1/orders/:orderId', () => {
   });
 
   it('answers an unknown order with a not found problem', async () => {
-    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+    const response = await server.inject({
+      method: 'GET',
+      headers: consumerAuthorization,
+      url: `/v1/orders/${placedOrderId}`,
+    });
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ type: 'about:blank', title: 'Not Found', status: 404 });
@@ -417,14 +459,29 @@ describe('GET /v1/orders/:orderId', () => {
     await server.inject({
       method: 'GET',
       url: `/v1/orders/${placedOrderId}`,
-      headers: row.sent === undefined ? {} : { 'x-correlation-id': row.sent },
+      headers:
+        row.sent === undefined
+          ? consumerAuthorization
+          : { ...consumerAuthorization, 'x-correlation-id': row.sent },
     });
 
     expect(orderService.receivedCorrelationIds).toEqual([row.expected]);
   });
 
+  it('answers a lookup without a token with an unauthorized problem', async () => {
+    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toEqual({ type: 'about:blank', title: 'Unauthorized', status: 401 });
+    expect(orderService.receivedCorrelationIds).toHaveLength(0);
+  });
+
   it('answers an order id that is not a uuid with a bad request problem', async () => {
-    const response = await server.inject({ method: 'GET', url: '/v1/orders/order-1' });
+    const response = await server.inject({
+      method: 'GET',
+      headers: consumerAuthorization,
+      url: '/v1/orders/order-1',
+    });
 
     expect(response.statusCode).toBe(400);
     expect(response.headers['content-type']).toBe('application/problem+json; charset=utf-8');
@@ -438,7 +495,11 @@ describe('GET /v1/orders/:orderId', () => {
       create(GetOrderResponseSchema, { orderId: placedOrderId, currency: 'BRL' }),
     );
 
-    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+    const response = await server.inject({
+      method: 'GET',
+      headers: consumerAuthorization,
+      url: `/v1/orders/${placedOrderId}`,
+    });
 
     expect(response.statusCode).toBe(500);
   });

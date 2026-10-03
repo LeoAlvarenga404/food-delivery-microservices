@@ -20,6 +20,7 @@ export class FakeOrderService {
   readonly placeOrderRequests: PlaceOrderRequest[] = [];
   readonly receivedCorrelationIds: string[] = [];
   readonly receivedTraceparents: (string | null)[] = [];
+  readonly receivedAuthorizations: (string | null)[] = [];
   readonly orders = new Map<string, GetOrderResponse>();
   answeredOrderId = placedOrderId;
   failure: ConnectError | undefined = undefined;
@@ -53,6 +54,7 @@ export class FakeOrderService {
   async #receive(context: HandlerContext): Promise<void> {
     this.receivedCorrelationIds.push(context.requestHeader.get('x-correlation-id') ?? '');
     this.receivedTraceparents.push(context.requestHeader.get('traceparent'));
+    this.receivedAuthorizations.push(context.requestHeader.get('authorization'));
     await delay(this.responseDelayInMilliseconds);
     if (this.failure !== undefined) throw this.failure;
   }

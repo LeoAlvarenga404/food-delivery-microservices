@@ -1,12 +1,15 @@
 import type { CallOptions, Client } from '@connectrpc/connect';
 import type { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
+import type { FastifyRequest } from 'fastify';
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { problemDetailsSchema } from '../http/problem-details.adapter.ts';
+import type { OrderServiceAccess } from '../http/order-service-access.adapter.ts';
+import { problemDetails, problemDetailsSchema } from '../http/problem-details.adapter.ts';
 import { orderViewSchema, toOrderView } from './order-view.message-mapper.ts';
 
 export interface OrderRoutesSettings {
   readonly orderService: Client<typeof OrderService>;
+  readonly orderServiceAccess: OrderServiceAccess;
 }
 
 type OrderRoutesServer = Parameters<FastifyPluginCallbackZod<OrderRoutesSettings>>[0];
@@ -15,9 +18,10 @@ const problemResponse = {
   content: { 'application/problem+json': { schema: problemDetailsSchema } },
 };
 const problemResponses = { '4xx': problemResponse, '5xx': problemResponse };
+const orderServiceTokenDecorator = 'orderServiceToken';
 
 const placeOrderSchema = {
-  headers: z.object({ 'idempotency-key': z.uuid(), 'x-consumer-id': z.uuid() }),
+  headers: z.object({ 'idempotency-key': z.uuid() }),
   body: z.object({
     restaurantId: z.uuid(),
     lineItems: z.array(z.object({ menuItemId: z.uuid(), quantity: z.int32() })),
@@ -37,8 +41,24 @@ const getOrderSchema = {
   response: { 200: orderViewSchema, ...problemResponses },
 };
 
-function forwardCorrelation(correlationId: string): CallOptions {
-  return { headers: { 'x-correlation-id': correlationId } };
+function orderServiceCall(request: FastifyRequest): CallOptions {
+  const orderServiceToken = request.getDecorator<string>(orderServiceTokenDecorator);
+  return {
+    headers: { 'x-correlation-id': request.id, authorization: `Bearer ${orderServiceToken}` },
+  };
+}
+
+function requireOrderServiceAccess(server: OrderRoutesServer, settings: OrderRoutesSettings): void {
+  server.decorateRequest(orderServiceTokenDecorator, '');
+  server.addHook('onRequest', async (request, reply) => {
+    const access = await settings.orderServiceAccess(request.headers.authorization);
+    if (access.isLeft()) {
+      const { status } = access.failure;
+      return reply.code(status).type('application/problem+json').send(problemDetails(status));
+    }
+    request.setDecorator(orderServiceTokenDecorator, access.success);
+    return undefined;
+  });
 }
 
 function registerPlaceOrder(server: OrderRoutesServer, settings: OrderRoutesSettings): void {
@@ -48,13 +68,12 @@ function registerPlaceOrder(server: OrderRoutesServer, settings: OrderRoutesSett
     const placed = await settings.orderService.placeOrder(
       {
         idempotencyKey: headers['idempotency-key'].toLowerCase(),
-        consumerId: headers['x-consumer-id'],
         restaurantId: body.restaurantId,
         lineItems: body.lineItems.map(({ menuItemId, quantity }) => ({ menuItemId, quantity })),
         deliveryAddress: { street, number, city, postalCode },
         paymentToken: body.paymentToken,
       },
-      forwardCorrelation(request.id),
+      orderServiceCall(request),
     );
     return reply
       .code(201)
@@ -67,7 +86,7 @@ function registerGetOrder(server: OrderRoutesServer, settings: OrderRoutesSettin
   server.get('/v1/orders/:orderId', { schema: getOrderSchema }, async (request) => {
     const order = await settings.orderService.getOrder(
       { orderId: request.params.orderId },
-      forwardCorrelation(request.id),
+      orderServiceCall(request),
     );
     return toOrderView(order);
   });
@@ -78,6 +97,7 @@ export const orderRoutes: FastifyPluginCallbackZod<OrderRoutesSettings> = (
   settings,
   done,
 ) => {
+  requireOrderServiceAccess(server, settings);
   registerPlaceOrder(server, settings);
   registerGetOrder(server, settings);
   done();

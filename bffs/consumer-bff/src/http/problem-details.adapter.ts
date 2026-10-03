@@ -19,6 +19,8 @@ type ProblemExplanation = Pick<ProblemDetails, 'detail' | 'reason'>;
 
 const httpStatusByConnectCode = new Map<Code, number>([
   [Code.InvalidArgument, 400],
+  [Code.Unauthenticated, 401],
+  [Code.PermissionDenied, 403],
   [Code.NotFound, 404],
   [Code.AlreadyExists, 422],
   [Code.FailedPrecondition, 422],

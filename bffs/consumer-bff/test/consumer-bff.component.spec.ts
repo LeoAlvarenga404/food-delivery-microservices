@@ -1,7 +1,13 @@
 import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
+import { createAccessTokenVerifier, readBearerToken } from '@fd/chassis-auth';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
-import { recordSpans, traceparentOf } from '@fd/chassis-testing';
+import {
+  recordSpans,
+  startKeycloakContainer,
+  traceparentOf,
+  type StartedKeycloak,
+} from '@fd/chassis-testing';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { startConsumerBff, type RunningConsumerBff } from '../src/main.ts';
 import { FakeOrderService, placedOrderId } from './support/order-service.fake.ts';
@@ -11,15 +17,21 @@ const spans = recordSpans();
 
 let orderService: FakeOrderService;
 let orderServer: FastifyInstance;
+let keycloak: StartedKeycloak;
 let consumerBff: RunningConsumerBff;
+let consumerToken: string;
 
-function placeOrder(): Promise<Response> {
+function bearer(accessToken: string): Record<string, string> {
+  return { authorization: `Bearer ${accessToken}` };
+}
+
+function placeOrder(authorization = bearer(consumerToken)): Promise<Response> {
   return fetch(`${consumerBff.url}/v1/orders`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
       'idempotency-key': '0199a5d0-0000-4000-8000-0000000000f1',
-      'x-consumer-id': '0199a5d0-0000-7000-8000-0000000000c1',
+      ...authorization,
     },
     body: JSON.stringify({
       restaurantId: '0199a5d0-0000-7000-8000-0000000000b1',
@@ -36,6 +48,8 @@ function placeOrder(): Promise<Response> {
 }
 
 beforeAll(async () => {
+  keycloak = await startKeycloakContainer();
+  consumerToken = await keycloak.signIn('consumer-a');
   orderService = new FakeOrderService();
   orderServer = fastify();
   await orderServer.register(fastifyConnectPlugin, {
@@ -48,6 +62,10 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
+    accessTokenIssuer: keycloak.issuer,
+    accessTokenJwksUrl: keycloak.jwksUrl,
+    tokenExchangeUrl: keycloak.tokenUrl,
+    clientSecret: keycloak.consumerBffClientSecret,
   });
 });
 
@@ -58,6 +76,7 @@ afterEach(() => {
 afterAll(async () => {
   await consumerBff.stop();
   await orderServer.close();
+  await keycloak.stop();
 });
 
 describe('consumer bff', () => {
@@ -66,6 +85,35 @@ describe('consumer bff', () => {
 
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({ orderId: placedOrderId });
+  });
+
+  it('calls the order service with a token exchanged for its audience', async () => {
+    await placeOrder();
+
+    const forwarded = readBearerToken(orderService.receivedAuthorizations.at(-1));
+    const verifier = createAccessTokenVerifier({
+      issuer: keycloak.issuer,
+      audience: 'order-service',
+      jwksUrl: keycloak.jwksUrl,
+    });
+    const verified = await verifier(forwarded ?? '');
+    expect(verified.isRight() && verified.success.subject).toBe(
+      '0199a5d0-0000-7000-8000-0000000000c1',
+    );
+  });
+
+  it.each([
+    { scenario: 'without a token', username: undefined, status: 401 },
+    { scenario: 'with the token of restaurant staff', username: 'staff-a', status: 403 },
+  ])('answers a placement $scenario with a $status problem', async ({ username, status }) => {
+    const authorization = username === undefined ? {} : bearer(await keycloak.signIn(username));
+    const callsBefore = orderService.placeOrderRequests.length;
+
+    const response = await placeOrder(authorization);
+
+    expect(response.status).toBe(status);
+    expect(response.headers.get('content-type')).toBe('application/problem+json; charset=utf-8');
+    expect(orderService.placeOrderRequests).toHaveLength(callsBefore);
   });
 
   it('sends the span of each order service call as traceparent', async () => {

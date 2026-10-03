@@ -71,6 +71,9 @@ importers:
       '@fastify/swagger':
         specifier: 9.9.1
         version: 9.9.1
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -83,6 +86,9 @@ importers:
       '@fd/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@fd/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       fastify:
         specifier: 5.12.5
         version: 5.12.5
