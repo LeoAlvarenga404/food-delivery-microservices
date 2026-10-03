@@ -1,5 +1,5 @@
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
-import { createHostKafka } from './create-host-kafka.ts';
+import { createKafkaClient } from './create-kafka-client.ts';
 import { topicCatalogue, type TopicDefinition } from './topic-catalogue.ts';
 
 const partitionCount = 6;
@@ -14,7 +14,7 @@ function toTopicConfiguration(topic: TopicDefinition): KafkaJS.ITopicConfig {
   };
 }
 
-const admin = createHostKafka().admin();
+const admin = createKafkaClient().admin();
 await admin.connect();
 
 try {

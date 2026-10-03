@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
 import { KafkaConnectClient } from '../debezium/kafka-connect-client.ts';
 import { outboxConnectorConfiguration } from '../debezium/outbox-connector-configuration.ts';
-import { createHostKafka } from '../kafka/create-host-kafka.ts';
+import { createKafkaClient } from '../kafka/create-kafka-client.ts';
 import { runOrderDatabaseSql } from './run-order-database-sql.ts';
 import { receiveSmokeMessage } from './receive-smoke-message.ts';
 
@@ -116,13 +116,13 @@ async function relaySmokeRows(kafka: KafkaJS.Kafka, admin: KafkaJS.Admin): Promi
 }
 
 async function cleanUp(admin: KafkaJS.Admin): Promise<void> {
-  await kafkaConnect.removeConnector(smokeConnector);
+  await kafkaConnect.removeConnectorAndOffsets(smokeConnector);
   dropSmokeDatabase();
   const existingTopicNames = await admin.listTopics();
   if (existingTopicNames.includes(smokeTopic)) await admin.deleteTopics({ topics: [smokeTopic] });
 }
 
-const kafka = createHostKafka();
+const kafka = createKafkaClient();
 const admin = kafka.admin();
 await admin.connect();
 
