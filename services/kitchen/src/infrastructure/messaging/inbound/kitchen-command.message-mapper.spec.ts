@@ -105,6 +105,10 @@ describe('toKitchenCommand', () => {
       message: buildCommandMessage(ApproveTicketSchema, { orderId: 'order-1' }),
     },
     {
+      problem: 'a CreateTicket order id that is not a uuid',
+      message: buildCommandMessage(CreateTicketSchema, { ...createTicket, orderId: 'order-1' }),
+    },
+    {
       problem: 'a RejectTicket whose order id is not a uuid',
       message: buildCommandMessage(RejectTicketSchema, { orderId: '' }),
     },

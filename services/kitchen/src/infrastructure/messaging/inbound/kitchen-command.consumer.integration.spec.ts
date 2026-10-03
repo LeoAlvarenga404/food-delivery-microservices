@@ -165,6 +165,19 @@ describe('kitchenCommandConsumer', () => {
     expect(await countRows('tickets')).toBe(0);
   });
 
+  it('rolls back the rejection, the reply and the inbox row when the inbox transaction fails', async () => {
+    await handleCommand(buildCommandMessage(CreateTicketSchema, createTicket));
+    const rejection = buildCommandMessage(RejectTicketSchema, { orderId });
+
+    await expect(failingInboxTransaction()(rejection)).rejects.toThrow('inbox transaction failed');
+
+    const outbox = await readOutbox();
+    expect(outbox.map((row) => row.messageType)).toEqual(['fooddelivery.kitchen.v1.TicketCreated']);
+    expect(await countRows('inbox')).toBe(1);
+    const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
+    expect(ticket?.toSnapshot()).toMatchObject({ status: 'CREATE_PENDING', version: 1 });
+  });
+
   it('replies TicketCreationFailed for a ticket without line items together with its inbox row', async () => {
     const command = buildCommandMessage(CreateTicketSchema, { ...createTicket, lineItems: [] });
 
