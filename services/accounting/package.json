@@ -13,10 +13,12 @@
     "typecheck": "tsc -p tsconfig.json",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
-    "test:golden": "vitest run --project golden"
+    "test:golden": "vitest run --project golden",
+    "test:component": "vitest run --project component"
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0",
+    "@fd/chassis-config": "workspace:*",
     "@fd/chassis-inbox": "workspace:*",
     "@fd/chassis-kafka": "workspace:*",
     "@fd/chassis-observability": "workspace:*",
@@ -24,7 +26,9 @@
     "@fd/chassis-postgres": "workspace:*",
     "@fd/contracts": "workspace:*",
     "@fd/domain": "workspace:*",
-    "kysely": "0.29.6"
+    "kysely": "0.29.6",
+    "uuid": "14.0.2",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@fd/chassis-testing": "workspace:*",
