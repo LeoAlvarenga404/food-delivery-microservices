@@ -259,6 +259,34 @@ describe('placeOrderSagaReplyConsumer', () => {
     expect(await readOutbox()).toHaveLength(2);
   });
 
+  it('warns about a stray reply for a compensated saga and keeps its inbox row', async () => {
+    await handleReply(
+      buildReplyMessage(ConsumerVerificationFailedSchema, {
+        orderId,
+        reason: ConsumerVerificationFailureReason.CONSUMER_NOT_FOUND,
+      }),
+    );
+    const outboxBeforeStrayReply = await readOutbox();
+    const strayReply = buildReplyMessage(PaymentAuthorizedSchema, { orderId, paymentId: 'pay-1' });
+
+    await handleReply(strayReply);
+
+    expect(logEntries).toContainEqual(
+      expect.objectContaining({
+        level: 40,
+        msg: 'place order saga reply ignored',
+        failure: {
+          type: 'UnexpectedSagaReply',
+          step: 'COMPENSATED',
+          replyType: 'PaymentAuthorized',
+        },
+      }),
+    );
+    expect(await countInboxRows(strayReply.headers.messageId)).toBe(1);
+    expect(await readOutbox()).toEqual(outboxBeforeStrayReply);
+    expect(await readSagaStatus()).toBe('COMPENSATED');
+  });
+
   it('dead-letters a reply for a saga that does not exist', async () => {
     const orphan = buildReplyMessage(
       ConsumerVerifiedSchema,
