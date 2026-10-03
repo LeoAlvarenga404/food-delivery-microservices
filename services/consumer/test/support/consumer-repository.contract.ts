@@ -11,7 +11,11 @@ export function describeConsumerRepositoryContract(
   createRepository: (storedConsumers: readonly Consumer[]) => Promise<ConsumerRepository>,
 ): void {
   describe(`${implementationName} consumer repository`, () => {
-    const blockedConsumer = buildConsumer({ consumerId: blockedConsumerId, status: 'BLOCKED' });
+    const blockedConsumer = buildConsumer({
+      consumerId: blockedConsumerId,
+      status: 'BLOCKED',
+      version: 3,
+    });
     let consumers: ConsumerRepository;
 
     beforeEach(async () => {

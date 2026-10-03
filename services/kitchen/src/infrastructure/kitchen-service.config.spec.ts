@@ -15,6 +15,20 @@ describe('readKitchenServiceConfiguration', () => {
     });
   });
 
+  it('reads the postgres scheme, the log level and the explicit overrides', () => {
+    const configuration = readKitchenServiceConfiguration({
+      KITCHEN_DATABASE_URL: 'postgres://kitchen_service:secret@127.0.0.1:5434/kitchen_service',
+      KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092',
+      LOG_LEVEL: 'debug',
+    });
+
+    expect(configuration).toEqual({
+      databaseUrl: 'postgres://kitchen_service:secret@127.0.0.1:5434/kitchen_service',
+      kafkaBootstrapServers: ['localhost:9092'],
+      logLevel: 'debug',
+    });
+  });
+
   it.each([
     { problem: 'a missing database url', variables: { KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092' } },
     {

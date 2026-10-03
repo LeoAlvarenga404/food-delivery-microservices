@@ -17,6 +17,23 @@ describe('readAccountingServiceConfiguration', () => {
     });
   });
 
+  it('reads the postgres scheme, the log level and the explicit overrides', () => {
+    const configuration = readAccountingServiceConfiguration({
+      ACCOUNTING_DATABASE_URL:
+        'postgres://accounting_service:secret@127.0.0.1:5435/accounting_service',
+      KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092',
+      LOG_LEVEL: 'debug',
+      SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: '250',
+    });
+
+    expect(configuration).toEqual({
+      databaseUrl: 'postgres://accounting_service:secret@127.0.0.1:5435/accounting_service',
+      kafkaBootstrapServers: ['localhost:9092'],
+      slowGatewayResponseInMilliseconds: 250,
+      logLevel: 'debug',
+    });
+  });
+
   it.each([
     { problem: 'a missing database url', variables: { KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092' } },
     {
@@ -30,6 +47,17 @@ describe('readAccountingServiceConfiguration', () => {
     {
       problem: 'a negative gateway delay',
       variables: { ...requiredVariables, SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: '-1' },
+    },
+    {
+      problem: 'a blank simulated gateway delay',
+      variables: { ...requiredVariables, SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: '  ' },
+    },
+    {
+      problem: 'a simulated gateway delay beyond the timer limit',
+      variables: {
+        ...requiredVariables,
+        SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: '2147483648',
+      },
     },
     { problem: 'an unknown log level', variables: { ...requiredVariables, LOG_LEVEL: 'verbose' } },
   ])('refuses $problem', ({ variables }) => {

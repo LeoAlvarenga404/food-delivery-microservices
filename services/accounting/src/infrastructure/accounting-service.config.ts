@@ -20,7 +20,13 @@ const accountingServiceEnvironmentSchema = z.object({
         .filter((server) => server.length > 0),
     )
     .pipe(z.array(z.string()).min(1)),
-  SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: z.coerce.number().int().min(0).default(3000),
+  SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: z
+    .string()
+    .trim()
+    .min(1)
+    .default('3000')
+    .transform(Number)
+    .pipe(z.number().int().min(0).max(2_147_483_647)),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
 
