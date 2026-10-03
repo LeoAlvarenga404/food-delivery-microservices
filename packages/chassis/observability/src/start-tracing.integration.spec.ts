@@ -16,6 +16,7 @@ interface ExportedSpan {
 const runFile = promisify(execFile);
 const serverSpanKind = 2;
 const clientSpanKind = 3;
+const maximumExitTimeInMilliseconds = 5_000;
 const packageDirectory = new URL('..', import.meta.url);
 
 const exportRequestSchema = z.object({
@@ -113,6 +114,11 @@ describe('the tracing registered through --import', () => {
   });
 
   it('exits cleanly when the collector cannot be reached', async () => {
-    await expect(runTracedRequests(await closedPortUrl())).resolves.toMatchObject({ stderr: '' });
+    const unreachableUrl = await closedPortUrl();
+    const startedAtInMilliseconds = Date.now();
+
+    await expect(runTracedRequests(unreachableUrl)).resolves.toMatchObject({ stderr: '' });
+
+    expect(Date.now() - startedAtInMilliseconds).toBeLessThan(maximumExitTimeInMilliseconds);
   });
 });

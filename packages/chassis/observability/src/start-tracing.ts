@@ -24,6 +24,7 @@ const tracingEnvironmentSchema = z.object({
 });
 
 const healthPath = '/health';
+const exportTimeoutInMilliseconds = 2_000;
 
 export function readTracingSettings(environment: NodeJS.ProcessEnv): TracingSettings {
   const variables = parseEnvironment(tracingEnvironmentSchema, environment);
@@ -35,7 +36,11 @@ export function readTracingSettings(environment: NodeJS.ProcessEnv): TracingSett
 
 function spanProcessors(exporterUrl: string | undefined): SpanProcessor[] {
   if (exporterUrl === undefined) return [];
-  const exporter = new OTLPTraceExporter({ url: new URL('/v1/traces', exporterUrl).toString() });
+  const exporter = new OTLPTraceExporter({
+    url: new URL('/v1/traces', exporterUrl).toString(),
+    timeoutMillis: exportTimeoutInMilliseconds,
+    httpAgentOptions: { timeout: exportTimeoutInMilliseconds },
+  });
   return [new BatchSpanProcessor(exporter)];
 }
 
