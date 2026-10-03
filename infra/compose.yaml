@@ -180,6 +180,8 @@ services:
       <<: *kafka-clients
       ORDER_DATABASE_URL: postgresql://order_service:${ORDER_DB_PASSWORD:?copy infra/.env.example to infra/.env}@order-db:5432/order_service
       ORDER_SERVICE_HOST: 0.0.0.0
+      PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: 10000
+      PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS: 20000
     healthcheck:
       <<: *health-timing
       test:

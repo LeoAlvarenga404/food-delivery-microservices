@@ -9,17 +9,17 @@ const composeFilePath = fileURLToPath(new URL('../../../infra/compose.yaml', imp
 const electionDeadlineInMilliseconds = 90_000;
 const electionRetryPauseInMilliseconds = 2_000;
 const electionAttemptTimeoutInMilliseconds = 30_000;
+const kafkaToolPrefix = ['exec', '-T', 'kafka-1'];
+const kafkaBootstrapServer = ['--bootstrap-server', 'kafka-1:29092'];
 const electionCommand = [
-  'exec',
-  '-T',
-  'kafka-1',
+  ...kafkaToolPrefix,
   '/opt/kafka/bin/kafka-leader-election.sh',
-  '--bootstrap-server',
-  'kafka-1:29092',
+  ...kafkaBootstrapServer,
   '--election-type',
   'preferred',
   '--all-topic-partitions',
 ];
+const keyedRecordLine = /^Partition:(\d+)\t(\S+)$/;
 
 function describeFailure(error: unknown): string {
   if (!(error instanceof Error)) {
@@ -52,6 +52,27 @@ export class DockerComposeStack {
       `--command=${query}`,
     ]);
     return output.trim();
+  }
+
+  async readPartitionsByKey(topic: string): Promise<ReadonlyMap<string, number>> {
+    const output = await this.#compose([
+      ...kafkaToolPrefix,
+      '/opt/kafka/bin/kafka-console-consumer.sh',
+      ...kafkaBootstrapServer,
+      '--topic',
+      topic,
+      '--from-beginning',
+      '--timeout-ms',
+      '5000',
+      ...['--formatter-property', 'print.partition=true', '--formatter-property', 'print.key=true'],
+      ...['--formatter-property', 'print.value=false'],
+    ]);
+    const partitionsByKey = new Map<string, number>();
+    for (const line of output.split('\n')) {
+      const [, partition, key] = keyedRecordLine.exec(line.trim()) ?? [];
+      if (partition !== undefined && key !== undefined) partitionsByKey.set(key, Number(partition));
+    }
+    return partitionsByKey;
   }
 
   async electPreferredLeaders(): Promise<void> {
