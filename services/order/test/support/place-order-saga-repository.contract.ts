@@ -66,6 +66,27 @@ export function describePlaceOrderSagaRepositoryContract(
       expect(advanced.version).toBe(2);
     });
 
+    it('saves the deadline of the next step and clears it once the saga is finished', async () => {
+      await sagas.save(started);
+      const stored = await findStoredSaga(sagas, started.sagaId);
+      const nextDeadline = new Date('2026-10-02T12:00:50.000Z');
+
+      await sagas.save({
+        ...stored,
+        state: { step: 'CREATING_TICKET', order, paymentToken: 'tok_visa_4242' },
+        deadlineAt: nextDeadline,
+      });
+      const advanced = await findStoredSaga(sagas, started.sagaId);
+      await sagas.save({
+        ...advanced,
+        state: { step: 'COMPENSATED', order, rejectionReason: 'CONSUMER_BLOCKED' },
+        deadlineAt: undefined,
+      });
+
+      expect(advanced.deadlineAt).toEqual(nextDeadline);
+      expect((await findStoredSaga(sagas, started.sagaId)).deadlineAt).toBeUndefined();
+    });
+
     it('stores a saga past the payment step without its payment token', async () => {
       await sagas.save(started);
       const stored = await findStoredSaga(sagas, started.sagaId);

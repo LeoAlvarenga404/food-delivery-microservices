@@ -11,6 +11,7 @@ import {
 import {
   buildSagaOrder,
   buildStartedSagaState,
+  sagaTimeoutsInMilliseconds,
 } from '../../../../test/support/place-order-saga.builder.ts';
 import { parseRestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import { PlaceOrderCommandHandler } from './place-order.command-handler.ts';
@@ -23,11 +24,16 @@ let placeOrder: PlaceOrderCommandHandler;
 
 beforeEach(() => {
   unitOfWork = new InMemoryUnitOfWork();
-  placeOrder = new PlaceOrderCommandHandler(unitOfWork, new FakeClock(), new FakeIdGenerator());
+  placeOrder = new PlaceOrderCommandHandler({
+    unitOfWork,
+    clock: new FakeClock(),
+    idGenerator: new FakeIdGenerator(),
+    sagaTimeoutsInMilliseconds,
+  });
 });
 
 describe('PlaceOrderCommandHandler', () => {
-  it('stores the pending order, starts the saga and asks for the consumer to be verified', async () => {
+  it('stores the pending order, starts the saga with the deadline of its first step and asks for the consumer to be verified', async () => {
     const outcome = await placeOrder.execute(buildPlaceOrderCommand());
 
     expect(outcome).toEqual(right({ orderId: firstOrderId }));
@@ -38,6 +44,7 @@ describe('PlaceOrderCommandHandler', () => {
       sagaId: firstSagaId,
       state: buildStartedSagaState(),
       version: 1,
+      deadlineAt: new Date('2026-10-02T12:00:10.000Z'),
     });
     expect(unitOfWork.commands.sentCommands).toEqual([
       { command: { type: 'VerifyConsumer', order: buildSagaOrder() }, sagaId: firstSagaId },

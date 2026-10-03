@@ -42,4 +42,5 @@ export interface PlaceOrderSagaInstance {
   readonly sagaId: string;
   readonly state: PlaceOrderSagaState;
   readonly version: number;
+  readonly deadlineAt: Date | undefined;
 }

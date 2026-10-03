@@ -51,7 +51,12 @@ const placeOrderSagaRepliesTopic = 'order.place-order-saga.replies';
 async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpServer> {
   const { configuration, logger, database, unitOfWork, clock } = parts;
   const rpcService = createOrderRpcService({
-    placeOrder: new PlaceOrderCommandHandler(unitOfWork, clock, new UuidV7IdGenerator()),
+    placeOrder: new PlaceOrderCommandHandler({
+      unitOfWork,
+      clock,
+      idGenerator: new UuidV7IdGenerator(),
+      sagaTimeoutsInMilliseconds: configuration.sagaTimeoutsInMilliseconds,
+    }),
     getOrder: new GetOrderQueryHandler(new PostgresOrderRepository(database)),
   });
   const server = fastify();
@@ -80,7 +85,12 @@ async function startReplyConsumer(parts: OrderServiceParts): Promise<RunningCons
     topics: [placeOrderSagaRepliesTopic],
     handle: withInbox(
       { database, handlerName: 'place-order-saga-reply', now: () => clock.now() },
-      placeOrderSagaReplyConsumer({ unitOfWork, clock, logger }),
+      placeOrderSagaReplyConsumer({
+        unitOfWork,
+        clock,
+        sagaTimeoutsInMilliseconds: configuration.sagaTimeoutsInMilliseconds,
+        logger,
+      }),
     ),
     logger,
   });

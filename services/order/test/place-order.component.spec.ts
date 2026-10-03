@@ -27,6 +27,7 @@ import { v7 as generateUuidV7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startOrderService, type RunningOrderService } from '../src/main.ts';
 import { guaranaId, margheritaId, pizzeriaMenu } from './support/order.builder.ts';
+import { sagaTimeoutsInMilliseconds } from './support/place-order-saga.builder.ts';
 
 interface CommandRow {
   readonly sagaId: string;
@@ -153,6 +154,7 @@ beforeAll(async () => {
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
+    sagaTimeoutsInMilliseconds,
   });
   stoppers.push(() => orderService.stop());
   client = createClient(
@@ -248,6 +250,7 @@ describe('order service', () => {
       host: '127.0.0.1',
       port: Number(new URL(orderService.url).port),
       logLevel: 'silent',
+      sagaTimeoutsInMilliseconds,
     });
 
     await expect(failedStart).rejects.toThrow();

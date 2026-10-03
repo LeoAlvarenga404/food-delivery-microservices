@@ -20,6 +20,7 @@ import { FakeClock } from '../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../test/support/in-memory-unit-of-work.adapter.ts';
 import { guaranaId, margheritaId, pizzeriaMenu } from '../../../test/support/order.builder.ts';
+import { sagaTimeoutsInMilliseconds } from '../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
 import { createOrderRpcService } from './order.rpc-service.ts';
@@ -81,11 +82,12 @@ beforeEach(() => {
       service(
         OrderService,
         createOrderRpcService({
-          placeOrder: new PlaceOrderCommandHandler(
+          placeOrder: new PlaceOrderCommandHandler({
             unitOfWork,
-            new FakeClock(),
-            new FakeIdGenerator(),
-          ),
+            clock: new FakeClock(),
+            idGenerator: new FakeIdGenerator(),
+            sagaTimeoutsInMilliseconds,
+          }),
           getOrder: new GetOrderQueryHandler(unitOfWork.orders),
         }),
       );

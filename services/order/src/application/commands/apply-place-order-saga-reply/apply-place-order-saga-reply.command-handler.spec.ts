@@ -8,6 +8,7 @@ import { buildPlaceOrderCommand } from '../../../../test/support/place-order-com
 import {
   buildSagaOrder,
   sagaPaymentToken,
+  sagaTimeoutsInMilliseconds,
 } from '../../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
@@ -36,6 +37,10 @@ async function readSagaStep(): Promise<string | undefined> {
   return (await unitOfWork.sagas.findById(sagaId))?.state.step;
 }
 
+async function readSagaDeadline(): Promise<Date | undefined> {
+  return (await unitOfWork.sagas.findById(sagaId))?.deadlineAt;
+}
+
 async function readOrderState() {
   return (await unitOfWork.orders.findById(orderId))?.toSnapshot().state;
 }
@@ -49,14 +54,19 @@ async function approveOrderElsewhere(): Promise<void> {
 
 beforeEach(async () => {
   unitOfWork = new InMemoryUnitOfWork();
-  const placeOrder = new PlaceOrderCommandHandler(
+  const placeOrder = new PlaceOrderCommandHandler({
     unitOfWork,
-    new FakeClock(),
-    new FakeIdGenerator(),
-  );
+    clock: new FakeClock(),
+    idGenerator: new FakeIdGenerator(),
+    sagaTimeoutsInMilliseconds,
+  });
   unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
   unitOfWork.commands.sentCommands.length = 0;
-  applyReply = new ApplyPlaceOrderSagaReplyCommandHandler(unitOfWork, new FakeClock(repliedAt));
+  applyReply = new ApplyPlaceOrderSagaReplyCommandHandler(
+    unitOfWork,
+    new FakeClock(repliedAt),
+    sagaTimeoutsInMilliseconds,
+  );
 });
 
 describe('ApplyPlaceOrderSagaReplyCommandHandler', () => {
@@ -162,7 +172,49 @@ describe('ApplyPlaceOrderSagaReplyCommandHandler', () => {
       }),
     );
     expect(await readSagaStep()).toBe('VERIFYING_CONSUMER');
+    expect(await readSagaDeadline()).toEqual(new Date('2026-10-02T12:00:10.000Z'));
     expect(unitOfWork.commands.sentCommands).toEqual([]);
+  });
+
+  it('gives the saga the deadline of the step a reply moves it to', async () => {
+    unwrap(await deliver({ type: 'ConsumerVerified' }));
+
+    expect(await readSagaDeadline()).toEqual(new Date('2026-10-02T12:00:50.000Z'));
+  });
+
+  it('clears the deadline once the saga is finished', async () => {
+    unwrap(
+      await deliver({ type: 'ConsumerVerificationFailed', rejectionReason: 'CONSUMER_BLOCKED' }),
+    );
+
+    expect(await readSagaStep()).toBe('COMPENSATED');
+    expect(await readSagaDeadline()).toBeUndefined();
+  });
+
+  it('asks the kitchen again to approve the ticket when the approval step times out, with a later deadline', async () => {
+    unwrap(await deliver({ type: 'ConsumerVerified' }));
+    unwrap(await deliver({ type: 'TicketCreated' }));
+    unwrap(await deliver({ type: 'PaymentAuthorized' }));
+    const timedOutAt = new Date('2026-10-02T12:01:30.000Z');
+    const applyLater = new ApplyPlaceOrderSagaReplyCommandHandler(
+      unitOfWork,
+      new FakeClock(timedOutAt),
+      sagaTimeoutsInMilliseconds,
+    );
+
+    const outcome = await applyLater.execute({
+      sagaId,
+      reply: { type: 'StepTimedOut' },
+      metadata: replyMetadata,
+    });
+
+    expect(outcome).toEqual(right(undefined));
+    expect(unitOfWork.commands.sentCommands.slice(-2)).toEqual([
+      { command: { type: 'ApproveTicket', order: buildSagaOrder() }, sagaId },
+      { command: { type: 'ApproveTicket', order: buildSagaOrder() }, sagaId },
+    ]);
+    expect(await readSagaStep()).toBe('APPROVING_TICKET');
+    expect(await readSagaDeadline()).toEqual(new Date('2026-10-02T12:02:00.000Z'));
   });
 
   it('leaves the saga waiting when the order was approved elsewhere', async () => {

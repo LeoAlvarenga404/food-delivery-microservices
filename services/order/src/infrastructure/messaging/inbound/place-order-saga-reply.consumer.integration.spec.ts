@@ -27,6 +27,7 @@ import {
 } from '../../../../test/support/order-database.builder.ts';
 import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../../test/support/place-order-command.builder.ts';
+import { sagaTimeoutsInMilliseconds } from '../../../../test/support/place-order-saga.builder.ts';
 import { buildReplyMessage } from '../../../../test/support/reply-message.builder.ts';
 import type { DB as OrderDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
@@ -106,11 +107,12 @@ beforeEach(async () => {
     },
     now: () => repliedAt,
   });
-  const placeOrder = new PlaceOrderCommandHandler(
+  const placeOrder = new PlaceOrderCommandHandler({
     unitOfWork,
-    new FakeClock(),
-    new FakeIdGenerator(),
-  );
+    clock: new FakeClock(),
+    idGenerator: new FakeIdGenerator(),
+    sagaTimeoutsInMilliseconds,
+  });
   unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
   inboxSettings = {
     database: testDatabase.database,
@@ -120,6 +122,7 @@ beforeEach(async () => {
   consumeReply = placeOrderSagaReplyConsumer({
     unitOfWork,
     clock: new FakeClock(repliedAt),
+    sagaTimeoutsInMilliseconds,
     logger: captureLogger(),
   });
   handleReply = withInbox(inboxSettings, consumeReply);

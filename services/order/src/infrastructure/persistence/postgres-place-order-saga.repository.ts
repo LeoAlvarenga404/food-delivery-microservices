@@ -37,10 +37,10 @@ export class PostgresPlaceOrderSagaRepository implements PlaceOrderSagaRepositor
   }
 
   async #update(row: SagaInstanceRow): Promise<void> {
-    const { sagaId, step, state, status, version } = row;
+    const { sagaId, step, state, status, deadlineAt, version } = row;
     const result = await this.#database
       .updateTable('sagaInstances')
-      .set({ step, state, status, version: version + 1 })
+      .set({ step, state, status, deadlineAt, version: version + 1 })
       .where('sagaId', '=', sagaId)
       .where('version', '=', version)
       .executeTakeFirst();

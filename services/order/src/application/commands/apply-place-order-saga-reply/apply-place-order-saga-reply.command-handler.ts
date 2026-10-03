@@ -2,6 +2,10 @@ import { left, right, type Either } from '@fd/domain';
 import type { Clock } from '#application/ports/clock.port.ts';
 import type { TransactionScope, UnitOfWork } from '#application/ports/unit-of-work.port.ts';
 import {
+  placeOrderSagaDeadline,
+  type PlaceOrderSagaTimeoutsInMilliseconds,
+} from '#application/sagas/place-order/place-order-saga-deadline.saga.ts';
+import {
   placeOrderSaga,
   type PlaceOrderSagaCommand,
 } from '#application/sagas/place-order/place-order.saga.ts';
@@ -18,10 +22,16 @@ type OrderChange = (order: Order, now: Date) => Either<InvalidOrderTransition, v
 export class ApplyPlaceOrderSagaReplyCommandHandler {
   readonly #unitOfWork: UnitOfWork;
   readonly #clock: Clock;
+  readonly #sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds;
 
-  constructor(unitOfWork: UnitOfWork, clock: Clock) {
+  constructor(
+    unitOfWork: UnitOfWork,
+    clock: Clock,
+    sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds,
+  ) {
     this.#unitOfWork = unitOfWork;
     this.#clock = clock;
+    this.#sagaTimeoutsInMilliseconds = sagaTimeoutsInMilliseconds;
   }
 
   async execute(
@@ -43,7 +53,9 @@ export class ApplyPlaceOrderSagaReplyCommandHandler {
       if (outcome.isLeft()) return outcome;
     }
     const state = placeOrderSaga.evolve(instance.state, command.reply);
-    await scope.sagas.save({ ...instance, state });
+    const timeouts = this.#sagaTimeoutsInMilliseconds;
+    const deadlineAt = placeOrderSagaDeadline(state.step, this.#clock.now(), timeouts);
+    await scope.sagas.save({ ...instance, state, deadlineAt });
     return right(undefined);
   }
 

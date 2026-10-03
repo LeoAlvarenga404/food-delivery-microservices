@@ -14,6 +14,29 @@ describe('readOrderServiceConfiguration', () => {
       host: '127.0.0.1',
       port: 4001,
       logLevel: 'info',
+      sagaTimeoutsInMilliseconds: {
+        VERIFYING_CONSUMER: 30_000,
+        CREATING_TICKET: 30_000,
+        AUTHORIZING_PAYMENT: 60_000,
+        APPROVING_TICKET: 30_000,
+        REJECTING_TICKET: 30_000,
+      },
+    });
+  });
+
+  it('gives the payment step its own timeout and every other step the step timeout', () => {
+    const configuration = readOrderServiceConfiguration({
+      ...requiredVariables,
+      PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: ' 10000 ',
+      PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS: '20000',
+    });
+
+    expect(configuration.sagaTimeoutsInMilliseconds).toEqual({
+      VERIFYING_CONSUMER: 10_000,
+      CREATING_TICKET: 10_000,
+      AUTHORIZING_PAYMENT: 20_000,
+      APPROVING_TICKET: 10_000,
+      REJECTING_TICKET: 10_000,
     });
   });
 
@@ -46,6 +69,18 @@ describe('readOrderServiceConfiguration', () => {
       variables: { ...requiredVariables, ORDER_DATABASE_URL: 'mysql://order_service@127.0.0.1/db' },
     },
     { problem: 'an unknown log level', variables: { ...requiredVariables, LOG_LEVEL: 'verbose' } },
+    {
+      problem: 'a step timeout of zero',
+      variables: { ...requiredVariables, PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: '0' },
+    },
+    {
+      problem: 'a blank payment timeout',
+      variables: { ...requiredVariables, PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS: ' ' },
+    },
+    {
+      problem: 'a step timeout that is not a whole number of milliseconds',
+      variables: { ...requiredVariables, PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: '1.5' },
+    },
   ])('refuses $problem', ({ variables }) => {
     expect(() => readOrderServiceConfiguration(variables)).toThrow('invalid environment');
   });

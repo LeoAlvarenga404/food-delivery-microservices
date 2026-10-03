@@ -102,6 +102,7 @@ export const placeOrderSagaPersistenceMapper = {
       sagaId: row.sagaId,
       state: toSagaState(row.state as unknown as StoredSagaState),
       version: row.version,
+      deadlineAt: row.deadlineAt ?? undefined,
     };
   },
 
@@ -114,7 +115,7 @@ export const placeOrderSagaPersistenceMapper = {
       step: state.step,
       state: toStoredState(state),
       status: toSagaStatus(state),
-      deadlineAt: null,
+      deadlineAt: instance.deadlineAt ?? null,
       version: instance.version,
     };
   },

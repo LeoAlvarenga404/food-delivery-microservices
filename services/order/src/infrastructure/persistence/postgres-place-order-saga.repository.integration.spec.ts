@@ -48,7 +48,11 @@ describe('postgres place order saga repository rows', () => {
 
     const stored = await sagas.findById(started.sagaId);
     if (stored === undefined) throw new Error('the saga was not stored');
-    await sagas.save({ ...stored, state: { step: 'COMPLETED', order: buildSagaOrder() } });
+    await sagas.save({
+      ...stored,
+      state: { step: 'COMPLETED', order: buildSagaOrder() },
+      deadlineAt: undefined,
+    });
 
     expect(await readRow()).toEqual({ step: 'COMPLETED', status: 'COMPLETED' });
   });
@@ -63,6 +67,7 @@ describe('postgres place order saga repository rows', () => {
     await sagas.save({
       ...stored,
       state: { step: 'COMPENSATED', order: buildSagaOrder(), rejectionReason: 'CONSUMER_BLOCKED' },
+      deadlineAt: undefined,
     });
 
     const row = await testDatabase.database
@@ -96,7 +101,11 @@ describe('postgres place order saga repository rows', () => {
   it('moves the payment token of slice 1 rows out of the stored order', async () => {
     const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
     const insertSlice1Row = async (sagaId: string, state: PlaceOrderSagaState) => {
-      const row = placeOrderSagaPersistenceMapper.toPersistence({ sagaId, state, version: 1 });
+      const row = placeOrderSagaPersistenceMapper.toPersistence({
+        ...buildSagaInstance(state),
+        sagaId,
+        version: 1,
+      });
       await testDatabase.database
         .insertInto('sagaInstances')
         .values({ ...row, orderId: crypto.randomUUID() })
@@ -134,5 +143,23 @@ describe('postgres place order saga repository rows', () => {
       step: 'CREATING_TICKET',
       paymentToken: 'tok_visa_4242',
     });
+  });
+
+  it.each([
+    { problem: 'a running saga without a deadline', statusAndDeadline: `'RUNNING', null` },
+    { problem: 'a completed saga with a deadline', statusAndDeadline: `'COMPLETED', now()` },
+    { problem: 'a compensated saga with a deadline', statusAndDeadline: `'COMPENSATED', now()` },
+  ])('refuses $problem', async ({ statusAndDeadline }) => {
+    const insertion = sql`
+      insert into saga_instances (
+        saga_id, saga_type, order_id, step, state, version, status, deadline_at
+      ) values (
+        '0199a5d0-0000-7000-8000-0000000000b9', 'PlaceOrderSaga',
+        '0199a5d0-0000-7000-8000-0000000000a9', 'VERIFYING_CONSUMER', '{}', 1,
+        ${sql.raw(statusAndDeadline)}
+      )
+    `.execute(testDatabase.database);
+
+    await expect(insertion).rejects.toMatchObject({ code: '23514' });
   });
 });
