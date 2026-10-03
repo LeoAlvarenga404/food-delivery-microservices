@@ -24,7 +24,7 @@ import {
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
 import { createOrderRpcService } from '#infrastructure/rpc/order.rpc-service.ts';
 import { createRpcCorrelation } from '#infrastructure/rpc/rpc-correlation.adapter.ts';
-import { stopInOrder, type Stopper } from '#infrastructure/system/service-shutdown.adapter.ts';
+import { stopInOrder, type Stopper } from '#infrastructure/system/stop-in-order.adapter.ts';
 import { SystemClock } from '#infrastructure/system/system-clock.adapter.ts';
 import { UuidV7IdGenerator } from '#infrastructure/system/uuid-v7-id-generator.adapter.ts';
 

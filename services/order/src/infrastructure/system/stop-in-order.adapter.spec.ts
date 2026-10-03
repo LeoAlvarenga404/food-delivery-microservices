@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stopInOrder } from './service-shutdown.adapter.ts';
+import { stopInOrder } from './stop-in-order.adapter.ts';
 
 describe('stopInOrder', () => {
   it('runs every stopper in order when all succeed', async () => {
