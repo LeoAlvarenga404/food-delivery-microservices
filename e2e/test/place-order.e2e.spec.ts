@@ -7,10 +7,21 @@ import {
 } from './support/http-consumer-api.adapter.ts';
 
 const consumerApi = new HttpConsumerApi();
-const simulatedGatewayDelayInMilliseconds = 3_000;
+const minimumSlowCardExtraDelayInMilliseconds = 4_500;
 
 function placementHeaders(idempotencyKey: string): Record<string, string> {
   return { 'idempotency-key': idempotencyKey, 'x-consumer-id': walkingSkeletonConsumerId };
+}
+
+async function measureApprovalInMilliseconds(paymentToken: string): Promise<number> {
+  const placedAtInMilliseconds = Date.now();
+  const response = await consumerApi.placeOrder(
+    { ...pizzeriaOrder, paymentToken },
+    placementHeaders(randomUUID()),
+  );
+  const orderId = await consumerApi.readPlacedOrderId(response);
+  await consumerApi.waitForOrderStatus(orderId, 'APPROVED');
+  return Date.now() - placedAtInMilliseconds;
 }
 
 beforeAll(() => consumerApi.waitUntilReachable());
@@ -29,16 +40,13 @@ describe('placing an order through the edge', () => {
     });
   });
 
-  it('approves an order paid with the slow test card only after the gateway delay', async () => {
-    const placedAt = Date.now();
-    const response = await consumerApi.placeOrder(
-      { ...pizzeriaOrder, paymentToken: 'tok_visa_0009' },
-      placementHeaders(randomUUID()),
-    );
+  it('approves an order paid with the slow test card later than one paid with a normal card', async () => {
+    const normalApprovalInMilliseconds = await measureApprovalInMilliseconds('tok_visa_4242');
+    const slowApprovalInMilliseconds = await measureApprovalInMilliseconds('tok_visa_0009');
 
-    const orderId = await consumerApi.readPlacedOrderId(response);
-    await consumerApi.waitForOrderStatus(orderId, 'APPROVED');
-    expect(Date.now() - placedAt).toBeGreaterThanOrEqual(simulatedGatewayDelayInMilliseconds);
+    expect(slowApprovalInMilliseconds - normalApprovalInMilliseconds).toBeGreaterThanOrEqual(
+      minimumSlowCardExtraDelayInMilliseconds,
+    );
   });
 
   it('answers a repeated placement with the same Idempotency-Key with the same order', async () => {

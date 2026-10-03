@@ -30,6 +30,19 @@ export const pizzeriaOrder = {
 };
 
 const pollIntervalInMilliseconds = 500;
+const terminalOrderStatuses: readonly string[] = ['APPROVED', 'REJECTED'];
+
+function failOnUnexpectedTerminalStatus(
+  orderId: string,
+  observedOrder: OrderView | undefined,
+  awaitedStatus: string,
+): void {
+  if (observedOrder !== undefined && terminalOrderStatuses.includes(observedOrder.status)) {
+    throw new Error(
+      `order ${orderId} reached ${observedOrder.status} while waiting for ${awaitedStatus}`,
+    );
+  }
+}
 
 export class HttpConsumerApi {
   readonly #baseUrl: string;
@@ -55,19 +68,24 @@ export class HttpConsumerApi {
     status: string,
     limitInMilliseconds = 60_000,
   ): Promise<OrderView> {
-    const deadline = Date.now() + limitInMilliseconds;
-    while (Date.now() < deadline) {
+    const deadlineInMilliseconds = Date.now() + limitInMilliseconds;
+    let lastObservation = 'no response';
+    while (Date.now() < deadlineInMilliseconds) {
       const response = await fetch(`${this.#baseUrl}/v1/orders/${orderId}`);
       const order = response.ok ? orderViewSchema.parse(await response.json()) : undefined;
       if (order?.status === status) return order;
+      failOnUnexpectedTerminalStatus(orderId, order, status);
+      lastObservation = order?.status ?? `HTTP ${String(response.status)}`;
       await delay(pollIntervalInMilliseconds);
     }
-    throw new Error(`order ${orderId} did not reach ${status} in time`);
+    throw new Error(
+      `order ${orderId} did not reach ${status} in time; last seen ${lastObservation}`,
+    );
   }
 
   async waitUntilReachable(limitInMilliseconds = 120_000): Promise<void> {
-    const deadline = Date.now() + limitInMilliseconds;
-    while (Date.now() < deadline) {
+    const deadlineInMilliseconds = Date.now() + limitInMilliseconds;
+    while (Date.now() < deadlineInMilliseconds) {
       const response = await fetch(`${this.#baseUrl}/health`).catch(() => undefined);
       if (response?.ok === true) return;
       await delay(pollIntervalInMilliseconds);

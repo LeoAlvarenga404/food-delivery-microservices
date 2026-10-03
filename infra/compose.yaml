@@ -240,7 +240,7 @@ services:
       <<: *kafka-clients
       ACCOUNTING_DATABASE_URL: postgresql://accounting_service:${ACCOUNTING_DB_PASSWORD:?copy infra/.env.example to infra/.env}@accounting-db:5432/accounting_service
       ACCOUNTING_SERVICE_HOST: 0.0.0.0
-      SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: 3000
+      SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: 6000
     healthcheck:
       <<: *health-timing
       test:
