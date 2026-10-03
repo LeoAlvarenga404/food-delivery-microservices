@@ -8,6 +8,11 @@ import {
   type SagaInstanceRow,
 } from './place-order-saga.persistence-mapper.ts';
 
+export interface ExpiredSaga {
+  readonly sagaId: string;
+  readonly orderId: string;
+}
+
 export class PostgresPlaceOrderSagaRepository implements PlaceOrderSagaRepository {
   readonly #database: Kysely<OrderDatabase>;
 
@@ -34,6 +39,18 @@ export class PostgresPlaceOrderSagaRepository implements PlaceOrderSagaRepositor
       return;
     }
     await this.#update(row);
+  }
+
+  async lockExpiredSagas(now: Date, limit: number): Promise<readonly ExpiredSaga[]> {
+    return this.#database
+      .selectFrom('sagaInstances')
+      .select(['sagaId', 'orderId'])
+      .where('deadlineAt', '<', now)
+      .orderBy('deadlineAt')
+      .limit(limit)
+      .forUpdate()
+      .skipLocked()
+      .execute();
   }
 
   async #update(row: SagaInstanceRow): Promise<void> {

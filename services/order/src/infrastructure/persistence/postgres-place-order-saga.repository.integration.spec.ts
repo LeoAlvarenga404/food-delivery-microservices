@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { runInTransaction } from '@fd/chassis-postgres';
 import { sql } from 'kysely';
 import type { PlaceOrderSagaState } from '#application/sagas/place-order/place-order.saga-state.ts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -161,5 +162,74 @@ describe('postgres place order saga repository rows', () => {
     `.execute(testDatabase.database);
 
     await expect(insertion).rejects.toMatchObject({ code: '23514' });
+  });
+});
+
+describe('postgres place order saga repository deadlines', () => {
+  const now = new Date('2026-10-02T12:01:00.000Z');
+  const { orderId } = buildSagaOrder();
+
+  async function saveRunningSaga(sagaId: string, deadlineAt: Date): Promise<void> {
+    await new PostgresPlaceOrderSagaRepository(testDatabase.database).save({
+      ...buildSagaInstance(),
+      sagaId,
+      deadlineAt,
+    });
+  }
+
+  it('locks the sagas whose deadline passed, the earliest deadline first, up to the limit', async () => {
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b1',
+      new Date('2026-10-02T12:00:59.000Z'),
+    );
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b2',
+      new Date('2026-10-02T12:00:57.000Z'),
+    );
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b3',
+      new Date('2026-10-02T12:00:58.000Z'),
+    );
+    await saveRunningSaga('0199a5d0-0000-7000-8000-0000000001b4', now);
+
+    const expired = await runInTransaction(testDatabase.database, (transaction) =>
+      new PostgresPlaceOrderSagaRepository(transaction).lockExpiredSagas(now, 2),
+    );
+
+    expect(expired).toEqual([
+      { sagaId: '0199a5d0-0000-7000-8000-0000000001b2', orderId },
+      { sagaId: '0199a5d0-0000-7000-8000-0000000001b3', orderId },
+    ]);
+  });
+
+  it('skips the expired sagas another transaction has locked instead of waiting for them', async () => {
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b1',
+      new Date('2026-10-02T12:00:57.000Z'),
+    );
+    await saveRunningSaga(
+      '0199a5d0-0000-7000-8000-0000000001b2',
+      new Date('2026-10-02T12:00:58.000Z'),
+    );
+    const firstLocked = Promise.withResolvers<undefined>();
+    const firstMayCommit = Promise.withResolvers<undefined>();
+    const first = runInTransaction(testDatabase.database, async (transaction) => {
+      await new PostgresPlaceOrderSagaRepository(transaction).lockExpiredSagas(now, 1);
+      firstLocked.resolve(undefined);
+      await firstMayCommit.promise;
+    });
+    await Promise.race([firstLocked.promise, first]);
+
+    const second = runInTransaction(testDatabase.database, async (transaction) => {
+      await sql`set local lock_timeout = '2s'`.execute(transaction);
+      return new PostgresPlaceOrderSagaRepository(transaction).lockExpiredSagas(now, 10);
+    }).finally(() => {
+      firstMayCommit.resolve(undefined);
+    });
+
+    await expect(second).resolves.toEqual([
+      { sagaId: '0199a5d0-0000-7000-8000-0000000001b2', orderId },
+    ]);
+    await first;
   });
 });
