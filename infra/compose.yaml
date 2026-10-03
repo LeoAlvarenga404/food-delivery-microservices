@@ -306,6 +306,31 @@ services:
       consumer-bff: { condition: service_healthy }
       outbox-connectors: { condition: service_completed_successfully }
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.5
+    profiles: [auth]
+    restart: unless-stopped
+    command: ['start-dev', '--import-realm']
+    ports: ['127.0.0.1:8180:8080']
+    mem_limit: 768m
+    volumes: ['./keycloak:/opt/keycloak/data/import:ro']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?copy infra/.env.example to infra/.env}
+      KC_HOSTNAME: http://localhost:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: 'true'
+      KC_HEALTH_ENABLED: 'true'
+      JAVA_OPTS_KC_HEAP: -Xms64m -Xmx320m
+      CONSUMER_BFF_CLIENT_SECRET: ${CONSUMER_BFF_CLIENT_SECRET:?copy infra/.env.example to infra/.env}
+    healthcheck:
+      <<: *health-timing
+      test:
+        - CMD
+        - bash
+        - -c
+        - "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q '\"status\": \"UP\"' <&3"
+      start_period: 60s
+
   otel-lgtm:
     image: grafana/otel-lgtm:0.35.0
     profiles: [observability]

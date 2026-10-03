@@ -1,0 +1,87 @@
+{
+  "realm": "food-delivery",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [{ "name": "consumer" }, { "name": "restaurant_staff" }, { "name": "courier" }]
+  },
+  "clients": [
+    {
+      "clientId": "e2e",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "consumer-bff audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "consumer-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "consumer-bff",
+      "publicClient": false,
+      "secret": "${CONSUMER_BFF_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": { "standard.token.exchange.enabled": "true" },
+      "protocolMappers": [
+        {
+          "name": "order-service audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "order-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "order-service",
+      "bearerOnly": true
+    }
+  ],
+  "users": [
+    {
+      "id": "0199a5d0-0000-7000-8000-0000000000c1",
+      "username": "consumer-a",
+      "enabled": true,
+      "email": "consumer-a@food-delivery.test",
+      "emailVerified": true,
+      "firstName": "Consumer",
+      "lastName": "A",
+      "credentials": [{ "type": "password", "value": "consumer-a-password", "temporary": false }],
+      "realmRoles": ["consumer"]
+    },
+    {
+      "id": "0199a5d0-0000-7000-8000-0000000000c2",
+      "username": "consumer-b",
+      "enabled": true,
+      "email": "consumer-b@food-delivery.test",
+      "emailVerified": true,
+      "firstName": "Consumer",
+      "lastName": "B",
+      "credentials": [{ "type": "password", "value": "consumer-b-password", "temporary": false }],
+      "realmRoles": ["consumer"]
+    },
+    {
+      "id": "0199a5d0-0000-7000-8000-0000000000e1",
+      "username": "staff-a",
+      "enabled": true,
+      "email": "staff-a@food-delivery.test",
+      "emailVerified": true,
+      "firstName": "Staff",
+      "lastName": "A",
+      "credentials": [{ "type": "password", "value": "staff-a-password", "temporary": false }],
+      "realmRoles": ["restaurant_staff"]
+    }
+  ]
+}
