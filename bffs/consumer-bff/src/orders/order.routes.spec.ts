@@ -1,7 +1,12 @@
 import { Writable } from 'node:stream';
+import { create } from '@bufbuild/protobuf';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { createLogger, type Logger } from '@fd/chassis-observability';
-import { PlaceOrderFailureSchema } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
+import {
+  GetOrderResponseSchema,
+  OrderStatus,
+  PlaceOrderFailureSchema,
+} from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeOrderService, placedOrderId } from '../../test/support/order-service.fake.ts';
@@ -222,5 +227,79 @@ describe('POST /v1/orders', () => {
         err: { message: '[internal] relation "orders" does not exist' },
       },
     ]);
+  });
+});
+
+describe('GET /v1/orders/:orderId', () => {
+  it('answers an order with its status, frozen line items and amounts in cents as strings', async () => {
+    orderService.orders.set(
+      placedOrderId,
+      create(GetOrderResponseSchema, {
+        orderId: placedOrderId,
+        status: OrderStatus.APPROVED,
+        lineItems: [
+          { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: 4500n, quantity: 2 },
+        ],
+        totalInCents: 9000n,
+        currency: 'BRL',
+      }),
+    );
+
+    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      orderId: placedOrderId,
+      status: 'APPROVED',
+      lineItems: [
+        { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: '4500', quantity: 2 },
+      ],
+      totalInCents: '9000',
+      currency: 'BRL',
+    });
+  });
+
+  it('keeps an amount beyond 2^53 cents exact', async () => {
+    orderService.orders.set(
+      placedOrderId,
+      create(GetOrderResponseSchema, {
+        orderId: placedOrderId,
+        status: OrderStatus.APPROVAL_PENDING,
+        totalInCents: 9_007_199_254_740_993n,
+        currency: 'BRL',
+      }),
+    );
+
+    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+    expect(response.json()).toMatchObject({
+      status: 'APPROVAL_PENDING',
+      totalInCents: '9007199254740993',
+    });
+  });
+
+  it('answers an unknown order with a not found problem', async () => {
+    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ type: 'about:blank', title: 'Not Found', status: 404 });
+  });
+
+  it('answers an order id that is not a uuid with a bad request problem', async () => {
+    const response = await server.inject({ method: 'GET', url: '/v1/orders/order-1' });
+
+    expect(response.statusCode).toBe(400);
+    expect(orderService.receivedCorrelationIds).toHaveLength(0);
+  });
+
+  it('answers an order without a status as an internal error', async () => {
+    orderService.orders.set(
+      placedOrderId,
+      create(GetOrderResponseSchema, { orderId: placedOrderId, currency: 'BRL' }),
+    );
+
+    const response = await server.inject({ method: 'GET', url: `/v1/orders/${placedOrderId}` });
+
+    expect(response.statusCode).toBe(500);
   });
 });

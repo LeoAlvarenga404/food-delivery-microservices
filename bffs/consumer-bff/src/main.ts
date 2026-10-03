@@ -1,11 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createClient, type Client } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
+import fastifySwagger from '@fastify/swagger';
 import { stopOnSignals } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { fastify, LogController, type FastifyInstance, type RawServerDefault } from 'fastify';
 import {
+  jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
@@ -75,8 +77,13 @@ export async function createConsumerBffServer(
   settings: ConsumerBffSettings,
 ): Promise<ConsumerBffServer> {
   const server = createHttpServer(settings);
+  await server.register(fastifySwagger, {
+    openapi: { info: { title: 'Consumer API', version: '1.0.0' } },
+    transform: jsonSchemaTransform,
+  });
   await server.register(orderRoutes, { orderService: settings.orderService });
-  server.get('/health', () => ({ status: 'ok' }));
+  server.get('/health', { schema: { hide: true } }, () => ({ status: 'ok' }));
+  server.get('/openapi.json', { schema: { hide: true } }, () => server.swagger());
   return server;
 }
 

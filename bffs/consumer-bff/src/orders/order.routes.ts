@@ -3,6 +3,7 @@ import type { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_p
 import type { FastifyPluginCallbackZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { problemDetailsSchema } from '../http/problem-details.adapter.ts';
+import { orderViewSchema, toOrderView } from './order-view.message-mapper.ts';
 
 export interface OrderRoutesSettings {
   readonly orderService: Client<typeof OrderService>;
@@ -31,6 +32,11 @@ const placeOrderSchema = {
   response: { 201: z.object({ orderId: z.uuid() }), ...problemResponses },
 };
 
+const getOrderSchema = {
+  params: z.object({ orderId: z.uuid() }),
+  response: { 200: orderViewSchema, ...problemResponses },
+};
+
 function forwardCorrelation(correlationId: string): CallOptions {
   return { headers: { 'x-correlation-id': correlationId } };
 }
@@ -57,11 +63,22 @@ function registerPlaceOrder(server: OrderRoutesServer, settings: OrderRoutesSett
   });
 }
 
+function registerGetOrder(server: OrderRoutesServer, settings: OrderRoutesSettings): void {
+  server.get('/v1/orders/:orderId', { schema: getOrderSchema }, async (request) => {
+    const order = await settings.orderService.getOrder(
+      { orderId: request.params.orderId },
+      forwardCorrelation(request.id),
+    );
+    return toOrderView(order);
+  });
+}
+
 export const orderRoutes: FastifyPluginCallbackZod<OrderRoutesSettings> = (
   server,
   settings,
   done,
 ) => {
   registerPlaceOrder(server, settings);
+  registerGetOrder(server, settings);
   done();
 };
