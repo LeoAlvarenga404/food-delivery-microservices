@@ -10,6 +10,7 @@ const electionDeadlineInMilliseconds = 90_000;
 const electionRetryPauseInMilliseconds = 2_000;
 const electionAttemptTimeoutInMilliseconds = 30_000;
 const sagaStepPollIntervalInMilliseconds = 500;
+const deadLetterReadTimeoutInMilliseconds = 15_000;
 const kafkaToolPrefix = ['exec', '-T', 'kafka-1'];
 const kafkaBootstrapServer = ['--bootstrap-server', 'kafka-1:29092'];
 const electionCommand = [
@@ -75,9 +76,7 @@ export class DockerComposeStack {
       '--status',
     ]);
     const leaderId = /^LeaderId:\s+(\d+)$/m.exec(output)?.[1];
-    if (leaderId === undefined)
-      throw new Error(`no active Kafka controller in:
-${output}`);
+    if (leaderId === undefined) throw new Error(`no active Kafka controller in:\n${output}`);
     return `kafka-${leaderId}`;
   }
 
@@ -90,7 +89,7 @@ ${output}`);
       topic,
       '--from-beginning',
       '--timeout-ms',
-      '5000',
+      String(deadLetterReadTimeoutInMilliseconds),
       ...['--formatter-property', 'print.partition=true', '--formatter-property', 'print.key=true'],
       ...['--formatter-property', 'print.value=false'],
     ]);
