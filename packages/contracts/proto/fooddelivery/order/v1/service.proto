@@ -41,6 +41,10 @@ message PlaceOrderResponse {
   string order_id = 1;
 }
 
+message PlaceOrderFailure {
+  string reason = 1;
+}
+
 message GetOrderRequest {
   string order_id = 1;
 }

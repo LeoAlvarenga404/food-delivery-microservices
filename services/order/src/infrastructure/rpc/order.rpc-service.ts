@@ -1,5 +1,8 @@
 import { Code, ConnectError, type HandlerContext, type ServiceImpl } from '@connectrpc/connect';
-import type { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
+import {
+  PlaceOrderFailureSchema,
+  type OrderService,
+} from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import type { PlaceOrderError } from '#application/commands/place-order/place-order.command.ts';
 import type { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
@@ -29,6 +32,12 @@ function toConnectCode(error: PlaceOrderError): Code {
   }
 }
 
+function placeOrderFailure(message: string, code: Code, reason: string): ConnectError {
+  return new ConnectError(message, code, undefined, [
+    { desc: PlaceOrderFailureSchema, value: { reason } },
+  ]);
+}
+
 function toRequestMetadata(context: HandlerContext): MessageMetadata {
   return {
     correlationId: context.values.get(correlationIdKey),
@@ -46,10 +55,14 @@ export function createOrderRpcService(
     async placeOrder(request, context) {
       const metadata = toRequestMetadata(context);
       const command = toPlaceOrderCommand(request, metadata);
-      if (command.isLeft()) throw new ConnectError(command.failure.field, Code.InvalidArgument);
+      if (command.isLeft()) {
+        const { field, type } = command.failure;
+        throw placeOrderFailure(field, Code.InvalidArgument, type);
+      }
       const outcome = await settings.placeOrder.execute(command.success);
       if (outcome.isLeft()) {
-        throw new ConnectError(JSON.stringify(outcome.failure), toConnectCode(outcome.failure));
+        const { failure } = outcome;
+        throw placeOrderFailure(JSON.stringify(failure), toConnectCode(failure), failure.type);
       }
       return { orderId: outcome.success.orderId };
     },

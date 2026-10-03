@@ -10,6 +10,7 @@ import {
 import {
   OrderService,
   OrderStatus,
+  PlaceOrderFailureSchema,
   PlaceOrderRequestSchema,
   type PlaceOrderRequest,
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
@@ -284,6 +285,45 @@ describe('OrderService.PlaceOrder', () => {
     await expect(
       client.placeOrder(placeOrderRequest({ paymentToken: 'tok_mastercard_4444' })),
     ).rejects.toMatchObject({ code: Code.AlreadyExists });
+  });
+
+  it.each<{ readonly reason: string; readonly overrides: PlaceOrderRequestInit }>([
+    { reason: 'InvalidPlaceOrderRequest', overrides: { consumerId: 'consumer-1' } },
+    {
+      reason: 'DuplicateMenuItem',
+      overrides: {
+        lineItems: [
+          { menuItemId: margheritaId, quantity: 1 },
+          { menuItemId: margheritaId, quantity: 2 },
+        ],
+      },
+    },
+    {
+      reason: 'UnknownMenuItem',
+      overrides: {
+        lineItems: [{ menuItemId: '0199a5d0-0000-7000-8000-0000000000ff', quantity: 1 }],
+      },
+    },
+  ])('names the $reason failure in a typed error detail', async ({ reason, overrides }) => {
+    const failure = await client
+      .placeOrder(placeOrderRequest(overrides))
+      .catch((error: unknown) => error);
+
+    expect(ConnectError.from(failure).findDetails(PlaceOrderFailureSchema)).toMatchObject([
+      { reason },
+    ]);
+  });
+
+  it('names a reused idempotency key in a typed error detail', async () => {
+    await client.placeOrder(placeOrderRequest());
+
+    const failure = await client
+      .placeOrder(placeOrderRequest({ paymentToken: 'tok_mastercard_4444' }))
+      .catch((error: unknown) => error);
+
+    expect(ConnectError.from(failure).findDetails(PlaceOrderFailureSchema)).toMatchObject([
+      { reason: 'IdempotencyKeyReused' },
+    ]);
   });
 });
 
