@@ -60,12 +60,22 @@ describe('parseMessageHeaders', () => {
     },
   );
 
-  it('accepts uppercase uuids', () => {
+  it('reads uuid headers in canonical lowercase form', () => {
     const headers = {
       ...relayedHeaders,
       'message-id': Buffer.from('0192A1B2-0000-7000-8000-00000000000A'),
+      'correlation-id': Buffer.from('0192A1B2-0000-7000-8000-00000000000B'),
+      'causation-id': Buffer.from('0192A1B2-0000-7000-8000-00000000000C'),
+      'saga-id': Buffer.from('0192A1B2-0000-7000-8000-00000000000D'),
     };
 
-    expect(parseMessageHeaders(headers).messageId).toBe('0192A1B2-0000-7000-8000-00000000000A');
+    const parsed = parseMessageHeaders(headers);
+
+    expect([parsed.messageId, parsed.correlationId, parsed.causationId, parsed.sagaId]).toEqual([
+      '0192a1b2-0000-7000-8000-00000000000a',
+      '0192a1b2-0000-7000-8000-00000000000b',
+      '0192a1b2-0000-7000-8000-00000000000c',
+      '0192a1b2-0000-7000-8000-00000000000d',
+    ]);
   });
 });

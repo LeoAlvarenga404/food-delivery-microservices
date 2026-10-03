@@ -34,14 +34,15 @@ function assertUuid(text: string, name: string): void {
 
 function readIdentifierHeader(rawHeaders: KafkaJS.IHeaders, name: string): string | undefined {
   const text = readHeader(rawHeaders, name);
-  if (text !== undefined) assertUuid(text, name);
-  return text;
+  if (text === undefined) return undefined;
+  assertUuid(text, name);
+  return text.toLowerCase();
 }
 
 function readRequiredIdentifierHeader(rawHeaders: KafkaJS.IHeaders, name: string): string {
   const text = readRequiredHeader(rawHeaders, name);
   assertUuid(text, name);
-  return text;
+  return text.toLowerCase();
 }
 
 export function parseMessageHeaders(rawHeaders: KafkaJS.IHeaders): MessageHeaders {
