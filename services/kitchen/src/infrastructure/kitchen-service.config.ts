@@ -5,12 +5,16 @@ import { z } from 'zod';
 export interface KitchenServiceConfiguration {
   readonly databaseUrl: string;
   readonly kafkaBootstrapServers: readonly string[];
+  readonly host: string;
+  readonly port: number;
   readonly logLevel: LogLevel;
 }
 
 const kitchenServiceEnvironmentSchema = z.object({
   KITCHEN_DATABASE_URL: environmentVariables.postgresUrl,
   KAFKA_BOOTSTRAP_SERVERS: environmentVariables.kafkaBootstrapServers,
+  KITCHEN_SERVICE_HOST: environmentVariables.listenHost,
+  KITCHEN_SERVICE_PORT: environmentVariables.listenPort.default(4003),
   LOG_LEVEL: environmentVariables.logLevel,
 });
 
@@ -21,6 +25,8 @@ export function readKitchenServiceConfiguration(
   return {
     databaseUrl: variables.KITCHEN_DATABASE_URL,
     kafkaBootstrapServers: variables.KAFKA_BOOTSTRAP_SERVERS,
+    host: variables.KITCHEN_SERVICE_HOST,
+    port: variables.KITCHEN_SERVICE_PORT,
     logLevel: variables.LOG_LEVEL,
   };
 }

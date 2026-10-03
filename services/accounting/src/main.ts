@@ -5,6 +5,7 @@ import {
   type MessageHandler,
   type RunningConsumer,
 } from '@fd/chassis-kafka';
+import { startHealthServer, stopInOrder, stopOnSignals, type Stopper } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
 import type { Kysely } from 'kysely';
@@ -23,6 +24,7 @@ import { SystemClock } from '#infrastructure/system/system-clock.adapter.ts';
 import { UuidV7IdGenerator } from '#infrastructure/system/uuid-v7-id-generator.adapter.ts';
 
 export interface RunningAccountingService {
+  readonly url: string;
   readonly stop: () => Promise<void>;
 }
 
@@ -84,35 +86,27 @@ export async function startAccountingService(
 ): Promise<RunningAccountingService> {
   const logger = createLogger({ serviceName: 'accounting-service', level: configuration.logLevel });
   const database = openDatabase(configuration, logger);
+  const stoppers: Stopper[] = [() => database.destroy()];
   try {
     await migrateToLatest(database, accountingMigrationSources);
     const parts = { configuration, logger, database, clock: new SystemClock() };
     const commandConsumer = await startCommandConsumer(parts);
-    logger.info('accounting service started');
-    return {
-      stop: async () => {
-        try {
-          await commandConsumer.stop();
-        } finally {
-          await database.destroy();
-        }
-      },
-    };
+    stoppers.unshift(() => commandConsumer.stop());
+    const healthServer = await startHealthServer(configuration);
+    stoppers.unshift(() => healthServer.stop());
+    logger.info({ url: healthServer.url }, 'accounting service started');
+    return { url: healthServer.url, stop: () => stopInOrder(stoppers) };
   } catch (error) {
-    await database.destroy().catch((destroyError: unknown) => {
-      logger.error({ err: destroyError }, 'releasing the database after a failed start failed');
+    await stopInOrder(stoppers).catch((stopError: unknown) => {
+      logger.error({ err: stopError }, 'releasing resources after a failed start failed');
     });
     throw error;
   }
 }
 
 if (import.meta.main) {
-  const accountingService = await startAccountingService(
-    readAccountingServiceConfiguration(process.env),
-  );
-  const stop = (): void => {
-    void accountingService.stop();
-  };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const configuration = readAccountingServiceConfiguration(process.env);
+  const accountingService = await startAccountingService(configuration);
+  const logger = createLogger({ serviceName: 'accounting-service', level: configuration.logLevel });
+  stopOnSignals(accountingService, logger);
 }

@@ -1,5 +1,6 @@
 import { withInbox } from '@fd/chassis-inbox';
 import { createKafka, startConsumerRunner, type RunningConsumer } from '@fd/chassis-kafka';
+import { startHealthServer, stopInOrder, stopOnSignals, type Stopper } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
 import type { Kysely } from 'kysely';
@@ -15,6 +16,7 @@ import { createKitchenUnitOfWork } from '#infrastructure/persistence/kitchen-uni
 import { UuidV7IdGenerator } from '#infrastructure/system/uuid-v7-id-generator.adapter.ts';
 
 export interface RunningKitchenService {
+  readonly url: string;
   readonly stop: () => Promise<void>;
 }
 
@@ -62,32 +64,26 @@ export async function startKitchenService(
 ): Promise<RunningKitchenService> {
   const logger = createLogger({ serviceName: 'kitchen-service', level: configuration.logLevel });
   const database = openDatabase(configuration, logger);
+  const stoppers: Stopper[] = [() => database.destroy()];
   try {
     await migrateToLatest(database, kitchenMigrationSources);
     const commandConsumer = await startCommandConsumer({ configuration, logger, database });
-    logger.info('kitchen service started');
-    return {
-      stop: async () => {
-        try {
-          await commandConsumer.stop();
-        } finally {
-          await database.destroy();
-        }
-      },
-    };
+    stoppers.unshift(() => commandConsumer.stop());
+    const healthServer = await startHealthServer(configuration);
+    stoppers.unshift(() => healthServer.stop());
+    logger.info({ url: healthServer.url }, 'kitchen service started');
+    return { url: healthServer.url, stop: () => stopInOrder(stoppers) };
   } catch (error) {
-    await database.destroy().catch((destroyError: unknown) => {
-      logger.error({ err: destroyError }, 'releasing the database after a failed start failed');
+    await stopInOrder(stoppers).catch((stopError: unknown) => {
+      logger.error({ err: stopError }, 'releasing resources after a failed start failed');
     });
     throw error;
   }
 }
 
 if (import.meta.main) {
-  const kitchenService = await startKitchenService(readKitchenServiceConfiguration(process.env));
-  const stop = (): void => {
-    void kitchenService.stop();
-  };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const configuration = readKitchenServiceConfiguration(process.env);
+  const kitchenService = await startKitchenService(configuration);
+  const logger = createLogger({ serviceName: 'kitchen-service', level: configuration.logLevel });
+  stopOnSignals(kitchenService, logger);
 }

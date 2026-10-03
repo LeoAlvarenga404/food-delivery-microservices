@@ -12,6 +12,8 @@ describe('readAccountingServiceConfiguration', () => {
     expect(readAccountingServiceConfiguration(requiredVariables)).toEqual({
       databaseUrl: 'postgresql://accounting_service:secret@127.0.0.1:5435/accounting_service',
       kafkaBootstrapServers: ['localhost:9092', 'localhost:9093', 'localhost:9094'],
+      host: '127.0.0.1',
+      port: 4004,
       slowGatewayResponseInMilliseconds: 3000,
       logLevel: 'info',
     });
@@ -22,6 +24,8 @@ describe('readAccountingServiceConfiguration', () => {
       ACCOUNTING_DATABASE_URL:
         'postgres://accounting_service:secret@127.0.0.1:5435/accounting_service',
       KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092',
+      ACCOUNTING_SERVICE_HOST: '0.0.0.0',
+      ACCOUNTING_SERVICE_PORT: '5004',
       LOG_LEVEL: 'debug',
       SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: '250',
     });
@@ -29,6 +33,8 @@ describe('readAccountingServiceConfiguration', () => {
     expect(configuration).toEqual({
       databaseUrl: 'postgres://accounting_service:secret@127.0.0.1:5435/accounting_service',
       kafkaBootstrapServers: ['localhost:9092'],
+      host: '0.0.0.0',
+      port: 5004,
       slowGatewayResponseInMilliseconds: 250,
       logLevel: 'debug',
     });
@@ -58,6 +64,10 @@ describe('readAccountingServiceConfiguration', () => {
         ...requiredVariables,
         SIMULATED_GATEWAY_SLOW_RESPONSE_IN_MILLISECONDS: '2147483648',
       },
+    },
+    {
+      problem: 'a port out of range',
+      variables: { ...requiredVariables, ACCOUNTING_SERVICE_PORT: '70000' },
     },
     { problem: 'an unknown log level', variables: { ...requiredVariables, LOG_LEVEL: 'verbose' } },
   ])('refuses $problem', ({ variables }) => {

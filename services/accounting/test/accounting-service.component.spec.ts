@@ -126,6 +126,8 @@ beforeAll(async () => {
     databaseUrl: postgres.connectionUri,
     kafkaBootstrapServers: [kafka.bootstrapServer],
     slowGatewayResponseInMilliseconds: 0,
+    host: '127.0.0.1',
+    port: 0,
     logLevel: 'silent',
   });
   stoppers.push(() => accountingService.stop());
@@ -163,6 +165,12 @@ describe('accounting service', () => {
     expect(reply).toEqual({ messageType: 'fooddelivery.accounting.v1.PaymentAuthorized', sagaId });
   });
 
+  it('answers its health endpoint', async () => {
+    const response = await fetch(`${accountingService.url}/health`);
+
+    expect(response.status).toBe(200);
+  });
+
   it('releases its database connections when it fails to start', async () => {
     const databaseName = 'accounting_start_failure';
     const databaseUrl = await createDatabaseThatFailsMigrations(databaseName);
@@ -171,10 +179,35 @@ describe('accounting service', () => {
       databaseUrl,
       kafkaBootstrapServers: [kafka.bootstrapServer],
       slowGatewayResponseInMilliseconds: 0,
+      host: '127.0.0.1',
+      port: 0,
       logLevel: 'silent',
     });
 
     await expect(failedStart).rejects.toThrow();
+    const openConnections = await waitFor(async () => {
+      const count = await countConnectionsTo(databaseName);
+      return count === 0 ? count : undefined;
+    }, 5_000);
+    expect(openConnections).toBe(0);
+  });
+
+  it('releases its database connections when its health port is taken', async () => {
+    const databaseName = 'accounting_port_taken';
+    await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = `/${databaseName}`;
+
+    const failedStart = startAccountingService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      slowGatewayResponseInMilliseconds: 0,
+      host: '127.0.0.1',
+      port: Number(new URL(accountingService.url).port),
+      logLevel: 'silent',
+    });
+
+    await expect(failedStart).rejects.toThrow('EADDRINUSE');
     const openConnections = await waitFor(async () => {
       const count = await countConnectionsTo(databaseName);
       return count === 0 ? count : undefined;

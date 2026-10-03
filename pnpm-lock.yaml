@@ -237,6 +237,9 @@ importers:
       '@fd/chassis-kafka':
         specifier: workspace:*
         version: link:../../packages/chassis/kafka
+      '@fd/chassis-lifecycle':
+        specifier: workspace:*
+        version: link:../../packages/chassis/lifecycle
       '@fd/chassis-observability':
         specifier: workspace:*
         version: link:../../packages/chassis/observability
@@ -286,6 +289,9 @@ importers:
       '@fd/chassis-kafka':
         specifier: workspace:*
         version: link:../../packages/chassis/kafka
+      '@fd/chassis-lifecycle':
+        specifier: workspace:*
+        version: link:../../packages/chassis/lifecycle
       '@fd/chassis-observability':
         specifier: workspace:*
         version: link:../../packages/chassis/observability
@@ -335,6 +341,9 @@ importers:
       '@fd/chassis-kafka':
         specifier: workspace:*
         version: link:../../packages/chassis/kafka
+      '@fd/chassis-lifecycle':
+        specifier: workspace:*
+        version: link:../../packages/chassis/lifecycle
       '@fd/chassis-observability':
         specifier: workspace:*
         version: link:../../packages/chassis/observability

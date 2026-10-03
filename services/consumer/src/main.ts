@@ -1,5 +1,6 @@
 import { withInbox } from '@fd/chassis-inbox';
 import { createKafka, startConsumerRunner, type RunningConsumer } from '@fd/chassis-kafka';
+import { startHealthServer, stopInOrder, stopOnSignals, type Stopper } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
 import type { Kysely } from 'kysely';
@@ -14,6 +15,7 @@ import { createConsumerUnitOfWork } from '#infrastructure/persistence/consumer-u
 import type { DB as ConsumerDatabase } from '#infrastructure/persistence/generated/database.ts';
 
 export interface RunningConsumerService {
+  readonly url: string;
   readonly stop: () => Promise<void>;
 }
 
@@ -61,32 +63,26 @@ export async function startConsumerService(
 ): Promise<RunningConsumerService> {
   const logger = createLogger({ serviceName: 'consumer-service', level: configuration.logLevel });
   const database = openDatabase(configuration, logger);
+  const stoppers: Stopper[] = [() => database.destroy()];
   try {
     await migrateToLatest(database, consumerMigrationSources);
     const commandConsumer = await startCommandConsumer({ configuration, logger, database });
-    logger.info('consumer service started');
-    return {
-      stop: async () => {
-        try {
-          await commandConsumer.stop();
-        } finally {
-          await database.destroy();
-        }
-      },
-    };
+    stoppers.unshift(() => commandConsumer.stop());
+    const healthServer = await startHealthServer(configuration);
+    stoppers.unshift(() => healthServer.stop());
+    logger.info({ url: healthServer.url }, 'consumer service started');
+    return { url: healthServer.url, stop: () => stopInOrder(stoppers) };
   } catch (error) {
-    await database.destroy().catch((destroyError: unknown) => {
-      logger.error({ err: destroyError }, 'releasing the database after a failed start failed');
+    await stopInOrder(stoppers).catch((stopError: unknown) => {
+      logger.error({ err: stopError }, 'releasing resources after a failed start failed');
     });
     throw error;
   }
 }
 
 if (import.meta.main) {
-  const consumerService = await startConsumerService(readConsumerServiceConfiguration(process.env));
-  const stop = (): void => {
-    void consumerService.stop();
-  };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const configuration = readConsumerServiceConfiguration(process.env);
+  const consumerService = await startConsumerService(configuration);
+  const logger = createLogger({ serviceName: 'consumer-service', level: configuration.logLevel });
+  stopOnSignals(consumerService, logger);
 }

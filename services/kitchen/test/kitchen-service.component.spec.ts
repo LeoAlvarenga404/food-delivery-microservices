@@ -1,5 +1,11 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { create, toBinary, type DescMessage, type MessageInitShape } from '@bufbuild/protobuf';
+import {
+  create,
+  fromBinary,
+  toBinary,
+  type DescMessage,
+  type MessageInitShape,
+} from '@bufbuild/protobuf';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
@@ -12,6 +18,10 @@ import {
   ApproveTicketSchema,
   CreateTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
+import {
+  TicketApprovedSchema,
+  TicketCreatedSchema,
+} from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startKitchenService, type RunningKitchenService } from '../src/main.ts';
@@ -19,6 +29,7 @@ import { startKitchenService, type RunningKitchenService } from '../src/main.ts'
 interface ReplyRow {
   readonly messageType: string;
   readonly sagaId: string | null;
+  readonly payload: Uint8Array;
 }
 
 const commandsTopic = 'kitchen.commands';
@@ -92,7 +103,7 @@ async function sendCommand<Schema extends DescMessage>(
 async function waitForReplyTo(messageId: string): Promise<ReplyRow> {
   return waitFor(async () => {
     const result = await sql<ReplyRow>`
-      select message_type, saga_id from outbox where causation_id = ${messageId}
+      select message_type, saga_id, payload from outbox where causation_id = ${messageId}
     `.execute(outboxReader);
     return result.rows[0];
   });
@@ -134,6 +145,8 @@ beforeAll(async () => {
   kitchenService = await startKitchenService({
     databaseUrl: postgres.connectionUri,
     kafkaBootstrapServers: [kafka.bootstrapServer],
+    host: '127.0.0.1',
+    port: 0,
     logLevel: 'silent',
   });
   stoppers.push(() => kitchenService.stop());
@@ -177,10 +190,21 @@ describe('kitchen service', () => {
     await sendCommand(ApproveTicketSchema, { orderId }, approveTicketMessageId);
     const ticketApproved = await waitForReplyTo(approveTicketMessageId);
 
-    expect([ticketCreated, ticketApproved]).toEqual([
+    expect([ticketCreated, ticketApproved]).toMatchObject([
       { messageType: 'fooddelivery.kitchen.v1.TicketCreated', sagaId },
       { messageType: 'fooddelivery.kitchen.v1.TicketApproved', sagaId },
     ]);
+    const createdTicketId = fromBinary(TicketCreatedSchema, ticketCreated.payload).ticketId;
+    expect(createdTicketId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(fromBinary(TicketApprovedSchema, ticketApproved.payload).ticketId).toBe(createdTicketId);
+  });
+
+  it('answers its health endpoint', async () => {
+    const response = await fetch(`${kitchenService.url}/health`);
+
+    expect(response.status).toBe(200);
   });
 
   it('releases its database connections when it fails to start', async () => {
@@ -190,10 +214,34 @@ describe('kitchen service', () => {
     const failedStart = startKitchenService({
       databaseUrl,
       kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: 0,
       logLevel: 'silent',
     });
 
     await expect(failedStart).rejects.toThrow();
+    const openConnections = await waitFor(async () => {
+      const count = await countConnectionsTo(databaseName);
+      return count === 0 ? count : undefined;
+    }, 5_000);
+    expect(openConnections).toBe(0);
+  });
+
+  it('releases its database connections when its health port is taken', async () => {
+    const databaseName = 'kitchen_port_taken';
+    await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = `/${databaseName}`;
+
+    const failedStart = startKitchenService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: Number(new URL(kitchenService.url).port),
+      logLevel: 'silent',
+    });
+
+    await expect(failedStart).rejects.toThrow('EADDRINUSE');
     const openConnections = await waitFor(async () => {
       const count = await countConnectionsTo(databaseName);
       return count === 0 ? count : undefined;

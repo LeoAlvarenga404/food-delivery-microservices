@@ -122,6 +122,8 @@ beforeAll(async () => {
   consumerService = await startConsumerService({
     databaseUrl: postgres.connectionUri,
     kafkaBootstrapServers: [kafka.bootstrapServer],
+    host: '127.0.0.1',
+    port: 0,
     logLevel: 'silent',
   });
   stoppers.push(() => consumerService.stop());
@@ -159,6 +161,12 @@ describe('consumer service', () => {
     expect(reply).toEqual({ messageType: 'fooddelivery.consumer.v1.ConsumerVerified', sagaId });
   });
 
+  it('answers its health endpoint', async () => {
+    const response = await fetch(`${consumerService.url}/health`);
+
+    expect(response.status).toBe(200);
+  });
+
   it('releases its database connections when it fails to start', async () => {
     const databaseName = 'consumer_start_failure';
     const databaseUrl = await createDatabaseThatFailsMigrations(databaseName);
@@ -166,10 +174,34 @@ describe('consumer service', () => {
     const failedStart = startConsumerService({
       databaseUrl,
       kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: 0,
       logLevel: 'silent',
     });
 
     await expect(failedStart).rejects.toThrow();
+    const openConnections = await waitFor(async () => {
+      const count = await countConnectionsTo(databaseName);
+      return count === 0 ? count : undefined;
+    }, 5_000);
+    expect(openConnections).toBe(0);
+  });
+
+  it('releases its database connections when its health port is taken', async () => {
+    const databaseName = 'consumer_port_taken';
+    await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
+    const databaseUrl = new URL(postgres.connectionUri);
+    databaseUrl.pathname = `/${databaseName}`;
+
+    const failedStart = startConsumerService({
+      databaseUrl: databaseUrl.toString(),
+      kafkaBootstrapServers: [kafka.bootstrapServer],
+      host: '127.0.0.1',
+      port: Number(new URL(consumerService.url).port),
+      logLevel: 'silent',
+    });
+
+    await expect(failedStart).rejects.toThrow('EADDRINUSE');
     const openConnections = await waitFor(async () => {
       const count = await countConnectionsTo(databaseName);
       return count === 0 ? count : undefined;

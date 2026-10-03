@@ -11,6 +11,8 @@ describe('readKitchenServiceConfiguration', () => {
     expect(readKitchenServiceConfiguration(requiredVariables)).toEqual({
       databaseUrl: 'postgresql://kitchen_service:secret@127.0.0.1:5434/kitchen_service',
       kafkaBootstrapServers: ['localhost:9092', 'localhost:9093', 'localhost:9094'],
+      host: '127.0.0.1',
+      port: 4003,
       logLevel: 'info',
     });
   });
@@ -19,12 +21,16 @@ describe('readKitchenServiceConfiguration', () => {
     const configuration = readKitchenServiceConfiguration({
       KITCHEN_DATABASE_URL: 'postgres://kitchen_service:secret@127.0.0.1:5434/kitchen_service',
       KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092',
+      KITCHEN_SERVICE_HOST: '0.0.0.0',
+      KITCHEN_SERVICE_PORT: '5003',
       LOG_LEVEL: 'debug',
     });
 
     expect(configuration).toEqual({
       databaseUrl: 'postgres://kitchen_service:secret@127.0.0.1:5434/kitchen_service',
       kafkaBootstrapServers: ['localhost:9092'],
+      host: '0.0.0.0',
+      port: 5003,
       logLevel: 'debug',
     });
   });
@@ -38,6 +44,10 @@ describe('readKitchenServiceConfiguration', () => {
     {
       problem: 'no bootstrap server',
       variables: { ...requiredVariables, KAFKA_BOOTSTRAP_SERVERS: ' , ' },
+    },
+    {
+      problem: 'a port out of range',
+      variables: { ...requiredVariables, KITCHEN_SERVICE_PORT: '70000' },
     },
     { problem: 'an unknown log level', variables: { ...requiredVariables, LOG_LEVEL: 'verbose' } },
   ])('refuses $problem', ({ variables }) => {

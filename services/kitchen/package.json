@@ -21,6 +21,7 @@
     "@fd/chassis-config": "workspace:*",
     "@fd/chassis-inbox": "workspace:*",
     "@fd/chassis-kafka": "workspace:*",
+    "@fd/chassis-lifecycle": "workspace:*",
     "@fd/chassis-observability": "workspace:*",
     "@fd/chassis-outbox": "workspace:*",
     "@fd/chassis-postgres": "workspace:*",
