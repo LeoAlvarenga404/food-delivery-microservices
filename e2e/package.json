@@ -1,0 +1,16 @@
+{
+  "name": "@fd/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:e2e": "vitest run --project e2e"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "vitest": "5.0.3",
+    "zod": "4.6.5"
+  }
+}

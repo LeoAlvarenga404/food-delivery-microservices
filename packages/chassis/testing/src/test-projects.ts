@@ -1,6 +1,7 @@
 import { defineConfig, type ViteUserConfig } from 'vitest/config';
 
 const containerTimeoutInMilliseconds = 120_000;
+const endToEndTimeoutInMilliseconds = 180_000;
 
 function specsOfKind(kind: string): string[] {
   return [`src/**/*.${kind}.spec.ts`, `test/**/*.${kind}.spec.ts`];
@@ -36,6 +37,15 @@ export const testProjects: ViteUserConfig = defineConfig({
           include: specsOfKind('component'),
           testTimeout: containerTimeoutInMilliseconds,
           hookTimeout: containerTimeoutInMilliseconds,
+        },
+      },
+      {
+        test: {
+          name: 'e2e',
+          include: specsOfKind('e2e'),
+          fileParallelism: false,
+          testTimeout: endToEndTimeoutInMilliseconds,
+          hookTimeout: endToEndTimeoutInMilliseconds,
         },
       },
     ],

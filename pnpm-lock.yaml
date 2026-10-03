@@ -109,6 +109,18 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
 
+  e2e:
+    devDependencies:
+      '@fd/chassis-testing':
+        specifier: workspace:*
+        version: link:../packages/chassis/testing
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+
   infra:
     dependencies:
       '@confluentinc/kafka-javascript':
