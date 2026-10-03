@@ -4,19 +4,32 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./register": "./src/register.ts"
   },
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
-    "test:unit": "vitest run --project unit"
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration"
   },
   "dependencies": {
+    "@fastify/otel": "0.21.1",
+    "@fd/chassis-config": "workspace:*",
     "@opentelemetry/api": "1.9.1",
-    "pino": "10.3.1"
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
+    "@opentelemetry/instrumentation": "0.222.0",
+    "@opentelemetry/instrumentation-http": "0.222.0",
+    "@opentelemetry/instrumentation-pg": "0.74.0",
+    "@opentelemetry/instrumentation-undici": "0.32.0",
+    "@opentelemetry/resources": "2.11.0",
+    "@opentelemetry/sdk-trace-node": "2.11.0",
+    "pino": "10.3.1",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@fd/chassis-testing": "workspace:*",
+    "fastify": "5.12.5",
     "vitest": "5.0.3"
   }
 }
