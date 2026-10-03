@@ -131,6 +131,25 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
 
+  packages/chassis/auth:
+    dependencies:
+      '@fd/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      jose:
+        specifier: 6.2.12
+        version: 6.2.12
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@fd/chassis-testing':
+        specifier: workspace:*
+        version: link:../testing
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
+
   packages/chassis/config:
     dependencies:
       zod:
@@ -2127,6 +2146,9 @@ packages:
   jiti@2.6.1:
     resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
     hasBin: true
+
+  jose@6.2.12:
+    resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -4774,6 +4796,8 @@ snapshots:
       '@pkgjs/parseargs': 0.11.0
 
   jiti@2.6.1: {}
+
+  jose@6.2.12: {}
 
   js-tokens@4.0.0: {}
 

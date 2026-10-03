@@ -21,6 +21,7 @@
     },
     "test:integration": {
       "dependsOn": ["transit", "generate", "^generate"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/infra/keycloak/**"],
       "passThroughEnv": ["TESTCONTAINERS_*"],
       "env": ["UPDATE_GOLDEN"]
     },
@@ -31,6 +32,7 @@
     },
     "test:component": {
       "dependsOn": ["transit", "generate", "^generate"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/infra/keycloak/**"],
       "passThroughEnv": ["TESTCONTAINERS_*"]
     },
     "dev": {
