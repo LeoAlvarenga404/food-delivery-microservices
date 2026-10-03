@@ -1,6 +1,7 @@
+import { ExternalDependencyFailure } from './external-dependency-failure.ts';
 import { PermanentMessageFailure } from './permanent-message-failure.ts';
 
-export type FailureClass = 'transient' | 'permanent' | 'unknown';
+export type FailureClass = 'transient' | 'external' | 'permanent' | 'unknown';
 
 export type FailureHandling =
   | { readonly kind: 'retry'; readonly delayInMilliseconds: number }
@@ -27,7 +28,13 @@ const transientErrorCodes = new Set([
 const connectionExceptionClass = '08';
 const baseDelayInMilliseconds = 100;
 const maximumDelayInMilliseconds = 30_000;
-const unknownFailureAttemptLimit = 5;
+
+const attemptLimits: Readonly<Record<FailureClass, number>> = {
+  transient: Number.POSITIVE_INFINITY,
+  external: 5,
+  unknown: 5,
+  permanent: 1,
+};
 
 function readErrorCode(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
@@ -36,6 +43,7 @@ function readErrorCode(error: unknown): string | undefined {
 
 export function classifyFailure(error: unknown): FailureClass {
   if (error instanceof PermanentMessageFailure) return 'permanent';
+  if (error instanceof ExternalDependencyFailure) return 'external';
   const code = readErrorCode(error);
   if (code === undefined) return 'unknown';
   const isTransient = transientErrorCodes.has(code) || code.startsWith(connectionExceptionClass);
@@ -47,10 +55,7 @@ export function decideFailureHandling(
   attemptCount: number,
   random: () => number = Math.random,
 ): FailureHandling {
-  if (failureClass === 'permanent') return { kind: 'dead-letter' };
-  if (failureClass === 'unknown' && attemptCount >= unknownFailureAttemptLimit) {
-    return { kind: 'dead-letter' };
-  }
+  if (attemptCount >= attemptLimits[failureClass]) return { kind: 'dead-letter' };
   const exponentialDelayInMilliseconds = baseDelayInMilliseconds * 2 ** (attemptCount - 1);
   const ceilingInMilliseconds = Math.min(
     maximumDelayInMilliseconds,

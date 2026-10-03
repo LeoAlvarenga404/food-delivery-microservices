@@ -5,6 +5,7 @@ import { createLogger } from '@fd/chassis-observability';
 import { startKafkaContainer, type StartedKafka } from '@fd/chassis-testing';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { createKafka } from './create-kafka.ts';
+import { ExternalDependencyFailure } from './external-dependency-failure.ts';
 import type { InboundMessage, MessageHandler } from './inbound-message.ts';
 import { startConsumerRunner, type RunningConsumer } from './kafka-consumer-runner.ts';
 
@@ -225,6 +226,38 @@ describe('startConsumerRunner', () => {
     expect(headerOf(deadLetter, 'error-message')).toBe('unexpected bug');
     expect(headerOf(deadLetter, 'attempt-count')).toBe('5');
     expect(await committedOffset(scenario.groupId, scenario.topic)).toBe('1');
+  });
+
+  it('dead-letters a message whose external dependency keeps failing after five attempts and moves on', async () => {
+    const handled: string[] = [];
+    let attemptCount = 0;
+    const scenario = await runScenario(
+      'external',
+      (message) => {
+        handled.push(payloadText(message));
+        if (payloadText(message) !== 'card-0005') return Promise.resolve();
+        attemptCount += 1;
+        const gatewayTimeout = new ExternalDependencyFailure('gateway timed out');
+        return Promise.reject(Object.assign(gatewayTimeout, { code: 'ETIMEDOUT' }));
+      },
+      ['card-0005', 'card-4242'].map((text) => ({
+        key: 'order-1',
+        value: text,
+        headers: headersFor('Sample'),
+      })),
+    );
+
+    await waitUntil(() => handled.includes('card-4242'));
+    const deadLetter = await readFirstMessage(`${scenario.topic}.${scenario.groupId}.dlq`);
+    await scenario.runner.stop();
+
+    expect(attemptCount).toBe(5);
+    expect(handled.at(-1)).toBe('card-4242');
+    expect(deadLetter.value?.toString()).toBe('card-0005');
+    expect(headerOf(deadLetter, 'error-class')).toBe('external');
+    expect(headerOf(deadLetter, 'error-type')).toBe('ExternalDependencyFailure');
+    expect(headerOf(deadLetter, 'attempt-count')).toBe('5');
+    expect(await committedOffset(scenario.groupId, scenario.topic)).toBe('2');
   });
 
   it('dead-letters a message without a value as a permanent failure', async () => {
