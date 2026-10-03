@@ -35,14 +35,14 @@ export function placeOrderSagaReplyConsumer(
 ): TransactionalMessageHandler<OrderDatabase> {
   return async (message, transaction) => {
     const sagaId = readSagaId(message);
-    const reply = toPlaceOrderSagaReply(message);
+    const { orderId, reply } = toPlaceOrderSagaReply(message);
     const { messageId, correlationId, causationId } = message.headers;
     const logger = withCorrelation(settings.logger, {
       correlationId,
       causationId,
       sagaId,
       messageId,
-    });
+    }).child({ orderId });
     const unitOfWork = joinTransaction(settings.unitOfWork, transaction);
     const handler = new ApplyPlaceOrderSagaReplyCommandHandler(unitOfWork, settings.clock);
     const outcome = await handler.execute({
@@ -55,6 +55,6 @@ export function placeOrderSagaReplyConsumer(
       logger.warn({ failure: outcome.failure }, 'place order saga reply ignored');
       return;
     }
-    logger.info({ replyType: reply.type }, 'place order saga reply applied');
+    logger.info({ reply }, 'place order saga reply applied');
   };
 }
