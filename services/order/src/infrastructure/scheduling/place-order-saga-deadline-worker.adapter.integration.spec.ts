@@ -18,6 +18,7 @@ import {
 } from '../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { PlaceOrderSagaState } from '#application/sagas/place-order/place-order.saga-state.ts';
+import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import {
   createOrderUnitOfWork,
   type OrderUnitOfWork,
@@ -96,11 +97,16 @@ async function readOutbox(): Promise<readonly OutboxRow[]> {
   return result.rows;
 }
 
-async function readOutboxTraceparents(): Promise<readonly (string | null)[]> {
-  const result = await sql<{ readonly traceparent: string | null }>`
-    select traceparent from outbox order by id
+interface OutboxTraceparentRow {
+  readonly sagaId: string | null;
+  readonly traceparent: string | null;
+}
+
+async function readOutboxTraceparents(): Promise<readonly OutboxTraceparentRow[]> {
+  const result = await sql<OutboxTraceparentRow>`
+    select saga_id, traceparent from outbox order by id
   `.execute(testDatabase.database);
-  return result.rows.map((row) => row.traceparent);
+  return result.rows;
 }
 
 async function readSaga(sagaId: string) {
@@ -214,26 +220,53 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
     });
   });
 
-  it('times out each saga in a span of the sweep that carries its ids and its commands', async () => {
-    const sagaId = '0199a5d0-0000-7000-8000-0000000002b2';
-    const order = buildSagaOrder();
-    await saveExpiredSaga(sagaId, {
-      step: 'CREATING_TICKET',
-      order,
-      paymentToken: 'tok_visa_4242',
-    });
+  it('times out each saga in its own span of the sweep that carries its ids and its commands', async () => {
+    const sagas = [
+      {
+        sagaId: '0199a5d0-0000-7000-8000-0000000002b2',
+        order: {
+          ...buildSagaOrder(),
+          orderId: unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000002c2')),
+        },
+      },
+      {
+        sagaId: '0199a5d0-0000-7000-8000-0000000002b3',
+        order: {
+          ...buildSagaOrder(),
+          orderId: unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000002c3')),
+        },
+      },
+    ];
+    for (const { sagaId, order } of sagas) {
+      await saveExpiredSaga(sagaId, {
+        step: 'CREATING_TICKET',
+        order,
+        paymentToken: 'tok_visa_4242',
+      });
+    }
 
     await runInRootSpan('place order saga deadlines', () =>
       workerAt(afterEveryDeadline).timeOutExpiredSteps(),
     );
 
     const [sweep] = spans.spansNamed('place order saga deadlines');
-    const [timeout] = spans.spansNamed('place order saga step timeout');
-    expect(timeout).toMatchObject({
-      parentSpanContext: { spanId: sweep?.spanContext().spanId },
-      attributes: { 'fooddelivery.order.id': order.orderId, 'fooddelivery.saga.id': sagaId },
-    });
-    expect(await readOutboxTraceparents()).toEqual([traceparentOf(timeout)]);
+    const timeouts = spans.spansNamed('place order saga step timeout');
+    const outbox = await readOutboxTraceparents();
+    expect(timeouts).toHaveLength(2);
+    for (const { sagaId, order } of sagas) {
+      const timeout = timeouts.find((span) => span.attributes['fooddelivery.saga.id'] === sagaId);
+      expect(timeout).toMatchObject({
+        parentSpanContext: { spanId: sweep?.spanContext().spanId },
+        attributes: { 'fooddelivery.order.id': order.orderId, 'fooddelivery.saga.id': sagaId },
+      });
+      expect(outbox.filter((row) => row.sagaId === sagaId)).toEqual([
+        { sagaId, traceparent: traceparentOf(timeout) },
+      ]);
+    }
+    expect(await readOutbox()).toMatchObject([
+      { topic: 'kitchen.commands', aggregateId: sagas[0]?.order.orderId, sagaId: sagas[0]?.sagaId },
+      { topic: 'kitchen.commands', aggregateId: sagas[1]?.order.orderId, sagaId: sagas[1]?.sagaId },
+    ]);
   });
 
   it('times out each saga once when two workers sweep at the same time', async () => {
