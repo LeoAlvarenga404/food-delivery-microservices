@@ -47,7 +47,7 @@ function registerPlaceOrder(server: OrderRoutesServer, settings: OrderRoutesSett
     const { street, number, city, postalCode } = body.deliveryAddress;
     const placed = await settings.orderService.placeOrder(
       {
-        idempotencyKey: headers['idempotency-key'],
+        idempotencyKey: headers['idempotency-key'].toLowerCase(),
         consumerId: headers['x-consumer-id'],
         restaurantId: body.restaurantId,
         lineItems: body.lineItems.map(({ menuItemId, quantity }) => ({ menuItemId, quantity })),

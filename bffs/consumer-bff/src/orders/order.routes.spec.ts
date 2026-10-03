@@ -93,6 +93,12 @@ describe('POST /v1/orders', () => {
     ]);
   });
 
+  it('forwards an uppercase Idempotency-Key to the order service in lowercase', async () => {
+    await placeOrder({ ...placementHeaders, 'idempotency-key': idempotencyKey.toUpperCase() });
+
+    expect(orderService.placeOrderRequests).toMatchObject([{ idempotencyKey }]);
+  });
+
   it.each([
     { scenario: 'the caller sent', sent: callerCorrelationId, expected: callerCorrelationId },
     {
