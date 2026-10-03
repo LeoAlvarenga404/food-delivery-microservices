@@ -23,7 +23,9 @@
     "infra:down": "docker compose -f infra/compose.yaml --profile core down",
     "infra:topics": "node infra/kafka/create-topics.ts",
     "infra:smoke": "node infra/smoke/outbox-relay-smoke.ts",
-    "infra:connectors": "node infra/debezium/register-outbox-connectors.ts"
+    "infra:connectors": "node infra/debezium/register-outbox-connectors.ts",
+    "stack:up": "docker compose -f infra/compose.yaml --profile core --profile apps up -d --build --wait",
+    "stack:down": "docker compose -f infra/compose.yaml --profile core --profile apps down"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",
