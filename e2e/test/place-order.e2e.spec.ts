@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
+import {
+  HttpConsumerApi,
+  openPizzeria,
+  type PizzeriaOrder,
+} from './support/http-consumer-api.adapter.ts';
 
 const consumerApi = new HttpConsumerApi('consumer-a');
 const minimumSlowCardExtraDelayInMilliseconds = 6_000;
+let pizzeriaOrder: PizzeriaOrder;
 
 function placementHeaders(idempotencyKey: string): Record<string, string> {
   return { 'idempotency-key': idempotencyKey };
@@ -20,7 +25,10 @@ async function measureApprovalInMilliseconds(paymentToken: string): Promise<numb
   return Date.now() - placedAtInMilliseconds;
 }
 
-beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
+beforeAll(async () => {
+  await consumerApi.waitUntilReachableAndRegistered();
+  pizzeriaOrder = await openPizzeria();
+});
 
 describe('placing an order through the edge', () => {
   it('approves the order once every participant answered the saga', async () => {

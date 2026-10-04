@@ -3,12 +3,14 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   consumerRegistration,
   HttpConsumerApi,
-  pizzeriaOrder,
+  openPizzeria,
   type OrderView,
+  type PizzeriaOrder,
 } from './support/http-consumer-api.adapter.ts';
 import { KeycloakUserAdministration } from './support/keycloak-user-administration.adapter.ts';
 
 const administration = new KeycloakUserAdministration();
+let pizzeriaOrder: PizzeriaOrder;
 
 async function newConsumerApi(): Promise<HttpConsumerApi> {
   return new HttpConsumerApi((await administration.createConsumer()).username);
@@ -24,7 +26,10 @@ async function placeOrderAndWaitFor(
   return consumerApi.waitForOrderStatus(await consumerApi.readPlacedOrderId(response), status);
 }
 
-beforeAll(() => new HttpConsumerApi(undefined).waitUntilReachable());
+beforeAll(async () => {
+  await new HttpConsumerApi(undefined).waitUntilReachable();
+  pizzeriaOrder = await openPizzeria();
+});
 
 describe('registering as a consumer through the edge', () => {
   it('rejects the order of a new consumer until it registers, then approves it', async () => {

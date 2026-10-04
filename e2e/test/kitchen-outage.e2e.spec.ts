@@ -1,13 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { DockerComposeStack } from './support/docker-compose-stack.adapter.ts';
-import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
+import {
+  HttpConsumerApi,
+  openPizzeria,
+  type PizzeriaOrder,
+} from './support/http-consumer-api.adapter.ts';
 
 const consumerApi = new HttpConsumerApi('consumer-a');
 const stack = new DockerComposeStack();
 const kitchenService = 'kitchen-service';
+let pizzeriaOrder: PizzeriaOrder;
 
-beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
+beforeAll(async () => {
+  await consumerApi.waitUntilReachableAndRegistered();
+  pizzeriaOrder = await openPizzeria();
+});
 
 afterEach(() => stack.startService(kitchenService));
 

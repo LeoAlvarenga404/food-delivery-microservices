@@ -43,6 +43,42 @@ export const pizzeriaMenu = [
   },
 ];
 
+const everyDayOfWeek = [
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+];
+
+export const aroundTheClockHours = everyDayOfWeek.flatMap((dayOfWeek) => [
+  { dayOfWeek, opensAt: '00:00', closesAt: '12:00' },
+  { dayOfWeek, opensAt: '12:00', closesAt: '00:00' },
+]);
+
+export const orderablePizzeriaMenu = [
+  {
+    menuItemId: '0199a5d0-0000-7000-8000-000000000101',
+    name: 'Margherita',
+    priceInCents: '4500',
+    isAvailable: true,
+  },
+  {
+    menuItemId: '0199a5d0-0000-7000-8000-000000000102',
+    name: 'Calabresa',
+    priceInCents: '5200',
+    isAvailable: true,
+  },
+  {
+    menuItemId: '0199a5d0-0000-7000-8000-000000000103',
+    name: 'Guarana',
+    priceInCents: '800',
+    isAvailable: true,
+  },
+];
+
 export class HttpRestaurantApi {
   readonly #signIn: KeycloakSignIn | undefined;
   readonly #baseUrl: string;
@@ -92,12 +128,26 @@ export class HttpRestaurantApi {
     return onboardedRestaurantSchema.parse(await response.json()).restaurantId;
   }
 
-  async onboardPizzeria(): Promise<string> {
-    const response = await this.onboardRestaurant(pizzeriaOnboarding);
+  async onboardPizzeria(
+    openingHours: readonly object[] = pizzeriaOnboarding.openingHours,
+  ): Promise<string> {
+    const response = await this.onboardRestaurant({ ...pizzeriaOnboarding, openingHours });
     if (response.status !== 201) {
       throw new Error(`onboarding the pizzeria failed: HTTP ${String(response.status)}`);
     }
     return this.readRestaurantId(response);
+  }
+
+  async openPizzeria(
+    openingHours: readonly object[],
+    menuItems: readonly object[] = orderablePizzeriaMenu,
+  ): Promise<string> {
+    const restaurantId = await this.onboardPizzeria(openingHours);
+    const revised = await this.reviseMenu(restaurantId, menuItems);
+    if (revised.status !== 200) {
+      throw new Error(`revising the pizzeria menu failed: HTTP ${String(revised.status)}`);
+    }
+    return restaurantId;
   }
 
   async waitUntilReachable(limitInMilliseconds = 120_000): Promise<void> {

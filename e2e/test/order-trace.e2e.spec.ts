@@ -2,7 +2,11 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DockerComposeStack } from './support/docker-compose-stack.adapter.ts';
-import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
+import {
+  HttpConsumerApi,
+  openPizzeria,
+  type PizzeriaOrder,
+} from './support/http-consumer-api.adapter.ts';
 import { HttpTempoApi, type TraceSpan } from './support/http-tempo-api.adapter.ts';
 
 type LogEntry = ReadonlyMap<string, unknown>;
@@ -10,6 +14,7 @@ type LogEntry = ReadonlyMap<string, unknown>;
 const consumerApi = new HttpConsumerApi('consumer-a');
 const tempoApi = new HttpTempoApi();
 const stack = new DockerComposeStack();
+let pizzeriaOrder: PizzeriaOrder;
 const tracedServices = [
   'order-service',
   'consumer-service',
@@ -56,7 +61,10 @@ async function readLogEntriesUntilEnvoyLogged(
   return logEntries;
 }
 
-beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
+beforeAll(async () => {
+  await consumerApi.waitUntilReachableAndRegistered();
+  pizzeriaOrder = await openPizzeria();
+});
 
 describe('tracing a placed order', () => {
   it('follows the order through every application in one trace that their logs point to', async () => {

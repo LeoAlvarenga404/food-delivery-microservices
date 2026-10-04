@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DockerComposeStack } from './support/docker-compose-stack.adapter.ts';
-import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
+import {
+  HttpConsumerApi,
+  openPizzeria,
+  type PizzeriaOrder,
+} from './support/http-consumer-api.adapter.ts';
 
 const consumerApi = new HttpConsumerApi('consumer-a');
 const stack = new DockerComposeStack();
 let stoppedKafkaNode = 'no node';
+let pizzeriaOrder: PizzeriaOrder;
 
 beforeAll(async () => {
   await consumerApi.waitUntilReachableAndRegistered();
+  pizzeriaOrder = await openPizzeria();
   stoppedKafkaNode = await stack.findActiveKafkaController();
   await stack.stopService(stoppedKafkaNode);
 });

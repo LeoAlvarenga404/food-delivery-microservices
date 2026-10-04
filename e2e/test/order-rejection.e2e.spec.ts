@@ -1,13 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DockerComposeStack } from './support/docker-compose-stack.adapter.ts';
-import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
+import {
+  HttpConsumerApi,
+  openPizzeria,
+  type PizzeriaOrder,
+} from './support/http-consumer-api.adapter.ts';
 
 const consumerApi = new HttpConsumerApi('consumer-a');
 const unregisteredConsumerApi = new HttpConsumerApi('consumer-b');
 const stack = new DockerComposeStack();
+let pizzeriaOrder: PizzeriaOrder;
 
-beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
+beforeAll(async () => {
+  await consumerApi.waitUntilReachableAndRegistered();
+  pizzeriaOrder = await openPizzeria();
+});
 
 describe('an order the saga cannot complete', () => {
   it('is rejected when the card is declined, after the kitchen rejected its ticket', async () => {

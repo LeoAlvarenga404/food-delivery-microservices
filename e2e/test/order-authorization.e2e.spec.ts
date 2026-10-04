@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
+import {
+  HttpConsumerApi,
+  openPizzeria,
+  type PizzeriaOrder,
+} from './support/http-consumer-api.adapter.ts';
 import { KeycloakSignIn } from './support/keycloak-sign-in.adapter.ts';
 
 const consumerAApi = new HttpConsumerApi('consumer-a');
 const consumerBApi = new HttpConsumerApi('consumer-b');
 const anonymousApi = new HttpConsumerApi(undefined);
+let pizzeriaOrder: PizzeriaOrder;
 
 function withAnotherSignature(accessToken: string): string {
   const [header, payload, signature = ''] = accessToken.split('.');
@@ -14,7 +19,10 @@ function withAnotherSignature(accessToken: string): string {
   );
 }
 
-beforeAll(() => consumerAApi.waitUntilReachableAndRegistered());
+beforeAll(async () => {
+  await consumerAApi.waitUntilReachableAndRegistered();
+  pizzeriaOrder = await openPizzeria();
+});
 
 describe('authorization of order requests', () => {
   it('refuses a placement without a token at the edge with an unauthorized problem', async () => {
