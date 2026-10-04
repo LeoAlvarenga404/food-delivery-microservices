@@ -1,6 +1,6 @@
 import { defineConfig, type ViteUserConfig } from 'vitest/config';
 
-const containerTimeoutInMilliseconds = 120_000;
+const containerTimeoutInMilliseconds = 180_000;
 const endToEndTimeoutInMilliseconds = 180_000;
 
 function specsOfKind(kind: string): string[] {

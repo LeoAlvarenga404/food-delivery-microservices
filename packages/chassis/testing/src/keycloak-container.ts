@@ -17,6 +17,7 @@ const realmFilePath = fileURLToPath(
 );
 const consumerBffClientSecret = 'test-consumer-bff-secret';
 const keycloakPort = 8080;
+const keycloakStartupTimeoutInMilliseconds = 150_000;
 
 function readAccessToken(body: unknown): string | undefined {
   if (typeof body !== 'object' || body === null || !('access_token' in body)) return undefined;
@@ -53,6 +54,7 @@ function startContainer(hostPort: number, baseUrl: string): Promise<StartedTestC
       { source: realmFilePath, target: '/opt/keycloak/data/import/food-delivery-realm.json' },
     ])
     .withCommand(['start-dev', '--import-realm'])
+    .withStartupTimeout(keycloakStartupTimeoutInMilliseconds)
     .withWaitStrategy(
       Wait.forHttp('/realms/food-delivery/.well-known/openid-configuration', keycloakPort),
     )
