@@ -38,6 +38,7 @@ const exchangedTokenSchema = z.object({
 const refusalSchema = z.object({ error: z.string() });
 const badRequestStatus = 400;
 const expiryMarginInMilliseconds = 5_000;
+const tokenEndpointTimeoutInMilliseconds = 5_000;
 
 function forgetExpired(cache: Map<string, CachedAccessToken>, nowInMilliseconds: number): void {
   for (const [cacheKey, cached] of cache) {
@@ -59,6 +60,7 @@ function postExchange(
       ['subject_token_type', 'urn:ietf:params:oauth:token-type:access_token'],
       ['audience', request.audience],
     ]),
+    signal: AbortSignal.timeout(tokenEndpointTimeoutInMilliseconds),
   });
 }
 
