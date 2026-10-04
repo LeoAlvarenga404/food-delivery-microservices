@@ -42,6 +42,7 @@ describe('registering as a consumer through the edge', () => {
 
     expect(registered.status).toBe(201);
     expect(registered.headers.get('location')).toBe('/v1/consumers/me');
+    expect(await registered.json()).toEqual({ consumerId: subject });
     const profile = await consumerApi.fetchOwnConsumer();
     expect(await profile.json()).toEqual({
       consumerId: subject,
