@@ -10,6 +10,31 @@ import {
   type RestaurantRows,
 } from './restaurant.persistence-mapper.ts';
 
+async function findRestaurant(
+  database: Kysely<RestaurantDatabase>,
+  restaurantId: string,
+): Promise<Restaurant | undefined> {
+  const restaurant = await database
+    .selectFrom('restaurants')
+    .selectAll()
+    .where('restaurantId', '=', restaurantId)
+    .executeTakeFirst();
+  if (restaurant === undefined) return undefined;
+  const members = await database
+    .selectFrom('restaurantMembers')
+    .selectAll()
+    .where('restaurantId', '=', restaurantId)
+    .orderBy('staffMemberId')
+    .execute();
+  const menuItems = await database
+    .selectFrom('menuItems')
+    .selectAll()
+    .where('restaurantId', '=', restaurantId)
+    .orderBy('position')
+    .execute();
+  return restaurantPersistenceMapper.toDomain({ restaurant, members, menuItems });
+}
+
 export class PostgresRestaurantRepository implements RestaurantRepository {
   readonly #database: Kysely<RestaurantDatabase>;
 
@@ -18,42 +43,22 @@ export class PostgresRestaurantRepository implements RestaurantRepository {
   }
 
   findById(restaurantId: RestaurantId): Promise<Restaurant | undefined> {
-    return this.#find(restaurantId);
+    return this.#readFromOneSnapshot((database) => findRestaurant(database, restaurantId));
   }
 
-  async findByMember(staffMemberId: StaffMemberId): Promise<readonly Restaurant[]> {
-    const memberships = await this.#database
-      .selectFrom('restaurantMembers')
-      .select('restaurantId')
-      .where('staffMemberId', '=', staffMemberId)
-      .orderBy('restaurantId')
-      .execute();
-    const restaurants = await Promise.all(
-      memberships.map(({ restaurantId }) => this.#find(restaurantId)),
-    );
-    return restaurants.filter((restaurant) => restaurant !== undefined);
-  }
-
-  async #find(restaurantId: string): Promise<Restaurant | undefined> {
-    const restaurant = await this.#database
-      .selectFrom('restaurants')
-      .selectAll()
-      .where('restaurantId', '=', restaurantId)
-      .executeTakeFirst();
-    if (restaurant === undefined) return undefined;
-    const members = await this.#database
-      .selectFrom('restaurantMembers')
-      .selectAll()
-      .where('restaurantId', '=', restaurantId)
-      .orderBy('staffMemberId')
-      .execute();
-    const menuItems = await this.#database
-      .selectFrom('menuItems')
-      .selectAll()
-      .where('restaurantId', '=', restaurantId)
-      .orderBy('position')
-      .execute();
-    return restaurantPersistenceMapper.toDomain({ restaurant, members, menuItems });
+  findByMember(staffMemberId: StaffMemberId): Promise<readonly Restaurant[]> {
+    return this.#readFromOneSnapshot(async (database) => {
+      const memberships = await database
+        .selectFrom('restaurantMembers')
+        .select('restaurantId')
+        .where('staffMemberId', '=', staffMemberId)
+        .orderBy('restaurantId')
+        .execute();
+      const restaurants = await Promise.all(
+        memberships.map(({ restaurantId }) => findRestaurant(database, restaurantId)),
+      );
+      return restaurants.filter((restaurant) => restaurant !== undefined);
+    });
   }
 
   async save(restaurant: Restaurant): Promise<void> {
@@ -64,6 +69,13 @@ export class PostgresRestaurantRepository implements RestaurantRepository {
       await this.#update(rows);
     }
     await this.#replaceChildren(rows);
+  }
+
+  #readFromOneSnapshot<Result>(
+    read: (database: Kysely<RestaurantDatabase>) => Promise<Result>,
+  ): Promise<Result> {
+    if (this.#database.isTransaction) return read(this.#database);
+    return this.#database.transaction().setIsolationLevel('repeatable read').execute(read);
   }
 
   async #insert(rows: RestaurantRows): Promise<void> {
