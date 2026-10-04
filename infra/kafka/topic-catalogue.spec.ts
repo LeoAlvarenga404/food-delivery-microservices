@@ -16,7 +16,7 @@ const topicNames = topicCatalogue.map((topic) => topic.name);
 const deadLetterTopics = topicCatalogue.filter((topic) => topic.name.endsWith('.dlq'));
 
 describe('topicCatalogue', () => {
-  it('lists the slice 1 topics and the restaurant state topic', () => {
+  it('lists the slice 1 topics, the restaurant state topic and its dead letters in Order', () => {
     expect(topicNames).toEqual([
       'order.order.events',
       'consumer.commands',
@@ -28,6 +28,7 @@ describe('topicCatalogue', () => {
       'kitchen.commands.kitchen-service.dlq',
       'accounting.commands.accounting-service.dlq',
       'order.place-order-saga.replies.order-service.dlq',
+      'restaurant.restaurant.state.order-service.dlq',
     ]);
   });
 

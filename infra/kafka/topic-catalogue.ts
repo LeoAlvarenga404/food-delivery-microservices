@@ -42,6 +42,7 @@ export const topicCatalogue: readonly TopicDefinition[] = [
   deadLetterTopic('kitchen.commands', 'kitchen-service'),
   deadLetterTopic('accounting.commands', 'accounting-service'),
   deadLetterTopic('order.place-order-saga.replies', 'order-service'),
+  deadLetterTopic('restaurant.restaurant.state', 'order-service'),
 ];
 
 export function toTopicConfigEntries(
