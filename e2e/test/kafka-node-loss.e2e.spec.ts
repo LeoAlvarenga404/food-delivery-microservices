@@ -1,13 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DockerComposeStack } from './support/docker-compose-stack.adapter.ts';
-import {
-  HttpConsumerApi,
-  pizzeriaOrder,
-  walkingSkeletonConsumerId,
-} from './support/http-consumer-api.adapter.ts';
+import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
 
-const consumerApi = new HttpConsumerApi();
+const consumerApi = new HttpConsumerApi('consumer-a');
 const stack = new DockerComposeStack();
 let stoppedKafkaNode = 'no node';
 
@@ -26,7 +22,6 @@ describe('placing an order while the active Kafka controller is stopped', () => 
   it('still approves the order with the two remaining nodes', async () => {
     const response = await consumerApi.placeOrder(pizzeriaOrder, {
       'idempotency-key': randomUUID(),
-      'x-consumer-id': walkingSkeletonConsumerId,
     });
 
     expect(response.status).toBe(201);

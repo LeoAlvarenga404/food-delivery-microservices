@@ -1,16 +1,13 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DockerComposeStack } from './support/docker-compose-stack.adapter.ts';
-import {
-  HttpConsumerApi,
-  pizzeriaOrder,
-  walkingSkeletonConsumerId,
-} from './support/http-consumer-api.adapter.ts';
+import { HttpConsumerApi, pizzeriaOrder } from './support/http-consumer-api.adapter.ts';
 import { HttpTempoApi, type TraceSpan } from './support/http-tempo-api.adapter.ts';
 
 type LogEntry = ReadonlyMap<string, unknown>;
 
-const consumerApi = new HttpConsumerApi();
+const consumerApi = new HttpConsumerApi('consumer-a');
 const tempoApi = new HttpTempoApi();
 const stack = new DockerComposeStack();
 const tracedServices = [
@@ -20,6 +17,7 @@ const tracedServices = [
   'accounting-service',
 ];
 const tracedApplications = ['consumer-bff', ...tracedServices];
+const envoyLogFlushLimitInMilliseconds = 20_000;
 const sagaConsumerSpanNames = [
   'process consumer.commands',
   'process kitchen.commands',
@@ -43,6 +41,21 @@ function toLogEntry(line: string): LogEntry {
   return new Map(typeof parsed === 'object' && parsed !== null ? Object.entries(parsed) : []);
 }
 
+async function readLogEntriesUntilEnvoyLogged(
+  since: Date,
+  traceparent: string,
+): Promise<readonly LogEntry[]> {
+  const deadlineInMilliseconds = Date.now() + envoyLogFlushLimitInMilliseconds;
+  let logEntries: readonly LogEntry[] = [];
+  while (Date.now() < deadlineInMilliseconds) {
+    const logLines = await stack.readLogLinesSince([...tracedServices, 'envoy'], since);
+    logEntries = logLines.map(toLogEntry);
+    if (logEntries.some((entry) => entry.get('traceparent') === traceparent)) return logEntries;
+    await delay(1_000);
+  }
+  return logEntries;
+}
+
 beforeAll(() => consumerApi.waitUntilReachable());
 
 describe('tracing a placed order', () => {
@@ -53,7 +66,6 @@ describe('tracing a placed order', () => {
     const traceparent = `00-${traceId}-${callerSpanId}-01`;
     const response = await consumerApi.placeOrder(pizzeriaOrder, {
       'idempotency-key': randomUUID(),
-      'x-consumer-id': walkingSkeletonConsumerId,
       traceparent,
     });
     const orderId = await consumerApi.readPlacedOrderId(response);
@@ -79,8 +91,7 @@ describe('tracing a placed order', () => {
         .flatMap((span) => [...span.attributes.values()])
         .filter((attribute) => attribute.includes('tok_')),
     ).toEqual([]);
-    const logLines = await stack.readLogLinesSince([...tracedServices, 'envoy'], startedAt);
-    const logEntries = logLines.map(toLogEntry);
+    const logEntries = await readLogEntriesUntilEnvoyLogged(startedAt, traceparent);
     expect(
       new Set(
         logEntries

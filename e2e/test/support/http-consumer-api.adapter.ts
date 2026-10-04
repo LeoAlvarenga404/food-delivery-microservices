@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
+import { KeycloakSignIn } from './keycloak-sign-in.adapter.ts';
 
 const placedOrderSchema = z.object({ orderId: z.uuid() });
 
@@ -12,8 +13,6 @@ const orderViewSchema = z.object({
 });
 
 export type OrderView = z.infer<typeof orderViewSchema>;
-
-export const walkingSkeletonConsumerId = '0199a5d0-0000-7000-8000-0000000000c1';
 
 export const pizzeriaOrder = {
   restaurantId: '0199a5d0-0000-7000-8000-000000000001',
@@ -46,18 +45,27 @@ function failOnUnexpectedTerminalStatus(
 }
 
 export class HttpConsumerApi {
+  readonly #signIn: KeycloakSignIn | undefined;
   readonly #baseUrl: string;
 
-  constructor(baseUrl = process.env['E2E_EDGE_URL'] ?? 'http://127.0.0.1:8080') {
+  constructor(
+    username: string | undefined,
+    baseUrl = process.env['E2E_EDGE_URL'] ?? 'http://127.0.0.1:8080',
+  ) {
+    this.#signIn = username === undefined ? undefined : new KeycloakSignIn(username);
     this.#baseUrl = baseUrl;
   }
 
-  placeOrder(order: object, headers: Readonly<Record<string, string>>): Promise<Response> {
+  async placeOrder(order: object, headers: Readonly<Record<string, string>>): Promise<Response> {
     return fetch(`${this.#baseUrl}/v1/orders`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...headers },
+      headers: { 'content-type': 'application/json', ...(await this.#authorization()), ...headers },
       body: JSON.stringify(order),
     });
+  }
+
+  async fetchOrder(orderId: string): Promise<Response> {
+    return fetch(`${this.#baseUrl}/v1/orders/${orderId}`, { headers: await this.#authorization() });
   }
 
   async readPlacedOrderId(response: Response): Promise<string> {
@@ -72,7 +80,7 @@ export class HttpConsumerApi {
     const deadlineInMilliseconds = Date.now() + limitInMilliseconds;
     let lastObservation = 'no response';
     while (Date.now() < deadlineInMilliseconds) {
-      const response = await fetch(`${this.#baseUrl}/v1/orders/${orderId}`);
+      const response = await this.fetchOrder(orderId);
       const order = response.ok ? orderViewSchema.parse(await response.json()) : undefined;
       if (order?.status === status) return order;
       failOnUnexpectedTerminalStatus(orderId, order, status);
@@ -92,5 +100,10 @@ export class HttpConsumerApi {
       await delay(pollIntervalInMilliseconds);
     }
     throw new Error(`the edge at ${this.#baseUrl} is not reachable; run pnpm stack:up first`);
+  }
+
+  async #authorization(): Promise<Record<string, string>> {
+    if (this.#signIn === undefined) return {};
+    return { authorization: `Bearer ${await this.#signIn.accessToken()}` };
   }
 }

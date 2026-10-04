@@ -156,6 +156,8 @@ export class DockerComposeStack {
         '--profile',
         'core',
         '--profile',
+        'auth',
+        '--profile',
         'apps',
         ...commandArguments,
       ],
