@@ -46,6 +46,17 @@ describe('consumer bff server', () => {
     expect(response.json()).toMatchObject({ title: 'Bad Request', status: 400 });
   });
 
+  it('refuses an anonymous body that is not JSON before parsing it', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/orders',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"restaurantId":',
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
   it('answers a malformed percent-encoded path with a bad request problem and a correlation id', async () => {
     const response = await server.inject({ method: 'GET', url: '/v1/orders/%E0%A4%A' });
 

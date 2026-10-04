@@ -62,6 +62,18 @@ describe('readConsumerBffConfiguration', () => {
       variables: { ...requiredVariables, TOKEN_EXCHANGE_URL: undefined },
     },
     {
+      problem: 'a missing access token issuer',
+      variables: { ...requiredVariables, ACCESS_TOKEN_ISSUER: undefined },
+    },
+    {
+      problem: 'a missing key set url',
+      variables: { ...requiredVariables, ACCESS_TOKEN_JWKS_URL: undefined },
+    },
+    {
+      problem: 'a token exchange url that is not an http url',
+      variables: { ...requiredVariables, TOKEN_EXCHANGE_URL: 'keycloak:8080/token' },
+    },
+    {
       problem: 'an empty client secret',
       variables: { ...requiredVariables, CONSUMER_BFF_CLIENT_SECRET: '' },
     },

@@ -68,4 +68,19 @@ describe('createOrderServiceAccess', () => {
       left({ status: 401 }),
     );
   });
+
+  it.each([
+    {
+      failingStep: 'the key set',
+      failing: { verify: () => Promise.reject(new Error('key set unreachable')), exchange },
+    },
+    {
+      failingStep: 'the token endpoint',
+      failing: { verify, exchange: () => Promise.reject(new Error('token endpoint unreachable')) },
+    },
+  ])('fails instead of refusing when $failingStep cannot be reached', async ({ failing }) => {
+    await expect(createOrderServiceAccess(failing)('Bearer consumer-token')).rejects.toThrow(
+      'unreachable',
+    );
+  });
 });
