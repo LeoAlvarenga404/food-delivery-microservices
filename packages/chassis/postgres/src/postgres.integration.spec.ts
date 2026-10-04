@@ -207,4 +207,13 @@ describe('ConcurrencyConflictError', () => {
 
     expect(ConcurrencyConflictError.fromUniqueViolation(failure, 'ignored')).toBe(failure);
   });
+
+  it('keeps an integrity violation other than a unique one as it was', async () => {
+    const failure = await sql`insert into stock_items (stock_item_id) values ('no-quantity')`
+      .execute(database)
+      .catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({ code: '23502' });
+    expect(ConcurrencyConflictError.fromUniqueViolation(failure, 'ignored')).toBe(failure);
+  });
 });
