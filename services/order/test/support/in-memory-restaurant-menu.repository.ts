@@ -3,21 +3,30 @@ import type { RestaurantMenuRepository } from '#domain/menu/restaurant-menu.repo
 import type { RestaurantMenu } from '#domain/menu/restaurant-menu.value-object.ts';
 import {
   restaurantMenuPersistenceMapper,
-  type MenuItemRow,
+  type RestaurantMenuRow,
 } from '#infrastructure/persistence/restaurant-menu.persistence-mapper.ts';
 import { pizzeriaMenu } from './order.builder.ts';
 
 export class InMemoryRestaurantMenuRepository implements RestaurantMenuRepository {
-  readonly rows: readonly MenuItemRow[];
+  readonly rows = new Map<string, RestaurantMenuRow>();
 
   constructor(menus: readonly RestaurantMenu[] = [pizzeriaMenu]) {
-    this.rows = menus.flatMap((menu) => restaurantMenuPersistenceMapper.toPersistence(menu));
+    menus.forEach((menu) => {
+      this.rows.set(menu.restaurantId, restaurantMenuPersistenceMapper.toPersistence(menu));
+    });
   }
 
   findByRestaurantId(restaurantId: RestaurantId): Promise<RestaurantMenu | undefined> {
-    const rows = this.rows.filter((row) => row.restaurantId === restaurantId);
+    const row = this.rows.get(restaurantId);
     return Promise.resolve(
-      rows.length === 0 ? undefined : restaurantMenuPersistenceMapper.toDomain(restaurantId, rows),
+      row === undefined ? undefined : restaurantMenuPersistenceMapper.toDomain(row),
     );
+  }
+
+  saveIfNewer(menu: RestaurantMenu): Promise<boolean> {
+    const stored = this.rows.get(menu.restaurantId);
+    if (stored !== undefined && stored.version >= menu.version) return Promise.resolve(false);
+    this.rows.set(menu.restaurantId, restaurantMenuPersistenceMapper.toPersistence(menu));
+    return Promise.resolve(true);
   }
 }

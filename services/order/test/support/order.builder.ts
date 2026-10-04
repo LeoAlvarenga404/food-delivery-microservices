@@ -1,8 +1,8 @@
 import type { Either } from '@fd/domain';
 import { parseMenuItemId, type MenuItemId } from '#domain/menu/menu-item-id.value-object.ts';
+import { parseOpeningHours, type OpeningHours } from '#domain/menu/opening-hours.value-object.ts';
 import { parseRestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import type { RestaurantMenu } from '#domain/menu/restaurant-menu.value-object.ts';
-import { Money } from '#domain/money/money.value-object.ts';
 import { parseConsumerId } from '#domain/order/consumer-id.value-object.ts';
 import { Order } from '#domain/order/order.aggregate.ts';
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
@@ -23,12 +23,35 @@ export const guaranaId: MenuItemId = unwrap(
   parseMenuItemId('0199a5d0-0000-7000-8000-000000000103'),
 );
 
+const everyDayOfWeek = [
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+];
+
+export const aroundTheClockHours: OpeningHours = unwrap(
+  parseOpeningHours({
+    timeZone: 'America/Sao_Paulo',
+    periods: everyDayOfWeek.flatMap((dayOfWeek) => [
+      { dayOfWeek, opensAt: '00:00', closesAt: '12:00' },
+      { dayOfWeek, opensAt: '12:00', closesAt: '00:00' },
+    ]),
+  }),
+);
+
 export const pizzeriaMenu: RestaurantMenu = {
   restaurantId: unwrap(parseRestaurantId('0199a5d0-0000-7000-8000-000000000001')),
+  version: 2,
+  openingHours: aroundTheClockHours,
+  minimumOrderInCents: 2000n,
   items: [
-    { menuItemId: margheritaId, name: 'Margherita', price: Money.of(4500n, 'BRL') },
-    { menuItemId: calabresaId, name: 'Calabresa', price: Money.of(5200n, 'BRL') },
-    { menuItemId: guaranaId, name: 'Guarana', price: Money.of(800n, 'BRL') },
+    { menuItemId: margheritaId, name: 'Margherita', priceInCents: 4500n, isAvailable: true },
+    { menuItemId: calabresaId, name: 'Calabresa', priceInCents: 5200n, isAvailable: true },
+    { menuItemId: guaranaId, name: 'Guarana', priceInCents: 800n, isAvailable: true },
   ],
 };
 

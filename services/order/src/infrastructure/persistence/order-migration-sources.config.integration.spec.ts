@@ -72,6 +72,7 @@ describe('orderMigrationSources', () => {
       'order/0008-move-payment-token-out-of-saga-order',
       'order/0009-add-timeout-rejection-reasons',
       'order/0010-require-deadlines-of-running-sagas',
+      'order/0011-replace-menu-items-with-restaurant-menus',
       'outbox/0001-create-outbox-table',
     ]);
   });

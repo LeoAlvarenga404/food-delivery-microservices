@@ -23,14 +23,13 @@ export class OrderLineItem extends Entity<MenuItemId> {
   }
 
   static fromMenuItem(menuItem: MenuItem, quantity: number): OrderLineItem {
-    const { amountInCents, currency } = menuItem.price.toSnapshot();
     const snapshot = {
       menuItemId: menuItem.menuItemId,
       name: menuItem.name,
-      unitPriceInCents: amountInCents,
+      unitPriceInCents: menuItem.priceInCents,
       quantity,
     };
-    return new OrderLineItem(snapshot, currency);
+    return new OrderLineItem(snapshot, 'BRL');
   }
 
   static restore(snapshot: OrderLineItemSnapshot, currency: Currency): OrderLineItem {

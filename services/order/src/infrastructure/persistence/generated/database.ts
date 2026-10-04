@@ -22,14 +22,6 @@ export interface IdempotencyKeys {
   requestHash: string;
 }
 
-export interface MenuItems {
-  currency: string;
-  menuItemId: string;
-  name: string;
-  priceInCents: bigint;
-  restaurantId: string;
-}
-
 export interface OrderLineItems {
   lineNumber: number;
   menuItemId: string;
@@ -57,6 +49,15 @@ export interface Orders {
   version: number;
 }
 
+export interface RestaurantMenus {
+  menuItems: Json;
+  minimumOrderInCents: bigint;
+  openingHours: Json;
+  restaurantId: string;
+  timeZone: string;
+  version: number;
+}
+
 export interface SagaInstances {
   deadlineAt: Timestamp | null;
   orderId: string;
@@ -70,8 +71,8 @@ export interface SagaInstances {
 
 export interface DB {
   idempotencyKeys: IdempotencyKeys;
-  menuItems: MenuItems;
   orderLineItems: OrderLineItems;
   orders: Orders;
+  restaurantMenus: RestaurantMenus;
   sagaInstances: SagaInstances;
 }

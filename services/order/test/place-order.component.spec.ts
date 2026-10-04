@@ -33,6 +33,8 @@ import { sql, type Kysely } from 'kysely';
 import { v7 as generateUuidV7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { OrderServiceConfiguration } from '../src/infrastructure/order-service.config.ts';
+import type { DB as OrderDatabase } from '../src/infrastructure/persistence/generated/database.ts';
+import { PostgresRestaurantMenuRepository } from '../src/infrastructure/persistence/postgres-restaurant-menu.repository.ts';
 import { startOrderService, type RunningOrderService } from '../src/main.ts';
 import { guaranaId, margheritaId, pizzeriaMenu } from './support/order.builder.ts';
 import { sagaTimeoutsInMilliseconds } from './support/place-order-saga.builder.ts';
@@ -132,6 +134,16 @@ async function reply<Schema extends DescMessage>(
   await producer.disconnect();
 }
 
+async function seedPizzeriaMenu(): Promise<void> {
+  const database = createDatabase<OrderDatabase>({
+    connectionString: postgres.connectionUri,
+    maximumConnectionCount: 1,
+    onConnectionError: () => undefined,
+  });
+  await new PostgresRestaurantMenuRepository(database).saveIfNewer(pizzeriaMenu);
+  await database.destroy();
+}
+
 function buildPlaceOrderRequest(idempotencyKey: string, paymentToken: string): PlaceOrderRequest {
   return create(PlaceOrderRequestSchema, {
     idempotencyKey,
@@ -223,6 +235,7 @@ beforeAll(async () => {
     serviceConfiguration({ sagaTimeoutsInMilliseconds: componentSagaTimeoutsInMilliseconds }),
   );
   stoppers.push(() => orderService.stop());
+  await seedPizzeriaMenu();
   client = clientFor(await orderServiceTokenOf('consumer-a'));
   outboxReader = createDatabase({
     connectionString: postgres.connectionUri,

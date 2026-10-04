@@ -42,11 +42,13 @@ export class InMemoryUnitOfWork implements UnitOfWork, TransactionScope {
 
   #takeSavepoint(): () => void {
     const orderRows = new Map(this.orders.rows);
+    const menuRows = new Map(this.menus.rows);
     const sagaRows = new Map(this.sagas.rows);
     const idempotencyKeyRows = new Map(this.idempotencyKeys.rows);
     const sentCommandCount = this.commands.sentCommands.length;
     return () => {
       restoreRows(this.orders.rows, orderRows);
+      restoreRows(this.menus.rows, menuRows);
       restoreRows(this.sagas.rows, sagaRows);
       restoreRows(this.idempotencyKeys.rows, idempotencyKeyRows);
       this.commands.sentCommands.splice(sentCommandCount);
