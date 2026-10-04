@@ -207,7 +207,7 @@ services:
       <<: *application-build
       args: { PACKAGE_NAME: '@fd/consumer-service', PACKAGE_DIRECTORY: services/consumer }
     environment:
-      <<: [*kafka-clients, *tracing]
+      <<: [*kafka-clients, *tracing, *access-tokens]
       OTEL_SERVICE_NAME: consumer-service
       CONSUMER_DATABASE_URL: postgresql://consumer_service:${CONSUMER_DB_PASSWORD:?copy infra/.env.example to infra/.env}@consumer-db:5432/consumer_service
       CONSUMER_SERVICE_HOST: 0.0.0.0

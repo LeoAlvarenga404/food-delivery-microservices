@@ -426,6 +426,9 @@ importers:
       '@connectrpc/connect':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect-fastify':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(fastify@5.12.5)
       '@fd/chassis-auth':
         specifier: workspace:*
         version: link:../../packages/chassis/auth
@@ -456,6 +459,9 @@ importers:
       '@fd/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      fastify:
+        specifier: 5.12.5
+        version: 5.12.5
       kysely:
         specifier: 0.29.6
         version: 0.29.6
@@ -466,6 +472,9 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@connectrpc/connect-node':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing
