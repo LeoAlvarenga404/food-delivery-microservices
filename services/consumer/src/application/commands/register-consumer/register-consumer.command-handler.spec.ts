@@ -56,7 +56,7 @@ describe('RegisterConsumerCommandHandler', () => {
     });
   });
 
-  it('refuses an invalid registration without storing a consumer', async () => {
+  it('refuses an invalid registration before opening a unit of work', async () => {
     const unitOfWork = new InMemoryUnitOfWork();
 
     const outcome = await new RegisterConsumerCommandHandler(unitOfWork).execute({
@@ -65,6 +65,7 @@ describe('RegisterConsumerCommandHandler', () => {
     });
 
     expect(outcome).toEqual(left({ type: 'InvalidEmail' }));
+    expect(unitOfWork.executedMetadata).toEqual([]);
     expect(await unitOfWork.consumers.findById(activeConsumerId)).toBeUndefined();
   });
 });
