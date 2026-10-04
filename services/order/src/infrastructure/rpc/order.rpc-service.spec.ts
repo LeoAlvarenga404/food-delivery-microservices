@@ -144,8 +144,10 @@ beforeEach(() => {
 });
 
 describe('OrderService.PlaceOrder', () => {
-  it('places an order for the consumer of the access token, who becomes its actor', async () => {
-    const response = await client.placeOrder(placeOrderRequest());
+  it('places an order for the consumer of the access token, who becomes its actor, ignoring a consumer id in the request', async () => {
+    const response = await client.placeOrder(
+      placeOrderRequest({ consumerId: '0199a5d0-0000-7000-8000-0000000000c2' }),
+    );
 
     expect(response.orderId).toBe('0199a5d0-0000-7000-8000-0000000000a1');
     expect(unitOfWork.executedMetadata).toEqual([
@@ -183,6 +185,10 @@ describe('OrderService.PlaceOrder', () => {
     const forConsumerB = await clientFor('consumer-b-token').placeOrder(placeOrderRequest());
 
     expect(forConsumerB.orderId).not.toBe(forConsumerA.orderId);
+    expect(unitOfWork.executedMetadata.map(({ actorId }) => actorId)).toEqual([
+      consumerId,
+      '0199a5d0-0000-7000-8000-0000000000c2',
+    ]);
   });
 
   it('adds the placed order id to the active span', async () => {

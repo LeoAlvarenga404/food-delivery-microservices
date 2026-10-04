@@ -57,6 +57,21 @@ export function describeIdempotencyKeyStoreContract(
         wasInserted: true,
         reservation: otherConsumerReservation,
       });
+      expect(
+        await store.reserve({ ...otherConsumerReservation, orderId: firstReservation.orderId }),
+      ).toEqual({
+        wasInserted: false,
+        reservation: otherConsumerReservation,
+      });
+    });
+
+    it('reports a repeat carrying the same order id as not inserted', async () => {
+      await store.reserve(firstReservation);
+
+      expect(await store.reserve(firstReservation)).toEqual({
+        wasInserted: false,
+        reservation: firstReservation,
+      });
     });
   });
 }

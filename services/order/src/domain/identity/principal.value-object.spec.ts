@@ -26,6 +26,7 @@ describe('parsePrincipal', () => {
   it.each([
     { scenario: 'only another role', roles: ['restaurant_staff'] },
     { scenario: 'no role', roles: [] },
+    { scenario: 'only look-alike roles', roles: ['Consumer', 'consumer_admin'] },
   ])('refuses a caller with $scenario', ({ roles }) => {
     expect(parsePrincipal({ subject: consumerId, roles })).toEqual(
       left({ type: 'MissingConsumerRole' }),
