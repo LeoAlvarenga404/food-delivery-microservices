@@ -1,5 +1,6 @@
 import { Code, ConnectError, type HandlerContext, type ServiceImpl } from '@connectrpc/connect';
 import { annotateActiveSpan } from '@fd/chassis-observability';
+import { correlationIdKey, principalOf } from '@fd/chassis-rpc';
 import {
   PlaceOrderFailureSchema,
   type OrderService,
@@ -12,15 +13,13 @@ import type {
 import type { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
 import type { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
-import type { Principal } from '#domain/identity/principal.value-object.ts';
+import { parsePrincipal, type Principal } from '#domain/identity/principal.value-object.ts';
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { toGetOrderResponse } from './get-order-response.message-mapper.ts';
 import {
   toPlaceOrderCommand,
   type InvalidPlaceOrderRequest,
 } from './place-order-request.message-mapper.ts';
-import { correlationIdKey } from './rpc-correlation.adapter.ts';
-import { principalOf } from './rpc-principal.adapter.ts';
 
 export interface OrderRpcServiceSettings {
   readonly placeOrder: PlaceOrderCommandHandler;
@@ -63,7 +62,7 @@ function toRequestMetadata(context: HandlerContext, principal: Principal): Messa
 }
 
 function toCommand(request: PlaceOrderRequest, context: HandlerContext): PlaceOrderCommand {
-  const principal = principalOf(context);
+  const principal = principalOf(context, parsePrincipal);
   const command = toPlaceOrderCommand(request, principal, toRequestMetadata(context, principal));
   if (command.isLeft()) {
     const { field, type } = command.failure;
@@ -87,7 +86,7 @@ export function createOrderRpcService(
     },
 
     async getOrder(request, context) {
-      const principal = principalOf(context);
+      const principal = principalOf(context, parsePrincipal);
       const orderId = parseOrderId(request.orderId);
       if (orderId.isLeft()) throw new ConnectError('order_id', Code.InvalidArgument);
       annotateActiveSpan({ orderId: orderId.success });

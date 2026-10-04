@@ -11,6 +11,7 @@ import {
 import { createAccessTokenInterceptor, type AccessTokenVerifier } from '@fd/chassis-auth';
 import { createLogger } from '@fd/chassis-observability';
 import { ConcurrencyConflictError } from '@fd/chassis-postgres';
+import { createRpcCorrelation } from '@fd/chassis-rpc';
 import {
   ConsumerService,
   ConsumerStatus,
@@ -25,7 +26,6 @@ import { InMemoryUnitOfWork } from '../../../test/support/in-memory-unit-of-work
 import { RegisterConsumerCommandHandler } from '#application/commands/register-consumer/register-consumer.command-handler.ts';
 import { GetConsumerQueryHandler } from '#application/queries/get-consumer/get-consumer.query-handler.ts';
 import { createConsumerRpcService } from './consumer.rpc-service.ts';
-import { createRpcCorrelation } from './rpc-correlation.adapter.ts';
 
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
 const callerCorrelationId = '0199a5d0-0000-7000-8000-0000000000e2';

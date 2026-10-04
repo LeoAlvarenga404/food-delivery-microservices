@@ -83,6 +83,9 @@ importers:
       '@fd/chassis-observability':
         specifier: workspace:*
         version: link:../../packages/chassis/observability
+      '@fd/chassis-rpc':
+        specifier: workspace:*
+        version: link:../../packages/chassis/rpc
       '@fd/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -319,6 +322,31 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
 
+  packages/chassis/rpc:
+    dependencies:
+      '@connectrpc/connect':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.16.0)
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@fd/chassis-observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@fd/domain':
+        specifier: workspace:*
+        version: link:../../domain
+    devDependencies:
+      '@fd/chassis-testing':
+        specifier: workspace:*
+        version: link:../testing
+      '@fd/contracts':
+        specifier: workspace:*
+        version: link:../../contracts
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
+
   packages/chassis/testing:
     dependencies:
       '@bufbuild/protobuf':
@@ -453,6 +481,9 @@ importers:
       '@fd/chassis-postgres':
         specifier: workspace:*
         version: link:../../packages/chassis/postgres
+      '@fd/chassis-rpc':
+        specifier: workspace:*
+        version: link:../../packages/chassis/rpc
       '@fd/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -575,6 +606,9 @@ importers:
       '@fd/chassis-postgres':
         specifier: workspace:*
         version: link:../../packages/chassis/postgres
+      '@fd/chassis-rpc':
+        specifier: workspace:*
+        version: link:../../packages/chassis/rpc
       '@fd/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

@@ -1,8 +1,19 @@
 import { Code, ConnectError, type HandlerContext } from '@connectrpc/connect';
-import { verifiedAccessTokenKey } from '@fd/chassis-auth';
-import { parsePrincipal, type Principal } from '#domain/identity/principal.value-object.ts';
+import { verifiedAccessTokenKey, type VerifiedAccessToken } from '@fd/chassis-auth';
+import type { Either } from '@fd/domain';
 
-export function principalOf(context: HandlerContext): Principal {
+export interface PrincipalRefusal {
+  readonly type: string;
+}
+
+export type PrincipalParser<Principal> = (
+  verifiedAccessToken: VerifiedAccessToken,
+) => Either<PrincipalRefusal, Principal>;
+
+export function principalOf<Principal>(
+  context: HandlerContext,
+  parsePrincipal: PrincipalParser<Principal>,
+): Principal {
   const verifiedAccessToken = context.values.get(verifiedAccessTokenKey);
   if (verifiedAccessToken === undefined) {
     throw new ConnectError('missing verified access token', Code.Unauthenticated);

@@ -18,6 +18,7 @@ import {
   type PlaceOrderRequest,
 } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { createLogger, runInRootSpan } from '@fd/chassis-observability';
+import { createRpcCorrelation } from '@fd/chassis-rpc';
 import { recordSpans } from '@fd/chassis-testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
@@ -34,7 +35,6 @@ import { PlaceOrderCommandHandler } from '#application/commands/place-order/plac
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { createOrderRpcService } from './order.rpc-service.ts';
-import { createRpcCorrelation } from './rpc-correlation.adapter.ts';
 
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
 const consumerId = '0199a5d0-0000-7000-8000-0000000000c1';

@@ -18,6 +18,7 @@
     "@fd/chassis-config": "workspace:*",
     "@fd/chassis-lifecycle": "workspace:*",
     "@fd/chassis-observability": "workspace:*",
+    "@fd/chassis-rpc": "workspace:*",
     "@fd/contracts": "workspace:*",
     "@fd/domain": "workspace:*",
     "fastify": "5.12.5",

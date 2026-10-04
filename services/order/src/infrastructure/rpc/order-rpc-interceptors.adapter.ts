@@ -1,9 +1,9 @@
 import type { Interceptor } from '@connectrpc/connect';
 import { createAccessTokenInterceptor, createAccessTokenVerifier } from '@fd/chassis-auth';
 import type { Logger } from '@fd/chassis-observability';
+import { createRpcCorrelation } from '@fd/chassis-rpc';
 import { v7 as generateUuidV7 } from 'uuid';
 import type { OrderServiceConfiguration } from '#infrastructure/order-service.config.ts';
-import { createRpcCorrelation } from './rpc-correlation.adapter.ts';
 
 const orderServiceAudience = 'order-service';
 

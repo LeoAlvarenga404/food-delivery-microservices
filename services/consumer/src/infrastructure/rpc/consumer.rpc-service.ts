@@ -1,5 +1,6 @@
 import { Code, ConnectError, type HandlerContext, type ServiceImpl } from '@connectrpc/connect';
 import { ConcurrencyConflictError } from '@fd/chassis-postgres';
+import { correlationIdKey, principalOf } from '@fd/chassis-rpc';
 import {
   RegisterConsumerFailureSchema,
   type ConsumerService,
@@ -13,9 +14,8 @@ import type {
 } from '#application/commands/register-consumer/register-consumer.command.ts';
 import type { RegisterConsumerCommandHandler } from '#application/commands/register-consumer/register-consumer.command-handler.ts';
 import type { GetConsumerQueryHandler } from '#application/queries/get-consumer/get-consumer.query-handler.ts';
+import { parsePrincipal } from '#domain/identity/principal.value-object.ts';
 import { toGetConsumerResponse } from './get-consumer-response.message-mapper.ts';
-import { correlationIdKey } from './rpc-correlation.adapter.ts';
-import { principalOf } from './rpc-principal.adapter.ts';
 
 export interface ConsumerRpcServiceSettings {
   readonly registerConsumer: RegisterConsumerCommandHandler;
@@ -44,7 +44,7 @@ function toCommand(
   request: RegisterConsumerRequest,
   context: HandlerContext,
 ): RegisterConsumerCommand {
-  const principal = principalOf(context);
+  const principal = principalOf(context, parsePrincipal);
   return {
     principal,
     name: request.name,
@@ -87,7 +87,8 @@ export function createConsumerRpcService(
     },
 
     async getConsumer(request, context) {
-      const outcome = await settings.getConsumer.execute({ principal: principalOf(context) });
+      const principal = principalOf(context, parsePrincipal);
+      const outcome = await settings.getConsumer.execute({ principal });
       if (outcome.isLeft()) throw new ConnectError(outcome.failure.type, Code.NotFound);
       return toGetConsumerResponse(outcome.success);
     },

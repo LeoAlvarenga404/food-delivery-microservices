@@ -5,6 +5,7 @@ import fastifySwagger from '@fastify/swagger';
 import { createAccessTokenVerifier, createTokenExchange } from '@fd/chassis-auth';
 import { stopOnSignals } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
+import { traceContextInterceptor } from '@fd/chassis-rpc';
 import { ConsumerService } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { fastify, LogController, type FastifyInstance, type RawServerDefault } from 'fastify';
@@ -23,7 +24,6 @@ import {
 import { consumerRoutes } from './consumers/consumer.routes.ts';
 import { problemDetails, sendProblemDetails } from './http/problem-details.adapter.ts';
 import { createServiceAccess, type ServiceAccess } from './http/service-access.adapter.ts';
-import { traceContextInterceptor } from './http/trace-context-interceptor.adapter.ts';
 import { orderRoutes } from './orders/order.routes.ts';
 
 export interface ConsumerBffSettings {

@@ -1,21 +1,34 @@
-import { createClient, createRouterTransport, type Client } from '@connectrpc/connect';
+import {
+  Code,
+  ConnectError,
+  createClient,
+  createRouterTransport,
+  type Client,
+} from '@connectrpc/connect';
 import { runInRootSpan } from '@fd/chassis-observability';
 import { recordSpans, SpanKind, SpanStatusCode, traceparentOf } from '@fd/chassis-testing';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { FakeOrderService } from '../../test/support/order-service.fake.ts';
-import { traceContextInterceptor } from './trace-context-interceptor.adapter.ts';
+import { traceContextInterceptor } from './trace-context-interceptor.ts';
 
 const spans = recordSpans();
 
-let orderService: FakeOrderService;
+let receivedTraceparents: (string | null)[];
 
 function tracedClient(): Client<typeof OrderService> {
   return createClient(
     OrderService,
     createRouterTransport(
       ({ service }) => {
-        service(OrderService, orderService.implementation());
+        service(OrderService, {
+          placeOrder: (request, context) => {
+            receivedTraceparents.push(context.requestHeader.get('traceparent'));
+            return { orderId: '0199a5d0-0000-7000-8000-0000000000a1' };
+          },
+          getOrder: (request) => {
+            throw new ConnectError(request.orderId, Code.NotFound);
+          },
+        });
       },
       { transport: { interceptors: [traceContextInterceptor] } },
     ),
@@ -23,12 +36,12 @@ function tracedClient(): Client<typeof OrderService> {
 }
 
 beforeEach(() => {
-  orderService = new FakeOrderService();
+  receivedTraceparents = [];
   spans.reset();
 });
 
 describe('traceContextInterceptor', () => {
-  it('calls the order service in a client span and sends that span as traceparent', async () => {
+  it('calls the service in a client span and sends that span as traceparent', async () => {
     await runInRootSpan('handling request', () => tracedClient().placeOrder({}));
 
     const [call] = spans.spansNamed('fooddelivery.order.v1.OrderService/PlaceOrder');
@@ -40,7 +53,7 @@ describe('traceContextInterceptor', () => {
       'rpc.service': 'fooddelivery.order.v1.OrderService',
       'rpc.method': 'PlaceOrder',
     });
-    expect(orderService.receivedTraceparents).toEqual([traceparentOf(call)]);
+    expect(receivedTraceparents).toEqual([traceparentOf(call)]);
   });
 
   it('marks the client span as failed when the call fails', async () => {
