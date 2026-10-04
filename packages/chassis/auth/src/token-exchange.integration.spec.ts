@@ -47,14 +47,14 @@ describe('token exchange against Keycloak', () => {
     expect(forConsumerBff.isLeft()).toBe(true);
   });
 
-  it('answers the same subject token and audience from its cache until the exchanged token expires', async () => {
+  it('answers the same subject token and audience from its cache until five seconds before the exchanged token expires', async () => {
     let nowInMilliseconds = Date.now();
     const exchange = consumerBffExchange(() => new Date(nowInMilliseconds));
     const subjectToken = await keycloak.signIn('consumer-a');
 
     const first = exchangedToken(await exchange(subjectToken, 'order-service'));
     const cached = exchangedToken(await exchange(subjectToken, 'order-service'));
-    nowInMilliseconds += exchangedTokenLifespanInMilliseconds;
+    nowInMilliseconds += exchangedTokenLifespanInMilliseconds - 4_000;
     const renewed = exchangedToken(await exchange(subjectToken, 'order-service'));
 
     expect(cached).toBe(first);
@@ -72,6 +72,17 @@ describe('token exchange against Keycloak', () => {
     );
 
     expect(forConsumerB).not.toBe(forConsumerA);
+  });
+
+  it('caches the exchanged token of each audience on its own', async () => {
+    const exchange = consumerBffExchange();
+    const subjectToken = await keycloak.signIn('consumer-a');
+
+    const forOrderService = await exchange(subjectToken, 'order-service');
+    const forE2e = await exchange(subjectToken, 'e2e');
+
+    expect(forOrderService.isRight()).toBe(true);
+    expect(forE2e.isLeft()).toBe(true);
   });
 
   it('refuses an audience the client may not request', async () => {

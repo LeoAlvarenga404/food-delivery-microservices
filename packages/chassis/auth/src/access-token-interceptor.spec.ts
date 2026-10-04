@@ -70,7 +70,17 @@ describe('createAccessTokenInterceptor', () => {
     const error = await rejectionOf(client.getOrder({}));
 
     expect(error.code).toBe(Code.Unauthenticated);
+    expect(error.rawMessage).toBe('missing bearer access token');
     expect(verifiedTokens).toEqual([]);
+  });
+
+  it('refuses another authorization scheme without echoing the header', async () => {
+    const error = await rejectionOf(
+      client.getOrder({}, { headers: { authorization: 'Token secret-value' } }),
+    );
+
+    expect(error.code).toBe(Code.Unauthenticated);
+    expect(error.rawMessage).toBe('missing bearer access token');
   });
 
   it('refuses a call whose token the verifier refuses as unauthenticated and names the reason', async () => {
@@ -83,6 +93,6 @@ describe('createAccessTokenInterceptor', () => {
   it('lets a verifier failure through instead of calling it unauthenticated', async () => {
     const error = await rejectionOf(client.getOrder({}, bearer('unreachable-key-set')));
 
-    expect(error.code).not.toBe(Code.Unauthenticated);
+    expect(error.code).toBe(Code.Internal);
   });
 });

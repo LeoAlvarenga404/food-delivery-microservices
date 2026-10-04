@@ -8,6 +8,10 @@ describe('readBearerToken', () => {
     );
   });
 
+  it('accepts several spaces after the scheme', () => {
+    expect(readBearerToken('Bearer  header.payload.signature')).toBe('header.payload.signature');
+  });
+
   it('accepts the scheme in any case', () => {
     expect(readBearerToken('bearer header.payload.signature')).toBe('header.payload.signature');
   });
@@ -19,6 +23,7 @@ describe('readBearerToken', () => {
     { scenario: 'another scheme', authorization: 'Basic Y29uc3VtZXItYmZmOnNlY3JldA==' },
     { scenario: 'a scheme without a token', authorization: 'Bearer ' },
     { scenario: 'two tokens', authorization: 'Bearer first second' },
+    { scenario: 'a bearer token after another scheme', authorization: 'Basic Bearer token' },
   ])('reads no token from $scenario', ({ authorization }) => {
     expect(readBearerToken(authorization)).toBeUndefined();
   });

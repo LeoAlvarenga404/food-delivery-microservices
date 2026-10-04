@@ -1,9 +1,9 @@
 import { startKeycloakContainer, type StartedKeycloak } from '@fd/chassis-testing';
+import { decodeJwt, SignJWT } from 'jose';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAccessTokenVerifier, type AccessTokenVerifier } from './access-token-verifier.ts';
 
 const consumerId = '0199a5d0-0000-7000-8000-0000000000c1';
-const accessTokenLifespanInMilliseconds = 300_000;
 
 let keycloak: StartedKeycloak;
 
@@ -68,11 +68,30 @@ describe('access token verifier against Keycloak', () => {
 
   it('refuses a token once it has expired', async () => {
     const accessToken = await keycloak.signIn('consumer-a');
-    const afterExpiry = () => new Date(Date.now() + accessTokenLifespanInMilliseconds + 1_000);
+    const { iat = 0, exp = 0 } = decodeJwt(accessToken);
+    let current = new Date(iat * 1_000);
+    const verifier = verifierFor('consumer-bff', () => current);
 
-    const verified = await verifierFor('consumer-bff', afterExpiry)(accessToken);
+    const beforeExpiry = await verifier(accessToken);
+    current = new Date((exp + 1) * 1_000);
+    const afterExpiry = await verifier(accessToken);
 
-    expect(verified.isLeft() && verified.failure.reason).toBe('ERR_JWT_EXPIRED');
+    expect(beforeExpiry.isRight()).toBe(true);
+    expect(afterExpiry.isLeft() && afterExpiry.failure.reason).toBe('ERR_JWT_EXPIRED');
+  });
+
+  it('refuses a token signed with an algorithm it does not allow', async () => {
+    const forgedToken = await new SignJWT()
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(consumerId)
+      .setIssuer(keycloak.issuer)
+      .setAudience('consumer-bff')
+      .setExpirationTime('1m')
+      .sign(new TextEncoder().encode('forged-shared-key-of-thirty-two-bytes'));
+
+    const verified = await verifierFor('consumer-bff')(forgedToken);
+
+    expect(verified.isLeft() && verified.failure.reason).toBe('ERR_JOSE_ALG_NOT_ALLOWED');
   });
 
   it('refuses a token whose signature was changed', async () => {
