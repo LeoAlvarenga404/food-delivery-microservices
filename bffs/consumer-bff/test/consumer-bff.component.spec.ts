@@ -1,5 +1,6 @@
 import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
 import { createAccessTokenVerifier, readBearerToken } from '@fd/chassis-auth';
+import { ConsumerService } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
 import {
@@ -10,13 +11,15 @@ import {
 } from '@fd/chassis-testing';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { startConsumerBff, type RunningConsumerBff } from '../src/main.ts';
+import { FakeConsumerService, registeredConsumerId } from './support/consumer-service.fake.ts';
 import { FakeOrderService, placedOrderId } from './support/order-service.fake.ts';
 
 const orderServiceTimeoutInMilliseconds = 300;
 const spans = recordSpans();
 
 let orderService: FakeOrderService;
-let orderServer: FastifyInstance;
+let consumerService: FakeConsumerService;
+let servicesServer: FastifyInstance;
 let keycloak: StartedKeycloak;
 let consumerBff: RunningConsumerBff;
 let consumerToken: string;
@@ -51,14 +54,20 @@ beforeAll(async () => {
   keycloak = await startKeycloakContainer();
   consumerToken = await keycloak.signIn('consumer-a');
   orderService = new FakeOrderService();
-  orderServer = fastify();
-  await orderServer.register(fastifyConnectPlugin, {
-    routes: (router) => router.service(OrderService, orderService.implementation()),
+  consumerService = new FakeConsumerService();
+  servicesServer = fastify();
+  await servicesServer.register(fastifyConnectPlugin, {
+    routes: (router) => {
+      router.service(OrderService, orderService.implementation());
+      router.service(ConsumerService, consumerService.implementation());
+    },
   });
-  const orderServiceUrl = await orderServer.listen({ host: '127.0.0.1', port: 0 });
+  const servicesUrl = await servicesServer.listen({ host: '127.0.0.1', port: 0 });
   consumerBff = await startConsumerBff({
-    orderServiceUrl,
+    orderServiceUrl: servicesUrl,
     orderServiceTimeoutInMilliseconds,
+    consumerServiceUrl: servicesUrl,
+    consumerServiceTimeoutInMilliseconds: 5000,
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
@@ -75,7 +84,7 @@ afterEach(() => {
 
 afterAll(async () => {
   await consumerBff.stop();
-  await orderServer.close();
+  await servicesServer.close();
   await keycloak.stop();
 });
 
@@ -130,6 +139,33 @@ describe('consumer bff', () => {
 
     expect(response.status).toBe(504);
     expect(response.headers.get('content-type')).toBe('application/problem+json; charset=utf-8');
+  });
+
+  it('registers the caller through the consumer service with a token exchanged for its audience', async () => {
+    const response = await fetch(`${consumerBff.url}/v1/consumers/me`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearer(consumerToken) },
+      body: JSON.stringify({
+        name: 'Ana Souza',
+        email: 'ana.souza@food-delivery.test',
+        addresses: [
+          { street: 'Rua Augusta', number: '1500', city: 'Sao Paulo', postalCode: '01304-001' },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toEqual({ consumerId: registeredConsumerId });
+    const forwarded = readBearerToken(consumerService.receivedAuthorizations.at(-1));
+    const verifier = createAccessTokenVerifier({
+      issuer: keycloak.issuer,
+      audience: 'consumer-service',
+      jwksUrl: keycloak.jwksUrl,
+    });
+    const verified = await verifier(forwarded ?? '');
+    expect(verified.isRight() && verified.success.subject).toBe(
+      '0199a5d0-0000-7000-8000-0000000000c1',
+    );
   });
 
   it('answers its health endpoint', async () => {

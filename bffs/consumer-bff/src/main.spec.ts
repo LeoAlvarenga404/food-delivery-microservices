@@ -1,5 +1,6 @@
 import { createLogger } from '@fd/chassis-observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FakeConsumerService } from '../test/support/consumer-service.fake.ts';
 import { fakeServiceAccess } from '../test/support/service-access.fake.ts';
 import { FakeOrderService } from '../test/support/order-service.fake.ts';
 import { createConsumerBffServer, type ConsumerBffServer } from './main.ts';
@@ -11,6 +12,7 @@ let server: ConsumerBffServer;
 beforeEach(async () => {
   server = await createConsumerBffServer({
     orderService: new FakeOrderService().client(),
+    consumerService: new FakeConsumerService().client(),
     serviceAccess: fakeServiceAccess,
     logger: createLogger({ serviceName: 'consumer-bff', level: 'silent' }),
     generateCorrelationId: () => generatedCorrelationId,
@@ -179,6 +181,7 @@ describe('consumer bff server', () => {
     expect(Object.keys(response.json<{ paths: object }>().paths)).toEqual([
       '/v1/orders',
       '/v1/orders/{orderId}',
+      '/v1/consumers/me',
     ]);
   });
 });

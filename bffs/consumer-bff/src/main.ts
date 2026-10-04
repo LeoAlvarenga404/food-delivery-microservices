@@ -1,10 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createClient, type Client } from '@connectrpc/connect';
+import { createClient, type Client, type Transport } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
 import fastifySwagger from '@fastify/swagger';
 import { createAccessTokenVerifier, createTokenExchange } from '@fd/chassis-auth';
 import { stopOnSignals } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
+import { ConsumerService } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { fastify, LogController, type FastifyInstance, type RawServerDefault } from 'fastify';
 import {
@@ -19,6 +20,7 @@ import {
   readConsumerBffConfiguration,
   type ConsumerBffConfiguration,
 } from './consumer-bff.config.ts';
+import { consumerRoutes } from './consumers/consumer.routes.ts';
 import { problemDetails, sendProblemDetails } from './http/problem-details.adapter.ts';
 import { createServiceAccess, type ServiceAccess } from './http/service-access.adapter.ts';
 import { traceContextInterceptor } from './http/trace-context-interceptor.adapter.ts';
@@ -26,6 +28,7 @@ import { orderRoutes } from './orders/order.routes.ts';
 
 export interface ConsumerBffSettings {
   readonly orderService: Client<typeof OrderService>;
+  readonly consumerService: Client<typeof ConsumerService>;
   readonly serviceAccess: ServiceAccess;
   readonly logger: Logger;
   readonly generateCorrelationId: () => string;
@@ -93,6 +96,10 @@ export async function createConsumerBffServer(
     orderService: settings.orderService,
     serviceAccess: settings.serviceAccess,
   });
+  await server.register(consumerRoutes, {
+    consumerService: settings.consumerService,
+    serviceAccess: settings.serviceAccess,
+  });
   server.get('/health', { schema: { hide: true } }, () => ({ status: 'ok' }));
   server.get('/openapi.json', { schema: { hide: true } }, () => server.swagger());
   return server;
@@ -113,22 +120,39 @@ function createConfiguredServiceAccess(configuration: ConsumerBffConfiguration):
   });
 }
 
+function createServiceTransport(baseUrl: string, timeoutInMilliseconds: number): Transport {
+  return createConnectTransport({
+    baseUrl,
+    httpVersion: '1.1',
+    useBinaryFormat: true,
+    defaultTimeoutMs: timeoutInMilliseconds,
+    interceptors: [traceContextInterceptor],
+  });
+}
+
+function createServiceClients(
+  configuration: ConsumerBffConfiguration,
+): Pick<ConsumerBffSettings, 'orderService' | 'consumerService'> {
+  const { orderServiceUrl, orderServiceTimeoutInMilliseconds } = configuration;
+  const { consumerServiceUrl, consumerServiceTimeoutInMilliseconds } = configuration;
+  return {
+    orderService: createClient(
+      OrderService,
+      createServiceTransport(orderServiceUrl, orderServiceTimeoutInMilliseconds),
+    ),
+    consumerService: createClient(
+      ConsumerService,
+      createServiceTransport(consumerServiceUrl, consumerServiceTimeoutInMilliseconds),
+    ),
+  };
+}
+
 export async function startConsumerBff(
   configuration: ConsumerBffConfiguration,
 ): Promise<RunningConsumerBff> {
   const logger = createLogger({ serviceName: 'consumer-bff', level: configuration.logLevel });
-  const orderService = createClient(
-    OrderService,
-    createConnectTransport({
-      baseUrl: configuration.orderServiceUrl,
-      httpVersion: '1.1',
-      useBinaryFormat: true,
-      defaultTimeoutMs: configuration.orderServiceTimeoutInMilliseconds,
-      interceptors: [traceContextInterceptor],
-    }),
-  );
   const server = await createConsumerBffServer({
-    orderService,
+    ...createServiceClients(configuration),
     serviceAccess: createConfiguredServiceAccess(configuration),
     logger,
     generateCorrelationId: generateUuidV7,

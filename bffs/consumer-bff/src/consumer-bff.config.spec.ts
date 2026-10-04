@@ -3,6 +3,7 @@ import { readConsumerBffConfiguration } from './consumer-bff.config.ts';
 
 const requiredVariables = {
   ORDER_SERVICE_URL: 'http://127.0.0.1:4001',
+  CONSUMER_SERVICE_URL: 'http://127.0.0.1:4002',
   ACCESS_TOKEN_ISSUER: 'http://localhost:8180/realms/food-delivery',
   ACCESS_TOKEN_JWKS_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
   TOKEN_EXCHANGE_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/token',
@@ -17,10 +18,12 @@ const accessSettings = {
 };
 
 describe('readConsumerBffConfiguration', () => {
-  it('reads the order service url and the access settings and defaults the rest', () => {
+  it('reads the service urls and the access settings and defaults the rest', () => {
     expect(readConsumerBffConfiguration(requiredVariables)).toEqual({
       orderServiceUrl: 'http://127.0.0.1:4001',
       orderServiceTimeoutInMilliseconds: 5000,
+      consumerServiceUrl: 'http://127.0.0.1:4002',
+      consumerServiceTimeoutInMilliseconds: 5000,
       ...accessSettings,
       host: '127.0.0.1',
       port: 4000,
@@ -34,6 +37,8 @@ describe('readConsumerBffConfiguration', () => {
         ...requiredVariables,
         ORDER_SERVICE_URL: 'http://order-service:4001',
         ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS: '2500',
+        CONSUMER_SERVICE_URL: 'http://consumer-service:4002',
+        CONSUMER_SERVICE_TIMEOUT_IN_MILLISECONDS: '1500',
         CONSUMER_BFF_HOST: '0.0.0.0',
         CONSUMER_BFF_PORT: '8000',
         LOG_LEVEL: 'warn',
@@ -41,6 +46,8 @@ describe('readConsumerBffConfiguration', () => {
     ).toEqual({
       orderServiceUrl: 'http://order-service:4001',
       orderServiceTimeoutInMilliseconds: 2500,
+      consumerServiceUrl: 'http://consumer-service:4002',
+      consumerServiceTimeoutInMilliseconds: 1500,
       ...accessSettings,
       host: '0.0.0.0',
       port: 8000,
@@ -56,6 +63,14 @@ describe('readConsumerBffConfiguration', () => {
     {
       problem: 'an order service url of another kind',
       variables: { ...requiredVariables, ORDER_SERVICE_URL: 'grpc://order:4001' },
+    },
+    {
+      problem: 'a missing consumer service url',
+      variables: { ...requiredVariables, CONSUMER_SERVICE_URL: undefined },
+    },
+    {
+      problem: 'a consumer service url of another kind',
+      variables: { ...requiredVariables, CONSUMER_SERVICE_URL: 'grpc://consumer:4002' },
     },
     {
       problem: 'a missing token exchange url',
@@ -80,6 +95,10 @@ describe('readConsumerBffConfiguration', () => {
     {
       problem: 'a zero timeout',
       variables: { ...requiredVariables, ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS: '0' },
+    },
+    {
+      problem: 'a zero consumer service timeout',
+      variables: { ...requiredVariables, CONSUMER_SERVICE_TIMEOUT_IN_MILLISECONDS: '0' },
     },
     {
       problem: 'a port out of range',

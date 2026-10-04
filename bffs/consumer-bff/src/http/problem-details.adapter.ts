@@ -1,5 +1,6 @@
 import { STATUS_CODES } from 'node:http';
 import { Code, ConnectError } from '@connectrpc/connect';
+import { RegisterConsumerFailureSchema } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { PlaceOrderFailureSchema } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
@@ -37,7 +38,10 @@ export function problemDetails(
 
 function fromConnectError(error: ConnectError): ProblemDetails {
   const status = httpStatusByConnectCode.get(error.code) ?? 500;
-  const [failure] = error.findDetails(PlaceOrderFailureSchema);
+  const [failure] = [
+    ...error.findDetails(PlaceOrderFailureSchema),
+    ...error.findDetails(RegisterConsumerFailureSchema),
+  ];
   return problemDetails(status, failure === undefined ? {} : { reason: failure.reason });
 }
 

@@ -5,6 +5,8 @@ import { z } from 'zod';
 export interface ConsumerBffConfiguration {
   readonly orderServiceUrl: string;
   readonly orderServiceTimeoutInMilliseconds: number;
+  readonly consumerServiceUrl: string;
+  readonly consumerServiceTimeoutInMilliseconds: number;
   readonly accessTokenIssuer: string;
   readonly accessTokenJwksUrl: string;
   readonly tokenExchangeUrl: string;
@@ -14,14 +16,18 @@ export interface ConsumerBffConfiguration {
   readonly logLevel: LogLevel;
 }
 
+const serviceTimeoutInMilliseconds = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(2_147_483_647)
+  .default(5000);
+
 const consumerBffEnvironmentSchema = z.object({
   ORDER_SERVICE_URL: environmentVariables.httpUrl,
-  ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(2_147_483_647)
-    .default(5000),
+  ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS: serviceTimeoutInMilliseconds,
+  CONSUMER_SERVICE_URL: environmentVariables.httpUrl,
+  CONSUMER_SERVICE_TIMEOUT_IN_MILLISECONDS: serviceTimeoutInMilliseconds,
   ACCESS_TOKEN_ISSUER: environmentVariables.httpUrl,
   ACCESS_TOKEN_JWKS_URL: environmentVariables.httpUrl,
   TOKEN_EXCHANGE_URL: environmentVariables.httpUrl,
@@ -38,6 +44,8 @@ export function readConsumerBffConfiguration(
   return {
     orderServiceUrl: variables.ORDER_SERVICE_URL,
     orderServiceTimeoutInMilliseconds: variables.ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS,
+    consumerServiceUrl: variables.CONSUMER_SERVICE_URL,
+    consumerServiceTimeoutInMilliseconds: variables.CONSUMER_SERVICE_TIMEOUT_IN_MILLISECONDS,
     accessTokenIssuer: variables.ACCESS_TOKEN_ISSUER,
     accessTokenJwksUrl: variables.ACCESS_TOKEN_JWKS_URL,
     tokenExchangeUrl: variables.TOKEN_EXCHANGE_URL,
