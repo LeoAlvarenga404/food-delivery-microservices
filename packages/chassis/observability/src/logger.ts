@@ -24,6 +24,10 @@ const credentialFields = [
   'accessToken',
   'connectionString',
   'databaseUrl',
+  'access_token',
+  'client_secret',
+  'subject_token',
+  'subjectToken',
 ];
 const redactedPaths = [
   ...credentialFields,

@@ -107,6 +107,39 @@ describe('createLogger', () => {
   });
 });
 
+describe('createLogger redaction', () => {
+  it.each([
+    'authorization',
+    'password',
+    'clientSecret',
+    'accessToken',
+    'connectionString',
+    'databaseUrl',
+    'access_token',
+    'client_secret',
+    'subject_token',
+    'subjectToken',
+  ])('redacts %s at the top level and under any parent', (field) => {
+    const { destination, entries } = captureEntries();
+    const logger = createLogger({ serviceName: 'consumer-bff', level: 'info' }, destination);
+
+    logger.info(
+      {
+        [field]: 'credential',
+        request: { [field]: 'credential' },
+        response: { [field]: 'credential' },
+      },
+      'credential around',
+    );
+
+    expect(entries[0]).toMatchObject({
+      [field]: '[redacted]',
+      request: { [field]: '[redacted]' },
+      response: { [field]: '[redacted]' },
+    });
+  });
+});
+
 describe('withCorrelation', () => {
   it('adds the correlation fields that are present to every entry', () => {
     const { destination, entries } = captureEntries();
