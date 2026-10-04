@@ -11,6 +11,8 @@ import {
   unwrap,
 } from '../../../test/support/order.builder.ts';
 import { Order } from './order.aggregate.ts';
+import type { OrderPlacementError } from './order.errors.ts';
+import type { PlaceOrderInput } from './order-placement.policy.ts';
 
 const placedAt = new Date('2026-10-02T12:00:00.000Z');
 const approvedAt = new Date('2026-10-02T12:00:05.000Z');
@@ -142,25 +144,41 @@ describe('Order.place', () => {
     expect(Order.place(orderInput({ menu }))).toEqual(left({ type: 'MinimumOrderNotReached' }));
   });
 
-  it.each([
+  it.each<{
+    readonly precedence: string;
+    readonly overrides: Partial<PlaceOrderInput>;
+    readonly failure: OrderPlacementError;
+  }>([
     {
       precedence: 'an unavailable item before a closed restaurant',
-      menu: {
-        ...pizzeriaMenu,
-        openingHours: fridayEveningHours,
-        items: pizzeriaMenu.items.map((item) =>
-          item.menuItemId === guaranaId ? { ...item, isAvailable: false } : item,
-        ),
+      overrides: {
+        menu: {
+          ...pizzeriaMenu,
+          openingHours: fridayEveningHours,
+          items: pizzeriaMenu.items.map((item) =>
+            item.menuItemId === guaranaId ? { ...item, isAvailable: false } : item,
+          ),
+        },
       },
       failure: { type: 'UnavailableMenuItem', menuItemId: guaranaId },
     },
     {
       precedence: 'a closed restaurant before the minimum order',
-      menu: { ...pizzeriaMenu, openingHours: fridayEveningHours, minimumOrderInCents: 9801n },
+      overrides: {
+        menu: { ...pizzeriaMenu, openingHours: fridayEveningHours, minimumOrderInCents: 9801n },
+      },
       failure: { type: 'RestaurantClosed' },
     },
-  ])('refuses $precedence', ({ menu, failure }) => {
-    expect(Order.place(orderInput({ menu }))).toEqual(left(failure));
+    {
+      precedence: 'an incomplete delivery address before a closed restaurant',
+      overrides: {
+        menu: { ...pizzeriaMenu, openingHours: fridayEveningHours },
+        deliveryAddress: { ...orderInput().deliveryAddress, street: '  ' },
+      },
+      failure: { type: 'IncompleteDeliveryAddress' },
+    },
+  ])('refuses $precedence', ({ overrides, failure }) => {
+    expect(Order.place(orderInput(overrides))).toEqual(left(failure));
   });
 });
 
