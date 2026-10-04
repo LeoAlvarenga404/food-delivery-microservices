@@ -33,7 +33,7 @@ function isValidText(fieldText: string): boolean {
 }
 
 function isWithin(coordinate: number, limitInDegrees: number): boolean {
-  return Number.isFinite(coordinate) && Math.abs(coordinate) <= limitInDegrees;
+  return Math.abs(coordinate) <= limitInDegrees;
 }
 
 function invalidField(address: RestaurantAddress): InvalidRestaurantAddress['field'] | undefined {
