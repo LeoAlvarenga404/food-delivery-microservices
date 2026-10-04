@@ -477,6 +477,14 @@ describe('OrderService.GetOrder', () => {
     });
   });
 
+  it('refuses a caller without the consumer role as permission denied', async () => {
+    const { orderId } = await client.placeOrder(placeOrderRequest());
+
+    await expect(clientFor('staff-token').getOrder({ orderId })).rejects.toMatchObject({
+      code: Code.PermissionDenied,
+    });
+  });
+
   it('reports an unknown order as not found', async () => {
     await expect(
       client.getOrder({ orderId: '0199a5d0-0000-7000-8000-0000000000ff' }),
