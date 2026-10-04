@@ -71,7 +71,8 @@ function failingInboxTransaction(): MessageHandler {
 
 beforeAll(async () => {
   testDatabase = await startConsumerTestDatabase();
-  await testDatabase.storeConsumers([
+  await testDatabase.replaceConsumers([
+    buildConsumer(),
     buildConsumer({ consumerId: blockedConsumerId, status: 'BLOCKED' }),
   ]);
 });

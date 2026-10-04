@@ -17,21 +17,15 @@ afterAll(async () => {
   await testDatabase.stop();
 });
 
-describeConsumerRepositoryContract('postgres', async (storedConsumers) => {
-  await testDatabase.storeConsumers(storedConsumers);
-  return new PostgresConsumerRepository(testDatabase.database);
-});
-
-describe('postgres consumer repository seed', () => {
-  it('finds the active consumer the migrations seed for the walking skeleton', async () => {
+describe('postgres consumer repository migrations', () => {
+  it('leave no seeded consumer, so every consumer registers itself', async () => {
     const consumers = new PostgresConsumerRepository(testDatabase.database);
 
-    const seeded = await consumers.findById(activeConsumerId);
-
-    expect(seeded?.toSnapshot()).toEqual({
-      consumerId: activeConsumerId,
-      status: 'ACTIVE',
-      version: 1,
-    });
+    expect(await consumers.findById(activeConsumerId)).toBeUndefined();
   });
+});
+
+describeConsumerRepositoryContract('postgres', async (storedConsumers) => {
+  await testDatabase.replaceConsumers(storedConsumers);
+  return new PostgresConsumerRepository(testDatabase.database);
 });
