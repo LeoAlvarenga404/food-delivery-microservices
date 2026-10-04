@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { topicCatalogue } from './topic-catalogue.ts';
+import { topicCatalogue, toTopicConfigEntries } from './topic-catalogue.ts';
 
 const sevenDaysInMilliseconds = 604_800_000;
 const thirtyDaysInMilliseconds = 2_592_000_000;
 
 const topicNamePatterns = [
   /^[a-z]+(?:-[a-z]+)*\.[a-z]+(?:-[a-z]+)*\.events$/,
+  /^[a-z]+(?:-[a-z]+)*\.[a-z]+(?:-[a-z]+)*\.state$/,
   /^[a-z]+(?:-[a-z]+)*\.commands$/,
   /^order\.[a-z]+(?:-[a-z]+)*-saga\.replies$/,
   /^.+\.[a-z]+(?:-[a-z]+)*-service\.dlq$/,
@@ -15,13 +16,14 @@ const topicNames = topicCatalogue.map((topic) => topic.name);
 const deadLetterTopics = topicCatalogue.filter((topic) => topic.name.endsWith('.dlq'));
 
 describe('topicCatalogue', () => {
-  it('lists the slice 1 topics', () => {
+  it('lists the slice 1 topics and the restaurant state topic', () => {
     expect(topicNames).toEqual([
       'order.order.events',
       'consumer.commands',
       'kitchen.commands',
       'accounting.commands',
       'order.place-order-saga.replies',
+      'restaurant.restaurant.state',
       'consumer.commands.consumer-service.dlq',
       'kitchen.commands.kitchen-service.dlq',
       'accounting.commands.accounting-service.dlq',
@@ -39,16 +41,25 @@ describe('topicCatalogue', () => {
     expect(topicNames).toContain(sourceTopic);
   });
 
-  it('keeps dead letters for thirty days and every other topic for seven days', () => {
-    const retentionByName = Object.fromEntries(
-      topicCatalogue.map((topic) => [topic.name, topic.retentionInMilliseconds]),
+  it('compacts state topics, keeps dead letters for thirty days and the others for seven', () => {
+    const configEntriesByName = Object.fromEntries(
+      topicCatalogue.map((topic) => [topic.name, toTopicConfigEntries(topic)]),
     );
 
-    expect(retentionByName).toEqual(
+    expect(configEntriesByName).toEqual(
       Object.fromEntries(
         topicNames.map((topicName) => [
           topicName,
-          topicName.endsWith('.dlq') ? thirtyDaysInMilliseconds : sevenDaysInMilliseconds,
+          topicName.endsWith('.state')
+            ? [{ name: 'cleanup.policy', value: 'compact' }]
+            : [
+                {
+                  name: 'retention.ms',
+                  value: String(
+                    topicName.endsWith('.dlq') ? thirtyDaysInMilliseconds : sevenDaysInMilliseconds,
+                  ),
+                },
+              ],
         ]),
       ),
     );

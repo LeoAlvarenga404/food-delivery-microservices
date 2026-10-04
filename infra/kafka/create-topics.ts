@@ -1,6 +1,6 @@
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
 import { createKafkaClient } from './create-kafka-client.ts';
-import { topicCatalogue, type TopicDefinition } from './topic-catalogue.ts';
+import { topicCatalogue, toTopicConfigEntries, type TopicDefinition } from './topic-catalogue.ts';
 
 const partitionCount = 6;
 const replicationFactor = 3;
@@ -10,7 +10,7 @@ function toTopicConfiguration(topic: TopicDefinition): KafkaJS.ITopicConfig {
     topic: topic.name,
     numPartitions: partitionCount,
     replicationFactor,
-    configEntries: [{ name: 'retention.ms', value: String(topic.retentionInMilliseconds) }],
+    configEntries: [...toTopicConfigEntries(topic)],
   };
 }
 
