@@ -56,7 +56,7 @@ async function readLogEntriesUntilEnvoyLogged(
   return logEntries;
 }
 
-beforeAll(() => consumerApi.waitUntilReachable());
+beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
 
 describe('tracing a placed order', () => {
   it('follows the order through every application in one trace that their logs point to', async () => {

@@ -7,7 +7,7 @@ const consumerApi = new HttpConsumerApi('consumer-a');
 const stack = new DockerComposeStack();
 const kitchenService = 'kitchen-service';
 
-beforeAll(() => consumerApi.waitUntilReachable());
+beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
 
 afterEach(() => stack.startService(kitchenService));
 

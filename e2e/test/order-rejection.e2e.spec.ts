@@ -7,7 +7,7 @@ const consumerApi = new HttpConsumerApi('consumer-a');
 const unregisteredConsumerApi = new HttpConsumerApi('consumer-b');
 const stack = new DockerComposeStack();
 
-beforeAll(() => consumerApi.waitUntilReachable());
+beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
 
 describe('an order the saga cannot complete', () => {
   it('is rejected when the card is declined, after the kitchen rejected its ticket', async () => {

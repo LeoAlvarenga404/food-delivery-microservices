@@ -46,7 +46,7 @@ async function placeOrderOnPartition(partition: number): Promise<string> {
   throw new Error(`no order landed on accounting.commands partition ${String(partition)}`);
 }
 
-beforeAll(() => consumerApi.waitUntilReachable());
+beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
 
 describe('an order whose payment step never answers', () => {
   it('is rejected through the payment deadline and leaves its accounting partition to the next order', async () => {

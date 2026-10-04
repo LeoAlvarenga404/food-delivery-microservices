@@ -20,7 +20,7 @@ async function measureApprovalInMilliseconds(paymentToken: string): Promise<numb
   return Date.now() - placedAtInMilliseconds;
 }
 
-beforeAll(() => consumerApi.waitUntilReachable());
+beforeAll(() => consumerApi.waitUntilReachableAndRegistered());
 
 describe('placing an order through the edge', () => {
   it('approves the order once every participant answered the saga', async () => {

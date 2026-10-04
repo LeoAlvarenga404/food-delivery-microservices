@@ -14,7 +14,7 @@ function withAnotherSignature(accessToken: string): string {
   );
 }
 
-beforeAll(() => consumerAApi.waitUntilReachable());
+beforeAll(() => consumerAApi.waitUntilReachableAndRegistered());
 
 describe('authorization of order requests', () => {
   it('refuses a placement without a token at the edge with an unauthorized problem', async () => {

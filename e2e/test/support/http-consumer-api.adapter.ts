@@ -29,6 +29,12 @@ export const pizzeriaOrder = {
   paymentToken: 'tok_visa_4242',
 };
 
+export const consumerRegistration = {
+  name: 'Ana Souza',
+  email: 'ana.souza@food-delivery.test',
+  addresses: [pizzeriaOrder.deliveryAddress],
+};
+
 const pollIntervalInMilliseconds = 500;
 const terminalOrderStatuses: readonly string[] = ['APPROVED', 'REJECTED'];
 
@@ -68,6 +74,18 @@ export class HttpConsumerApi {
     return fetch(`${this.#baseUrl}/v1/orders/${orderId}`, { headers: await this.#authorization() });
   }
 
+  async registerConsumer(registration: object): Promise<Response> {
+    return fetch(`${this.#baseUrl}/v1/consumers/me`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(await this.#authorization()) },
+      body: JSON.stringify(registration),
+    });
+  }
+
+  async fetchOwnConsumer(): Promise<Response> {
+    return fetch(`${this.#baseUrl}/v1/consumers/me`, { headers: await this.#authorization() });
+  }
+
   async readPlacedOrderId(response: Response): Promise<string> {
     return placedOrderSchema.parse(await response.json()).orderId;
   }
@@ -100,6 +118,14 @@ export class HttpConsumerApi {
       await delay(pollIntervalInMilliseconds);
     }
     throw new Error(`the edge at ${this.#baseUrl} is not reachable; run pnpm stack:up first`);
+  }
+
+  async waitUntilReachableAndRegistered(): Promise<void> {
+    await this.waitUntilReachable();
+    const response = await this.registerConsumer(consumerRegistration);
+    if (response.status !== 201 && response.status !== 409) {
+      throw new Error(`registering the consumer failed: HTTP ${String(response.status)}`);
+    }
   }
 
   async #authorization(): Promise<Record<string, string>> {

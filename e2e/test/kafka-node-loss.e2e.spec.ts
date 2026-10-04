@@ -8,7 +8,7 @@ const stack = new DockerComposeStack();
 let stoppedKafkaNode = 'no node';
 
 beforeAll(async () => {
-  await consumerApi.waitUntilReachable();
+  await consumerApi.waitUntilReachableAndRegistered();
   stoppedKafkaNode = await stack.findActiveKafkaController();
   await stack.stopService(stoppedKafkaNode);
 });
