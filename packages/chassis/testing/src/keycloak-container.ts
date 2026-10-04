@@ -7,6 +7,7 @@ export interface StartedKeycloak {
   readonly jwksUrl: string;
   readonly tokenUrl: string;
   readonly consumerBffClientSecret: string;
+  readonly restaurantBffClientSecret: string;
   readonly signIn: (username: string) => Promise<string>;
   readonly stop: () => Promise<void>;
 }
@@ -16,6 +17,7 @@ const realmFilePath = fileURLToPath(
   new URL('../../../../infra/keycloak/food-delivery-realm.json', import.meta.url),
 );
 const consumerBffClientSecret = 'test-consumer-bff-secret';
+const restaurantBffClientSecret = 'test-restaurant-bff-secret';
 const keycloakPort = 8080;
 const keycloakStartupTimeoutInMilliseconds = 150_000;
 
@@ -49,6 +51,7 @@ function startContainer(hostPort: number, baseUrl: string): Promise<StartedTestC
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: 'true',
       JAVA_OPTS_KC_HEAP: '-Xms64m -Xmx320m',
       CONSUMER_BFF_CLIENT_SECRET: consumerBffClientSecret,
+      RESTAURANT_BFF_CLIENT_SECRET: restaurantBffClientSecret,
     })
     .withCopyFilesToContainer([
       { source: realmFilePath, target: '/opt/keycloak/data/import/food-delivery-realm.json' },
@@ -72,6 +75,7 @@ export async function startKeycloakContainer(): Promise<StartedKeycloak> {
     jwksUrl: `${issuer}/protocol/openid-connect/certs`,
     tokenUrl,
     consumerBffClientSecret,
+    restaurantBffClientSecret,
     signIn: (username) => signIn(tokenUrl, username),
     stop: async () => {
       await container.stop();
