@@ -13,7 +13,16 @@ export interface InvalidAddress {
 }
 
 const maximumFieldLength = 100;
+const controlCharacterPattern = /\p{Cc}/u;
 const addressFields: readonly (keyof Address)[] = ['street', 'number', 'city', 'postalCode'];
+
+function isValidField(fieldText: string): boolean {
+  return (
+    fieldText.length > 0 &&
+    fieldText.length <= maximumFieldLength &&
+    !controlCharacterPattern.test(fieldText)
+  );
+}
 
 export function parseAddress(rawAddress: Address): Either<InvalidAddress, Address> {
   const address: Address = {
@@ -22,9 +31,7 @@ export function parseAddress(rawAddress: Address): Either<InvalidAddress, Addres
     city: rawAddress.city.trim(),
     postalCode: rawAddress.postalCode.trim(),
   };
-  const invalidField = addressFields.find(
-    (field) => address[field].length === 0 || address[field].length > maximumFieldLength,
-  );
+  const invalidField = addressFields.find((field) => !isValidField(address[field]));
   return invalidField === undefined
     ? right(address)
     : left({ type: 'InvalidAddress', field: invalidField });

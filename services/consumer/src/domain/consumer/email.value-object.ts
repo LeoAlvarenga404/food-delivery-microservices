@@ -7,7 +7,7 @@ export interface InvalidEmail {
 }
 
 const maximumEmailLength = 254;
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emailPattern = /^[^\s@\p{Cc}]+@[^\s@\p{Cc}]+\.[^\s@\p{Cc}]+$/u;
 
 export function parseEmail(rawEmail: string): Either<InvalidEmail, Email> {
   const email = rawEmail.trim().toLowerCase();

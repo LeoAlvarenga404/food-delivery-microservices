@@ -23,6 +23,7 @@ describe('parseEmail', () => {
     { scenario: 'an email without a domain dot', rawEmail: 'ana@localhost' },
     { scenario: 'an email with two at signs', rawEmail: 'ana@souza@food-delivery.test' },
     { scenario: 'an email with a space inside', rawEmail: 'ana souza@food-delivery.test' },
+    { scenario: 'an email with a control character', rawEmail: 'ana\u0000@food-delivery.test' },
     {
       scenario: 'an email longer than 254 characters',
       rawEmail: `a${longestLocalPart}@food-delivery.test`,
