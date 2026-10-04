@@ -53,6 +53,7 @@ const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
 const replyTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
 const consumerAId = '0199a5d0-0000-7000-8000-0000000000c1';
+const unreadableStateMessageId = generateUuidV7();
 const spans = recordSpans();
 const componentSagaTimeoutsInMilliseconds = {
   ...sagaTimeoutsInMilliseconds,
@@ -110,9 +111,17 @@ async function publishMenuRevisionsOfThePizzeria(): Promise<void> {
     bootstrapServers: [kafka.bootstrapServer],
   }).producer();
   await producer.connect();
-  await producer.send({
-    topic: restaurantStateTopic,
-    messages: [{ ...pizzeriaMenu, version: 1, items: [] }, pizzeriaMenu].map((menu) => ({
+  const unreadableRecord = {
+    key: pizzeriaMenu.restaurantId,
+    value: Buffer.of(0xff),
+    headers: {
+      'message-id': unreadableStateMessageId,
+      'message-type': MenuRevisedSchema.typeName,
+      'correlation-id': generateUuidV7(),
+    },
+  };
+  const snapshotRecords = [{ ...pizzeriaMenu, version: 1, items: [] }, pizzeriaMenu].map(
+    (menu) => ({
       key: menu.restaurantId,
       value: Buffer.from(
         toBinary(MenuRevisedSchema, create(MenuRevisedSchema, { restaurant: snapshotOf(menu) })),
@@ -122,9 +131,36 @@ async function publishMenuRevisionsOfThePizzeria(): Promise<void> {
         'message-type': MenuRevisedSchema.typeName,
         'correlation-id': generateUuidV7(),
       },
-    })),
+    }),
+  );
+  await producer.send({
+    topic: restaurantStateTopic,
+    messages: [unreadableRecord, ...snapshotRecords],
   });
   await producer.disconnect();
+}
+
+async function readFirstStateDeadLetterMessageId(): Promise<string> {
+  const reader = createKafka({
+    clientId: 'dead-letter-reader',
+    bootstrapServers: [kafka.bootstrapServer],
+  }).consumer({
+    kafkaJS: { groupId: `dead-letter-reader-${generateUuidV7()}`, fromBeginning: true },
+  });
+  await reader.connect();
+  await reader.subscribe({ topic: `${restaurantStateTopic}.order-service.dlq` });
+  const messageIds: string[] = [];
+  await reader.run({
+    eachMessage: ({ message }) => {
+      messageIds.push(message.headers?.['message-id']?.toString() ?? 'no message id');
+      return Promise.resolve();
+    },
+  });
+  try {
+    return await waitFor(() => Promise.resolve(messageIds[0]));
+  } finally {
+    await reader.disconnect();
+  }
 }
 
 async function readReplicaVersion(): Promise<number | undefined> {
@@ -278,7 +314,8 @@ afterAll(async () => {
 });
 
 describe('order service', () => {
-  it('builds its menu replica from the earliest offset of the restaurant state topic', async () => {
+  it('builds its menu replica from the earliest offset past a state record it dead-letters', async () => {
+    expect(await readFirstStateDeadLetterMessageId()).toBe(unreadableStateMessageId);
     expect(await readReplicaVersion()).toBe(2);
   });
 
