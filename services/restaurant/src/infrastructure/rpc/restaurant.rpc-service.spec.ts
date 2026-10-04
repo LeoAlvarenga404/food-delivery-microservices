@@ -333,3 +333,28 @@ describe('RestaurantService.ListMemberships', () => {
     expect((await clientFor('staff-b-token').listMemberships({})).memberships).toEqual([]);
   });
 });
+
+describe('RestaurantService for a caller without the restaurant staff role', () => {
+  it.each([
+    {
+      procedure: 'ReviseMenu',
+      call: (client: Client<typeof RestaurantService>) =>
+        client.reviseMenu({ restaurantId: pizzeriaId, menuItems: [guarana] }),
+    },
+    {
+      procedure: 'GetRestaurant',
+      call: (client: Client<typeof RestaurantService>) =>
+        client.getRestaurant({ restaurantId: pizzeriaId }),
+    },
+    {
+      procedure: 'ListMemberships',
+      call: (client: Client<typeof RestaurantService>) => client.listMemberships({}),
+    },
+  ])('refuses $procedure as permission denied for the missing role', async ({ call }) => {
+    const error = await rejectionOf(call(clientFor('consumer-token')));
+
+    expect(error.code).toBe(Code.PermissionDenied);
+    expect(error.rawMessage).toBe('MissingRestaurantStaffRole');
+    expect(unitOfWork.publishedEvents).toEqual([]);
+  });
+});

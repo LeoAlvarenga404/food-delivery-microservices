@@ -144,4 +144,18 @@ describe('restaurant unit of work', () => {
     );
     expect(versionsIn(await readOutbox())).toEqual([1]);
   });
+
+  it('stores no restaurant when its MenuRevised cannot be written to the outbox', async () => {
+    unitOfWork = createRestaurantUnitOfWork({
+      database: testDatabase.database,
+      generateMessageId: () => 'not-a-uuid',
+      now: () => new Date('2026-10-04T12:00:01.000Z'),
+    });
+
+    await expect(onboardPizzeria()).rejects.toThrow();
+
+    expect(
+      await testDatabase.database.selectFrom('restaurants').select('restaurantId').execute(),
+    ).toEqual([]);
+  });
 });

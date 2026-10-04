@@ -28,6 +28,7 @@ describe('parseOpeningPeriod', () => {
     { field: 'opensAt', period: { ...fridayEvening, opensAt: '8:00' } },
     { field: 'closesAt', period: { ...fridayEvening, closesAt: '23:60' } },
     { field: 'closesAt', period: { ...fridayEvening, closesAt: ' 23:30' } },
+    { field: 'closesAt', period: { ...fridayEvening, closesAt: '23:300' } },
     { field: 'closesAt', period: { ...fridayEvening, closesAt: '18:00' } },
   ])('refuses a period with an invalid $field: $period', ({ field, period }) => {
     expect(parseOpeningPeriod(period)).toEqual(left({ type: 'InvalidOpeningPeriod', field }));

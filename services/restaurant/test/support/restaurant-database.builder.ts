@@ -26,7 +26,7 @@ async function replaceRestaurants(
       .execute();
     await database.insertInto('restaurantMembers').values(rows.members).execute();
     if (rows.menuItems.length > 0) {
-      await database.insertInto('menuItems').values(rows.menuItems).execute();
+      await database.insertInto('menuItems').values(rows.menuItems.toReversed()).execute();
     }
   }
 }

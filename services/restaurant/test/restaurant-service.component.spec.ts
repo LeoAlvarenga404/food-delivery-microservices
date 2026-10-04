@@ -1,10 +1,18 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { create, fromBinary } from '@bufbuild/protobuf';
-import { Code, createClient, type Client, type Interceptor } from '@connectrpc/connect';
+import {
+  Code,
+  ConnectError,
+  createClient,
+  type Client,
+  type Interceptor,
+} from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
 import { createTokenExchange } from '@fd/chassis-auth';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
+  recordSpans,
+  SpanStatusCode,
   startKeycloakContainer,
   startPostgresContainer,
   type StartedKeycloak,
@@ -18,6 +26,7 @@ import {
   MembershipRole,
   OnboardRestaurantRequestSchema,
   RestaurantService,
+  ReviseMenuFailureSchema,
 } from '@fd/contracts/fooddelivery/restaurant/v1/service_pb.js';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -52,6 +61,7 @@ const pizzeria = create(OnboardRestaurantRequestSchema, {
   openingHours: [{ dayOfWeek: DayOfWeek.FRIDAY, opensAt: '18:00', closesAt: '23:30' }],
   minimumOrderInCents: 2000n,
 });
+const spans = recordSpans();
 
 let postgres: StartedPostgres;
 let keycloak: StartedKeycloak;
@@ -129,18 +139,30 @@ async function waitUntilNoConnectionTo(databaseName: string): Promise<number> {
   return connectionCount;
 }
 
-async function createDatabaseThatFailsMigrations(databaseName: string): Promise<string> {
+async function createEmptyDatabase(databaseName: string): Promise<string> {
   await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
   const databaseUrl = new URL(postgres.connectionUri);
   databaseUrl.pathname = `/${databaseName}`;
+  return databaseUrl.toString();
+}
+
+async function createDatabaseThatFailsMigrations(databaseName: string): Promise<string> {
+  const databaseUrl = await createEmptyDatabase(databaseName);
   const conflicting = createDatabase({
-    connectionString: databaseUrl.toString(),
+    connectionString: databaseUrl,
     maximumConnectionCount: 1,
     onConnectionError: () => undefined,
   });
   await sql`create table restaurants (restaurant_id integer)`.execute(conflicting);
   await conflicting.destroy();
-  return databaseUrl.toString();
+  return databaseUrl;
+}
+
+async function waitForHousekeepingRun(): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (spans.spansNamed('housekeeping').length === 0 && Date.now() < deadline) {
+    await delay(100);
+  }
 }
 
 function started<Started extends { readonly stop: () => Promise<void> }>(
@@ -220,9 +242,14 @@ describe('restaurant service', () => {
     await expect(staffBClient.getRestaurant({ restaurantId })).rejects.toMatchObject({
       code: Code.PermissionDenied,
     });
-    await expect(
-      staffBClient.reviseMenu({ restaurantId, menuItems: [margherita] }),
-    ).rejects.toMatchObject({ code: Code.PermissionDenied });
+    const revision = await staffBClient.reviseMenu({ restaurantId, menuItems: [margherita] }).then(
+      () => undefined,
+      (rejection: unknown) => ConnectError.from(rejection),
+    );
+    expect(revision?.code).toBe(Code.PermissionDenied);
+    expect(revision?.findDetails(ReviseMenuFailureSchema).at(0)?.reason).toBe(
+      'NotRestaurantMember',
+    );
   });
 
   it('refuses a token issued for another audience as unauthenticated', async () => {
@@ -247,5 +274,38 @@ describe('restaurant service', () => {
 
     await expect(failedStart).rejects.toThrow();
     expect(await waitUntilNoConnectionTo(databaseName)).toBe(0);
+  });
+
+  it('releases its database connections when its port is taken', async () => {
+    const databaseName = 'restaurant_port_taken';
+    const databaseUrl = await createEmptyDatabase(databaseName);
+
+    const failedStart = startRestaurantService(
+      serviceConfiguration({ databaseUrl, port: Number(new URL(restaurantService.url).port) }),
+    );
+
+    await expect(failedStart).rejects.toThrow('EADDRINUSE');
+    expect(await waitUntilNoConnectionTo(databaseName)).toBe(0);
+  });
+
+  it('stops answering its health endpoint, running housekeeping and holding database connections once stopped', async () => {
+    const databaseName = 'restaurant_stopped';
+    const databaseUrl = await createEmptyDatabase(databaseName);
+    const stoppableService = await startRestaurantService(
+      serviceConfiguration({ databaseUrl, housekeepingIntervalInMilliseconds: 100 }),
+    );
+    const healthUrl = `${stoppableService.url}/health`;
+    expect((await fetch(healthUrl)).status).toBe(200);
+    await waitForHousekeepingRun();
+
+    await stoppableService.stop();
+    const housekeepingRuns = spans.spansNamed('housekeeping');
+
+    expect(housekeepingRuns).not.toHaveLength(0);
+    await expect(fetch(healthUrl)).rejects.toThrow('fetch failed');
+    expect(await waitUntilNoConnectionTo(databaseName)).toBe(0);
+    await delay(500);
+    expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
+    expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
   });
 });

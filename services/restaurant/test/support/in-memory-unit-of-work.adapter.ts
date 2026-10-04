@@ -6,7 +6,16 @@ import type {
   UnitOfWork,
 } from '#application/ports/unit-of-work.port.ts';
 import type { Restaurant, RestaurantEvent } from '#domain/restaurant/restaurant.aggregate.ts';
+import type { RestaurantRows } from '#infrastructure/persistence/restaurant.persistence-mapper.ts';
 import { InMemoryRestaurantRepository } from './in-memory-restaurant.repository.ts';
+
+function restoreRows(
+  table: Map<string, RestaurantRows>,
+  savedRows: ReadonlyMap<string, RestaurantRows>,
+): void {
+  table.clear();
+  savedRows.forEach((rows, restaurantId) => table.set(restaurantId, rows));
+}
 
 export class InMemoryUnitOfWork implements UnitOfWork {
   readonly restaurants: InMemoryRestaurantRepository;
@@ -23,7 +32,23 @@ export class InMemoryUnitOfWork implements UnitOfWork {
   ): Promise<Either<Failure, Success>> {
     this.executedMetadata.push(metadata);
     const savedRestaurants: Restaurant[] = [];
-    const scope: TransactionScope = {
+    const rollBack = this.#takeSavepoint();
+    try {
+      const outcome = await work(this.#scopeTracking(savedRestaurants));
+      if (outcome.isLeft()) rollBack();
+      else
+        this.publishedEvents.push(
+          ...savedRestaurants.flatMap((saved) => saved.pullRecordedEvents()),
+        );
+      return outcome;
+    } catch (error) {
+      rollBack();
+      throw error;
+    }
+  }
+
+  #scopeTracking(savedRestaurants: Restaurant[]): TransactionScope {
+    return {
       restaurants: {
         findById: (restaurantId) => this.restaurants.findById(restaurantId),
         findByMember: (staffMemberId) => this.restaurants.findByMember(staffMemberId),
@@ -33,10 +58,12 @@ export class InMemoryUnitOfWork implements UnitOfWork {
         },
       },
     };
-    const outcome = await work(scope);
-    if (outcome.isRight()) {
-      this.publishedEvents.push(...savedRestaurants.flatMap((saved) => saved.pullRecordedEvents()));
-    }
-    return outcome;
+  }
+
+  #takeSavepoint(): () => void {
+    const savedRows = new Map(this.restaurants.rows);
+    return () => {
+      restoreRows(this.restaurants.rows, savedRows);
+    };
   }
 }

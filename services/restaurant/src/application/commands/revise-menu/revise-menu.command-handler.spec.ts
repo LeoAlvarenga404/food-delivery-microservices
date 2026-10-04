@@ -17,6 +17,7 @@ import type { ReviseMenuCommand } from './revise-menu.command.ts';
 import { ReviseMenuCommandHandler } from './revise-menu.command-handler.ts';
 
 const revisedAt = new Date('2026-10-04T12:30:00.000Z');
+const metadataActorId = '0199a5d0-0000-7000-8000-0000000000a1';
 const command: ReviseMenuCommand = {
   principal: { staffMemberId: staffAId },
   restaurantId: pizzeriaId,
@@ -24,7 +25,7 @@ const command: ReviseMenuCommand = {
   metadata: {
     correlationId: '0199a5d0-0000-7000-8000-0000000000f1',
     causationId: undefined,
-    actorId: staffAId,
+    actorId: metadataActorId,
     actorType: 'restaurant_staff',
   },
 };

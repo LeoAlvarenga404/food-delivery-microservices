@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildRestaurant,
   guarana,
-  margherita,
   menuOf,
   onboardedAt,
   onboardRestaurant,
@@ -70,7 +69,7 @@ describe('Restaurant.reviseMenu', () => {
   it('records the full public state with the next version', () => {
     const restaurant = buildRestaurant({ version: 3 });
 
-    restaurant.reviseMenu(staffAId, menuOf([margherita, guarana]), revisedAt);
+    restaurant.reviseMenu(staffAId, menuOf([guarana]), revisedAt);
 
     expect(restaurant.pullRecordedEvents()).toEqual([
       {
@@ -78,7 +77,7 @@ describe('Restaurant.reviseMenu', () => {
         occurredAt: revisedAt,
         restaurantId: pizzeriaId,
         ...pizzeriaProfile,
-        menuItems: [margherita, guarana],
+        menuItems: [guarana],
         version: 4,
       },
     ]);

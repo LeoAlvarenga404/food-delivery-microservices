@@ -12,13 +12,14 @@ import type { OnboardRestaurantCommand } from './onboard-restaurant.command.ts';
 import { OnboardRestaurantCommandHandler } from './onboard-restaurant.command-handler.ts';
 
 const onboardedAt = new Date('2026-10-04T12:00:00.000Z');
+const metadataActorId = '0199a5d0-0000-7000-8000-0000000000a1';
 const command: OnboardRestaurantCommand = {
   principal: { staffMemberId: staffAId },
   profile: pizzeriaProfile,
   metadata: {
     correlationId: '0199a5d0-0000-7000-8000-0000000000f1',
     causationId: undefined,
-    actorId: staffAId,
+    actorId: metadataActorId,
     actorType: 'restaurant_staff',
   },
 };
