@@ -23,7 +23,7 @@ export class PostgresRestaurantMenuRepository implements RestaurantMenuRepositor
 
   async saveIfNewer(menu: RestaurantMenu): Promise<boolean> {
     const row = restaurantMenuPersistenceMapper.toPersistence(menu);
-    const saved = await this.#database
+    const savedRow = await this.#database
       .insertInto('restaurantMenus')
       .values({
         ...row,
@@ -44,6 +44,6 @@ export class PostgresRestaurantMenuRepository implements RestaurantMenuRepositor
       )
       .returning('restaurantId')
       .executeTakeFirst();
-    return saved !== undefined;
+    return savedRow !== undefined;
   }
 }

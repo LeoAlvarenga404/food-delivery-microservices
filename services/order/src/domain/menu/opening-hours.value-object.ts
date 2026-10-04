@@ -59,7 +59,8 @@ function localClockOf(timeZone: string): Intl.DateTimeFormat {
 
 function isKnownTimeZone(timeZone: string): boolean {
   try {
-    return localClockOf(timeZone).resolvedOptions().timeZone.length > 0;
+    localClockOf(timeZone);
+    return true;
   } catch {
     return false;
   }
@@ -100,7 +101,7 @@ function localMomentOf(timeZone: string, instant: Date): LocalMoment {
   };
 }
 
-function covers(period: OpeningPeriod, moment: LocalMoment): boolean {
+function isCoveredBy(period: OpeningPeriod, moment: LocalMoment): boolean {
   const isOvernight = period.closesAt < period.opensAt;
   if (period.dayOfWeek === moment.today && moment.time >= period.opensAt) {
     return isOvernight || moment.time < period.closesAt;
@@ -110,5 +111,5 @@ function covers(period: OpeningPeriod, moment: LocalMoment): boolean {
 
 export function isOpenAt(openingHours: OpeningHours, instant: Date): boolean {
   const moment = localMomentOf(openingHours.timeZone, instant);
-  return openingHours.periods.some((period) => covers(period, moment));
+  return openingHours.periods.some((period) => isCoveredBy(period, moment));
 }

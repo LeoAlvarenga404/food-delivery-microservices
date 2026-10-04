@@ -45,7 +45,7 @@ export interface InvalidRestaurantMenu {
 
 export type RestaurantMenuError = InvalidRestaurantMenu | InvalidOpeningHours;
 
-const controlCharacter = /\p{Cc}/u;
+const controlCharacterPattern = /\p{Cc}/u;
 
 function invalid(field: InvalidRestaurantMenu['field']): Either<InvalidRestaurantMenu, never> {
   return left({ type: 'InvalidRestaurantMenu', field });
@@ -54,7 +54,7 @@ function invalid(field: InvalidRestaurantMenu['field']): Either<InvalidRestauran
 function parseMenuItem(rawItem: RawMenuItem): Either<InvalidRestaurantMenu, MenuItem> {
   const menuItemId = parseMenuItemId(rawItem.menuItemId);
   if (menuItemId.isLeft()) return invalid('menuItemId');
-  if (rawItem.name.trim().length === 0 || controlCharacter.test(rawItem.name)) {
+  if (rawItem.name.trim().length === 0 || controlCharacterPattern.test(rawItem.name)) {
     return invalid('name');
   }
   if (rawItem.priceInCents <= 0n) return invalid('priceInCents');
