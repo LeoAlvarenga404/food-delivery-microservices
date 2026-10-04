@@ -16,6 +16,7 @@ import {
   onboardedRestaurantId,
 } from '../../test/support/restaurant-service.fake.ts';
 import { fakeServiceAccess } from '../../test/support/service-access.fake.ts';
+import type { ServiceAccess } from '../http/service-access.adapter.ts';
 import { createRestaurantBffServer, type RestaurantBffServer } from '../main.ts';
 
 const callerCorrelationId = '0199a5d0-0000-7000-8000-0000000000f2';
@@ -61,8 +62,22 @@ function onboard(
 function reviseMenu(
   headers: Record<string, string>,
   path = `${restaurantPath}/menu`,
+  body: Record<string, unknown> = { menuItems: [margherita] },
 ): Promise<LightMyRequestResponse> {
-  return server.inject({ method: 'PUT', url: path, headers, payload: { menuItems: [margherita] } });
+  return server.inject({ method: 'PUT', url: path, headers, payload: body });
+}
+
+function readRestaurant(path = restaurantPath): Promise<LightMyRequestResponse> {
+  return server.inject({ method: 'GET', url: path, headers: staffAuthorization });
+}
+
+function serverWith(serviceAccess: ServiceAccess): Promise<RestaurantBffServer> {
+  return createRestaurantBffServer({
+    restaurantService: restaurantService.client(),
+    serviceAccess,
+    logger: createLogger({ serviceName: 'restaurant-bff', level: 'silent' }),
+    generateCorrelationId: () => '0199a5d0-0000-7000-8000-0000000000f9',
+  });
 }
 
 function refusal(code: Code, reason: string): ConnectError {
@@ -73,12 +88,7 @@ function refusal(code: Code, reason: string): ConnectError {
 
 beforeEach(async () => {
   restaurantService = new FakeRestaurantService();
-  server = await createRestaurantBffServer({
-    restaurantService: restaurantService.client(),
-    serviceAccess: fakeServiceAccess,
-    logger: createLogger({ serviceName: 'restaurant-bff', level: 'silent' }),
-    generateCorrelationId: () => '0199a5d0-0000-7000-8000-0000000000f9',
-  });
+  server = await serverWith(fakeServiceAccess);
 });
 
 afterEach(() => server.close());
@@ -165,6 +175,21 @@ describe('POST /v1/restaurant/restaurants', () => {
       reason: 'InvalidTimeZone',
     });
   });
+
+  it('answers an access check that cannot reach the issuer with an internal error problem, never 401', async () => {
+    await server.close();
+    server = await serverWith(() => Promise.reject(new Error('issuer unreachable')));
+
+    const response = await onboard(staffAuthorization);
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+    });
+    expect(restaurantService.receivedCorrelationIds).toHaveLength(0);
+  });
 });
 
 describe('PUT /v1/restaurant/restaurants/:restaurantId/menu', () => {
@@ -208,6 +233,31 @@ describe('PUT /v1/restaurant/restaurants/:restaurantId/menu', () => {
     expect(response.statusCode).toBe(400);
     expect(restaurantService.receivedCorrelationIds).toHaveLength(0);
   });
+
+  it.each([
+    { invalidPart: 'a menu that is not a list', body: { menuItems: margherita } },
+    {
+      invalidPart: 'a price that is not a whole number',
+      body: { menuItems: [{ ...margherita, priceInCents: '45.00' }] },
+    },
+    {
+      invalidPart: 'a negative price',
+      body: { menuItems: [{ ...margherita, priceInCents: '-4500' }] },
+    },
+    {
+      invalidPart: 'an item without availability',
+      body: { menuItems: [{ ...margherita, isAvailable: undefined }] },
+    },
+  ])(
+    'answers $invalidPart with a bad request problem without calling the restaurant service',
+    async ({ body }) => {
+      const response = await reviseMenu(staffAuthorization, `${restaurantPath}/menu`, body);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toMatchObject({ title: 'Bad Request', status: 400 });
+      expect(restaurantService.receivedCorrelationIds).toHaveLength(0);
+    },
+  );
 });
 
 describe('GET /v1/restaurant/restaurants/:restaurantId', () => {
@@ -227,13 +277,10 @@ describe('GET /v1/restaurant/restaurants/:restaurantId', () => {
       },
     });
 
-    const response = await server.inject({
-      method: 'GET',
-      url: restaurantPath,
-      headers: staffAuthorization,
-    });
+    const response = await readRestaurant();
 
     expect(response.statusCode).toBe(200);
+    expect(restaurantService.receivedAuthorizations).toEqual(['Bearer restaurant-service-token']);
     expect(response.json()).toEqual({
       restaurantId: onboardedRestaurantId,
       version: 3,
@@ -251,11 +298,7 @@ describe('GET /v1/restaurant/restaurants/:restaurantId', () => {
   it('answers another staff member with a forbidden problem', async () => {
     restaurantService.failure = new ConnectError('NotRestaurantMember', Code.PermissionDenied);
 
-    const response = await server.inject({
-      method: 'GET',
-      url: restaurantPath,
-      headers: staffAuthorization,
-    });
+    const response = await readRestaurant();
 
     expect(response.statusCode).toBe(403);
     expect(response.json()).toEqual({ type: 'about:blank', title: 'Forbidden', status: 403 });
@@ -266,13 +309,16 @@ describe('GET /v1/restaurant/restaurants/:restaurantId', () => {
       restaurant: { restaurantId: onboardedRestaurantId, address: { street: 'Rua' } },
     });
 
-    const response = await server.inject({
-      method: 'GET',
-      url: restaurantPath,
-      headers: staffAuthorization,
-    });
+    const response = await readRestaurant();
 
     expect(response.statusCode).toBe(500);
+  });
+
+  it('answers a restaurant id that is not a uuid with a bad request problem', async () => {
+    const response = await readRestaurant('/v1/restaurant/restaurants/pizzeria');
+
+    expect(response.statusCode).toBe(400);
+    expect(restaurantService.receivedCorrelationIds).toHaveLength(0);
   });
 });
 
@@ -295,6 +341,7 @@ describe('GET /v1/restaurant/memberships', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(restaurantService.receivedAuthorizations).toEqual(['Bearer restaurant-service-token']);
     expect(response.json()).toEqual({
       memberships: [
         { restaurantId: onboardedRestaurantId, restaurantName: 'Pizzaria Bella', role: 'OWNER' },
