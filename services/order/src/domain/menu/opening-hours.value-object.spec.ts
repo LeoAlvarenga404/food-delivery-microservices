@@ -71,6 +71,13 @@ describe('parseOpeningHours', () => {
       },
     },
     {
+      invalidPart: 'opensAt',
+      rawOpeningHours: {
+        ...pizzeriaHours,
+        periods: [{ dayOfWeek: 'FRIDAY', opensAt: '18:60', closesAt: '23:30' }],
+      },
+    },
+    {
       invalidPart: 'closesAt',
       rawOpeningHours: {
         ...pizzeriaHours,
@@ -123,6 +130,25 @@ describe('isOpenAt', () => {
 
     expect(isOpenAt(hoursInUtc, lunchtime)).toBe(true);
     expect(isOpenAt(openingHoursOf(pizzeriaHours), lunchtime)).toBe(false);
+  });
+
+  it('carries an overnight Sunday period into Monday morning', () => {
+    const sundayNights = openingHoursOf({
+      timeZone: 'America/Sao_Paulo',
+      periods: [{ dayOfWeek: 'SUNDAY', opensAt: '18:00', closesAt: '02:00' }],
+    });
+
+    expect(isOpenAt(sundayNights, new Date('2026-10-05T04:00:00Z'))).toBe(true);
+  });
+
+  it('follows the daylight saving time of the time zone of the restaurant', () => {
+    const newYorkEvenings = openingHoursOf({
+      timeZone: 'America/New_York',
+      periods: [{ dayOfWeek: 'MONDAY', opensAt: '18:00', closesAt: '22:00' }],
+    });
+
+    expect(isOpenAt(newYorkEvenings, new Date('2026-07-06T22:00:00Z'))).toBe(true);
+    expect(isOpenAt(newYorkEvenings, new Date('2026-01-05T22:00:00Z'))).toBe(false);
   });
 
   it.each([
