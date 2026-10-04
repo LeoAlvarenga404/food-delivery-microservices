@@ -13,6 +13,7 @@ import {
 } from './consumer.builder.ts';
 
 const blockedConsumerId = unwrap(parseConsumerId('0199a5d0-0000-7000-8000-0000000000c2'));
+const neighbourConsumerId = unwrap(parseConsumerId('0199a5d0-0000-7000-8000-0000000000c3'));
 
 async function findStoredConsumer(consumers: ConsumerRepository): Promise<Consumer> {
   const consumer = await consumers.findById(activeConsumerId);
@@ -59,8 +60,10 @@ export function describeConsumerRepositoryContract(
       });
     });
 
-    it('saves a stored consumer again with every field and the next version', async () => {
+    it('saves a stored consumer again with every field and the next version, leaving the others', async () => {
+      const neighbour = registerConsumer({ consumerId: neighbourConsumerId, name: 'Bruno Lima' });
       await consumers.save(registerConsumer());
+      await consumers.save(neighbour);
       const stored = (await findStoredConsumer(consumers)).toSnapshot();
       const changed = Consumer.restore({ ...stored, addresses: [workAddress], status: 'BLOCKED' });
 
@@ -69,6 +72,10 @@ export function describeConsumerRepositoryContract(
       expect((await findStoredConsumer(consumers)).toSnapshot()).toEqual({
         ...changed.toSnapshot(),
         version: 2,
+      });
+      expect((await consumers.findById(neighbourConsumerId))?.toSnapshot()).toEqual({
+        ...neighbour.toSnapshot(),
+        version: 1,
       });
     });
 

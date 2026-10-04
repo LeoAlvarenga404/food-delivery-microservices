@@ -29,8 +29,11 @@ import { createRpcCorrelation } from './rpc-correlation.adapter.ts';
 
 const generatedCorrelationId = '0199a5d0-0000-7000-8000-0000000000e9';
 const callerCorrelationId = '0199a5d0-0000-7000-8000-0000000000e2';
+const consumerBId = '0199a5d0-0000-7000-8000-0000000000c2';
+const sentPersonalDataPattern = /Ana Souza|ana\.souza@|Rua Augusta|01304-001/;
 const verifiedAccessTokens = new Map([
   ['consumer-a-token', { subject: activeConsumerId, roles: ['consumer'] }],
+  ['consumer-b-token', { subject: consumerBId, roles: ['consumer'] }],
   ['staff-token', { subject: '0199a5d0-0000-7000-8000-0000000000e1', roles: ['restaurant_staff'] }],
 ]);
 
@@ -181,13 +184,19 @@ describe('ConsumerService.RegisterConsumer', () => {
       reason: 'InvalidAddress',
     },
     { invalidPart: 'no address', request: { addresses: [] }, reason: 'InvalidAddressCount' },
+    {
+      invalidPart: 'an address with a control character',
+      request: { addresses: [{ ...homeAddress, street: 'Rua\u0000Augusta' }] },
+      reason: 'InvalidAddress',
+    },
   ])(
-    'refuses $invalidPart as an invalid argument naming the reason',
+    'refuses $invalidPart as an invalid argument naming the reason without echoing the request',
     async ({ request, reason }) => {
       const error = await rejectionOf(client.registerConsumer(registerConsumerRequest(request)));
 
       expect(error.code).toBe(Code.InvalidArgument);
       expect(reasonOf(error)).toBe(reason);
+      expect(error.rawMessage).not.toMatch(sentPersonalDataPattern);
       expect(await unitOfWork.consumers.findById(activeConsumerId)).toBeUndefined();
     },
   );
@@ -247,6 +256,21 @@ describe('ConsumerService.GetConsumer', () => {
       email: 'ana.souza@food-delivery.test',
       addresses: [homeAddress],
       status: ConsumerStatus.ACTIVE,
+    });
+  });
+
+  it('registers and answers every caller as the subject of its own access token', async () => {
+    await client.registerConsumer(registerConsumerRequest());
+    const consumerBClient = clientFor('consumer-b-token');
+
+    const registered = await consumerBClient.registerConsumer(
+      registerConsumerRequest({ name: 'Bruno Lima' }),
+    );
+
+    expect(registered.consumerId).toBe(consumerBId);
+    expect(await consumerBClient.getConsumer({})).toMatchObject({
+      consumerId: consumerBId,
+      name: 'Bruno Lima',
     });
   });
 
