@@ -14,6 +14,7 @@ import {
 } from '../../test/support/consumer-service.fake.ts';
 import { FakeOrderService } from '../../test/support/order-service.fake.ts';
 import { fakeServiceAccess } from '../../test/support/service-access.fake.ts';
+import type { ServiceAccess } from '../http/service-access.adapter.ts';
 import { createConsumerBffServer, type ConsumerBffServer } from '../main.ts';
 
 const callerCorrelationId = '0199a5d0-0000-7000-8000-0000000000e2';
@@ -44,15 +45,19 @@ function readOwnConsumer(headers: Record<string, string>): Promise<LightMyReques
   return server.inject({ method: 'GET', url: '/v1/consumers/me', headers });
 }
 
-beforeEach(async () => {
-  consumerService = new FakeConsumerService();
-  server = await createConsumerBffServer({
+function serverWith(serviceAccess: ServiceAccess): Promise<ConsumerBffServer> {
+  return createConsumerBffServer({
     orderService: new FakeOrderService().client(),
     consumerService: consumerService.client(),
-    serviceAccess: fakeServiceAccess,
+    serviceAccess,
     logger: createLogger({ serviceName: 'consumer-bff', level: 'silent' }),
     generateCorrelationId: () => '0199a5d0-0000-7000-8000-0000000000e9',
   });
+}
+
+beforeEach(async () => {
+  consumerService = new FakeConsumerService();
+  server = await serverWith(fakeServiceAccess);
 });
 
 afterEach(() => server.close());
@@ -176,6 +181,21 @@ describe('GET /v1/consumers/me', () => {
     const response = await readOwnConsumer({});
 
     expect(response.statusCode).toBe(401);
+    expect(consumerService.receivedCorrelationIds).toHaveLength(0);
+  });
+
+  it('answers an access check that cannot reach the issuer with an internal error problem, never 401', async () => {
+    await server.close();
+    server = await serverWith(() => Promise.reject(new Error('issuer unreachable')));
+
+    const response = await readOwnConsumer(consumerAuthorization);
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      type: 'about:blank',
+      title: 'Internal Server Error',
+      status: 500,
+    });
     expect(consumerService.receivedCorrelationIds).toHaveLength(0);
   });
 });
