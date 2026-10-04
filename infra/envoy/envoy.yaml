@@ -24,6 +24,22 @@ static_resources:
                           traceparent: '%REQ(TRACEPARENT)%'
                 local_reply_config:
                   mappers:
+                    # ADR-0015: an unreachable key set is an outage, never an invalid token
+                    - filter:
+                        extension_filter:
+                          name: envoy.access_loggers.extension_filters.cel
+                          typed_config:
+                            '@type': type.googleapis.com/envoy.extensions.access_loggers.filters.cel.v3.ExpressionFilter
+                            expression: "response.code_details == 'jwt_authn_access_denied{Jwks_remote_fetch_is_failed}'"
+                      status_code: 503
+                      body_format_override:
+                        content_type: application/problem+json
+                        json_format:
+                          {
+                            type: about:blank,
+                            title: Service Unavailable,
+                            status: '%RESPONSE_CODE%',
+                          }
                     - filter:
                         status_code_filter:
                           comparison:
