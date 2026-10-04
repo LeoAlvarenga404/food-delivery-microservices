@@ -22,6 +22,7 @@ const electionCommand = [
   '--all-topic-partitions',
 ];
 const keyedRecordLine = /^Partition:(\d+)\t(\S+)$/;
+const messageTypeHeader = /(?:^|,)message-type:([^,]+)/;
 
 function describeFailure(error: unknown): string {
   if (!(error instanceof Error)) {
@@ -99,6 +100,43 @@ export class DockerComposeStack {
       if (partition !== undefined && key !== undefined) partitionsByKey.set(key, Number(partition));
     }
     return partitionsByKey;
+  }
+
+  async readMessageTypesByKey(topic: string): Promise<ReadonlyMap<string, readonly string[]>> {
+    const output = await this.#compose([
+      ...kafkaToolPrefix,
+      '/opt/kafka/bin/kafka-console-consumer.sh',
+      ...kafkaBootstrapServer,
+      '--topic',
+      topic,
+      '--from-beginning',
+      '--timeout-ms',
+      String(deadLetterReadTimeoutInMilliseconds),
+      ...['--formatter-property', 'print.headers=true', '--formatter-property', 'print.key=true'],
+      ...['--formatter-property', 'print.value=false'],
+    ]);
+    const messageTypesByKey = new Map<string, string[]>();
+    for (const line of output.split('\n')) {
+      const [headers = '', key = ''] = line.trim().split('\t');
+      const messageType = messageTypeHeader.exec(headers)?.[1];
+      if (messageType !== undefined && key !== '') {
+        messageTypesByKey.set(key, [...(messageTypesByKey.get(key) ?? []), messageType]);
+      }
+    }
+    return messageTypesByKey;
+  }
+
+  async describeTopicConfiguration(topic: string): Promise<string> {
+    return this.#compose([
+      ...kafkaToolPrefix,
+      '/opt/kafka/bin/kafka-configs.sh',
+      ...kafkaBootstrapServer,
+      '--entity-type',
+      'topics',
+      '--entity-name',
+      topic,
+      '--describe',
+    ]);
   }
 
   async electPreferredLeaders(): Promise<void> {

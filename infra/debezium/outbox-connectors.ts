@@ -21,4 +21,5 @@ export const outboxConnectors: readonly OutboxConnector[] = [
   'consumer',
   'kitchen',
   'accounting',
+  'restaurant',
 ].map(serviceOutboxConnector);
