@@ -46,12 +46,12 @@ describe('placing orders against the menu replica in Order', () => {
       ),
       { menuItemId: aguaId, name: 'Agua', priceInCents: '500', isAvailable: true },
     ]);
+    expect(revised.status).toBe(200);
     await consumerApi.waitForPlacementRefusal(
       { ...pizzeriaOrder, lineItems: [{ menuItemId: aguaId, quantity: 1 }] },
       'MinimumOrderNotReached',
     );
 
-    expect(revised.status).toBe(200);
     expect([totalBeforeRevision, await approvedTotalInCents(pizzeriaOrder)]).toEqual([
       '9800',
       '10800',
@@ -73,7 +73,7 @@ describe('placing orders against the menu replica in Order', () => {
     expect(problem).toEqual(unprocessableProblem('RestaurantClosed'));
   });
 
-  it('refuses an order below the minimum order with an unprocessable entity problem', async () => {
+  it('refuses an order below the minimum order and approves one whose quantity reaches it', async () => {
     const pizzeriaOrder = await openPizzeria();
 
     const response = await consumerApi.placeOrder(
@@ -83,5 +83,11 @@ describe('placing orders against the menu replica in Order', () => {
 
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual(unprocessableProblem('MinimumOrderNotReached'));
+    expect(
+      await approvedTotalInCents({
+        ...pizzeriaOrder,
+        lineItems: [{ menuItemId: guaranaId, quantity: 3 }],
+      }),
+    ).toBe('2400');
   });
 });
