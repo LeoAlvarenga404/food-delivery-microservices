@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "2.16.0",
+    "@connectrpc/connect": "2.2.0",
+    "@fd/chassis-auth": "workspace:*",
     "@fd/chassis-config": "workspace:*",
     "@fd/chassis-inbox": "workspace:*",
     "@fd/chassis-kafka": "workspace:*",

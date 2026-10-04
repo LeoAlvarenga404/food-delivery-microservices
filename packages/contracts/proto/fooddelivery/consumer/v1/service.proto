@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package fooddelivery.consumer.v1;
+
+service ConsumerService {
+  rpc RegisterConsumer(RegisterConsumerRequest) returns (RegisterConsumerResponse);
+  rpc GetConsumer(GetConsumerRequest) returns (GetConsumerResponse);
+}
+
+enum ConsumerStatus {
+  CONSUMER_STATUS_UNSPECIFIED = 0;
+  CONSUMER_STATUS_ACTIVE = 1;
+  CONSUMER_STATUS_BLOCKED = 2;
+}
+
+message Address {
+  string street = 1;
+  string number = 2;
+  string city = 3;
+  string postal_code = 4;
+}
+
+message RegisterConsumerRequest {
+  string name = 1;
+  string email = 2;
+  repeated Address addresses = 3;
+}
+
+message RegisterConsumerResponse {
+  string consumer_id = 1;
+}
+
+message RegisterConsumerFailure {
+  string reason = 1;
+}
+
+message GetConsumerRequest {}
+
+message GetConsumerResponse {
+  string consumer_id = 1;
+  string name = 2;
+  string email = 3;
+  repeated Address addresses = 4;
+  ConsumerStatus status = 5;
+}
