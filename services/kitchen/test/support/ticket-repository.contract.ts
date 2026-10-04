@@ -76,11 +76,22 @@ export function describeTicketRepositoryContract(
       await expect(tickets.save(second)).rejects.toThrow(ConcurrencyConflictError);
     });
 
-    it('refuses a second ticket for the same order', async () => {
+    it('refuses a second ticket for the same order as a concurrency conflict', async () => {
       await tickets.save(buildTicket());
       const otherTicketId = unwrap(parseTicketId('0199a5d0-0000-7000-8000-0000000000f2'));
 
-      await expect(tickets.save(buildTicket({ ticketId: otherTicketId }))).rejects.toThrow();
+      await expect(tickets.save(buildTicket({ ticketId: otherTicketId }))).rejects.toThrow(
+        ConcurrencyConflictError,
+      );
+    });
+
+    it('refuses a new ticket whose id is already stored as a concurrency conflict', async () => {
+      await tickets.save(buildTicket());
+      const otherOrderId = unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000000af'));
+
+      await expect(tickets.save(buildTicket({ orderId: otherOrderId }))).rejects.toThrow(
+        ConcurrencyConflictError,
+      );
     });
   });
 }

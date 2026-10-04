@@ -25,7 +25,9 @@ export class InMemoryTicketRepository implements TicketRepository {
       stored === undefined &&
       [...this.rows.values()].some((other) => other.orderId === row.orderId)
     ) {
-      return Promise.reject(new Error(`order ${row.orderId} already has a ticket`));
+      return Promise.reject(
+        new ConcurrencyConflictError(`order ${row.orderId} already has a ticket`),
+      );
     }
     this.rows.set(row.ticketId, { ...row, version: row.version + 1 });
     return Promise.resolve();

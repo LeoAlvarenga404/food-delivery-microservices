@@ -181,4 +181,30 @@ describe('ConcurrencyConflictError', () => {
       message: 'order-1 changed',
     });
   });
+
+  it('turns a unique violation into a conflict that keeps the driver error as its cause', async () => {
+    const stockItem = { stockItemId: 'duplicate-sku', quantityOnHand: 1n, reorderLevel: 0n };
+    await database.insertInto('stockItems').values(stockItem).execute();
+
+    const failure = await database
+      .insertInto('stockItems')
+      .values(stockItem)
+      .execute()
+      .catch((error: unknown) =>
+        ConcurrencyConflictError.fromUniqueViolation(error, 'stock item duplicate-sku exists'),
+      );
+
+    expect(failure).toBeInstanceOf(ConcurrencyConflictError);
+    expect(failure).toMatchObject({
+      code: '40001',
+      message: 'stock item duplicate-sku exists',
+      cause: { code: '23505' },
+    });
+  });
+
+  it('keeps any other failure as it was', () => {
+    const failure = Object.assign(new Error('deadlock detected'), { code: '40P01' });
+
+    expect(ConcurrencyConflictError.fromUniqueViolation(failure, 'ignored')).toBe(failure);
+  });
 });

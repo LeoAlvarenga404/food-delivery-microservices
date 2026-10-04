@@ -35,7 +35,13 @@ export class PostgresPlaceOrderSagaRepository implements PlaceOrderSagaRepositor
       await this.#database
         .insertInto('sagaInstances')
         .values({ ...row, version: 1 })
-        .execute();
+        .execute()
+        .catch((error: unknown) => {
+          throw ConcurrencyConflictError.fromUniqueViolation(
+            error,
+            `saga ${row.sagaId} already exists`,
+          );
+        });
       return;
     }
     await this.#update(row);

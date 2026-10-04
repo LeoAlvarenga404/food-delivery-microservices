@@ -81,5 +81,11 @@ export function describeOrderRepositoryContract(
 
       await expect(orders.save(second)).rejects.toThrow(ConcurrencyConflictError);
     });
+
+    it('refuses a new order whose id is already stored as a concurrency conflict', async () => {
+      await orders.save(buildOrder());
+
+      await expect(orders.save(buildOrder())).rejects.toThrow(ConcurrencyConflictError);
+    });
   });
 }

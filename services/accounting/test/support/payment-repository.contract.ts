@@ -1,3 +1,4 @@
+import { ConcurrencyConflictError } from '@fd/chassis-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseOrderId } from '#domain/payment/order-id.value-object.ts';
 import { parsePaymentId } from '#domain/payment/payment-id.value-object.ts';
@@ -34,18 +35,22 @@ export function describePaymentRepositoryContract(
       expect(await payments.findByOrderId(otherOrderId)).toBeUndefined();
     });
 
-    it('refuses a second payment for the same order', async () => {
+    it('refuses a second payment for the same order as a concurrency conflict', async () => {
       await payments.save(buildPayment());
       const otherPaymentId = unwrap(parsePaymentId('0199a5d0-0000-7000-8000-0000000000ea'));
 
-      await expect(payments.save(buildPayment({ paymentId: otherPaymentId }))).rejects.toThrow();
+      await expect(payments.save(buildPayment({ paymentId: otherPaymentId }))).rejects.toThrow(
+        ConcurrencyConflictError,
+      );
     });
 
-    it('refuses a second payment with the same payment id for another order', async () => {
+    it('refuses a second payment with the same payment id for another order as a concurrency conflict', async () => {
       await payments.save(buildPayment());
       const otherOrderId = unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000000af'));
 
-      await expect(payments.save(buildPayment({ orderId: otherOrderId }))).rejects.toThrow();
+      await expect(payments.save(buildPayment({ orderId: otherOrderId }))).rejects.toThrow(
+        ConcurrencyConflictError,
+      );
     });
   });
 }

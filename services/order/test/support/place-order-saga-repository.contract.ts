@@ -126,5 +126,11 @@ export function describePlaceOrderSagaRepositoryContract(
 
       await expect(sagas.save(advanced)).rejects.toThrow(ConcurrencyConflictError);
     });
+
+    it('refuses a new saga whose id is already stored as a concurrency conflict', async () => {
+      await sagas.save(started);
+
+      await expect(sagas.save(started)).rejects.toThrow(ConcurrencyConflictError);
+    });
   });
 }
