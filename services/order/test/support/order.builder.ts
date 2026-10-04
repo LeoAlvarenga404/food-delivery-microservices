@@ -43,6 +43,13 @@ export const aroundTheClockHours: OpeningHours = unwrap(
   }),
 );
 
+export const fridayEveningHours: OpeningHours = unwrap(
+  parseOpeningHours({
+    timeZone: 'America/Sao_Paulo',
+    periods: [{ dayOfWeek: 'FRIDAY', opensAt: '18:00', closesAt: '23:30' }],
+  }),
+);
+
 export const pizzeriaMenu: RestaurantMenu = {
   restaurantId: unwrap(parseRestaurantId('0199a5d0-0000-7000-8000-000000000001')),
   version: 2,

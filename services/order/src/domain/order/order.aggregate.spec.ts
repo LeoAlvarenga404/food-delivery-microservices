@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildOrder,
   calabresaId,
+  fridayEveningHours,
   guaranaId,
   margheritaId,
   orderInput,
@@ -102,6 +103,65 @@ describe('Order.place', () => {
       );
     },
   );
+
+  it('rejects a menu item the restaurant made unavailable', () => {
+    const menu = {
+      ...pizzeriaMenu,
+      items: pizzeriaMenu.items.map((item) =>
+        item.menuItemId === guaranaId ? { ...item, isAvailable: false } : item,
+      ),
+    };
+
+    expect(Order.place(orderInput({ menu }))).toEqual(
+      left({ type: 'UnavailableMenuItem', menuItemId: guaranaId }),
+    );
+  });
+
+  it('rejects an order placed while the restaurant is closed', () => {
+    const menu = { ...pizzeriaMenu, openingHours: fridayEveningHours };
+
+    expect(Order.place(orderInput({ menu }))).toEqual(left({ type: 'RestaurantClosed' }));
+  });
+
+  it('places an order at the opening minute of the restaurant', () => {
+    const menu = { ...pizzeriaMenu, openingHours: fridayEveningHours };
+    const openingMinute = new Date('2026-10-02T21:00:00.000Z');
+
+    expect(Order.place(orderInput({ menu, placedAt: openingMinute })).isRight()).toBe(true);
+  });
+
+  it('places an order whose total reaches the minimum order exactly', () => {
+    const menu = { ...pizzeriaMenu, minimumOrderInCents: 9800n };
+
+    expect(Order.place(orderInput({ menu })).isRight()).toBe(true);
+  });
+
+  it('rejects an order one cent below the minimum order', () => {
+    const menu = { ...pizzeriaMenu, minimumOrderInCents: 9801n };
+
+    expect(Order.place(orderInput({ menu }))).toEqual(left({ type: 'MinimumOrderNotReached' }));
+  });
+
+  it.each([
+    {
+      precedence: 'an unavailable item before a closed restaurant',
+      menu: {
+        ...pizzeriaMenu,
+        openingHours: fridayEveningHours,
+        items: pizzeriaMenu.items.map((item) =>
+          item.menuItemId === guaranaId ? { ...item, isAvailable: false } : item,
+        ),
+      },
+      failure: { type: 'UnavailableMenuItem', menuItemId: guaranaId },
+    },
+    {
+      precedence: 'a closed restaurant before the minimum order',
+      menu: { ...pizzeriaMenu, openingHours: fridayEveningHours, minimumOrderInCents: 9801n },
+      failure: { type: 'RestaurantClosed' },
+    },
+  ])('refuses $precedence', ({ menu, failure }) => {
+    expect(Order.place(orderInput({ menu }))).toEqual(left(failure));
+  });
 });
 
 describe('Order.approve', () => {

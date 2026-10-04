@@ -25,6 +25,7 @@ import { FakeClock } from '../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../test/support/in-memory-unit-of-work.adapter.ts';
 import {
+  fridayEveningHours,
   guaranaId,
   margheritaId,
   pizzeriaMenu,
@@ -33,6 +34,7 @@ import {
 import { sagaTimeoutsInMilliseconds } from '../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
+import type { RestaurantMenu } from '#domain/menu/restaurant-menu.value-object.ts';
 import { parseOrderId } from '#domain/order/order-id.value-object.ts';
 import { createOrderRpcService } from './order.rpc-service.ts';
 
@@ -426,6 +428,34 @@ describe('OrderService.PlaceOrder', () => {
     expect(ConnectError.from(failure).findDetails(PlaceOrderFailureSchema)).toMatchObject([
       { reason },
     ]);
+  });
+
+  it.each<{ readonly reason: string; readonly menu: RestaurantMenu }>([
+    {
+      reason: 'UnavailableMenuItem',
+      menu: {
+        ...pizzeriaMenu,
+        version: 3,
+        items: pizzeriaMenu.items.map((item) => ({ ...item, isAvailable: false })),
+      },
+    },
+    {
+      reason: 'RestaurantClosed',
+      menu: { ...pizzeriaMenu, version: 3, openingHours: fridayEveningHours },
+    },
+    {
+      reason: 'MinimumOrderNotReached',
+      menu: { ...pizzeriaMenu, version: 3, minimumOrderInCents: 9801n },
+    },
+  ])('answers $reason from the menu replica as a failed precondition', async ({ reason, menu }) => {
+    await unitOfWork.menus.saveIfNewer(menu);
+
+    const failure = ConnectError.from(
+      await client.placeOrder(placeOrderRequest()).catch((error: unknown) => error),
+    );
+
+    expect(failure.code).toBe(Code.FailedPrecondition);
+    expect(failure.findDetails(PlaceOrderFailureSchema)).toMatchObject([{ reason }]);
   });
 
   it('names a reused idempotency key in a typed error detail', async () => {

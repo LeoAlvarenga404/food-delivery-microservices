@@ -1,6 +1,8 @@
 import { left, right, type Either } from '@fd/domain';
 import type { MenuItemId } from '#domain/menu/menu-item-id.value-object.ts';
+import { isOpenAt } from '#domain/menu/opening-hours.value-object.ts';
 import type { RestaurantMenu } from '#domain/menu/restaurant-menu.value-object.ts';
+import { Money } from '#domain/money/money.value-object.ts';
 import type { ConsumerId } from './consumer-id.value-object.ts';
 import type { DeliveryAddress } from './delivery-address.value-object.ts';
 import type { OrderPlacementError } from './order.errors.ts';
@@ -31,6 +33,7 @@ function priceLineItem(
   }
   const menuItem = menu.items.find((item) => item.menuItemId === menuItemId);
   if (menuItem === undefined) return left({ type: 'UnknownMenuItem', menuItemId });
+  if (!menuItem.isAvailable) return left({ type: 'UnavailableMenuItem', menuItemId });
   return right(OrderLineItem.fromMenuItem(menuItem, quantity));
 }
 
@@ -62,11 +65,27 @@ function isComplete(deliveryAddress: DeliveryAddress): boolean {
   return [street, number, city, postalCode].every((field) => field.trim().length > 0);
 }
 
+function totalInCentsOf(lineItems: readonly OrderLineItem[]): bigint {
+  const total = lineItems.reduce((sum, lineItem) => sum.add(lineItem.total()), Money.zero('BRL'));
+  return total.toSnapshot().amountInCents;
+}
+
+function meetRestaurantRules(
+  input: PlaceOrderInput,
+  lineItems: readonly OrderLineItem[],
+): Either<OrderPlacementError, readonly OrderLineItem[]> {
+  if (!isOpenAt(input.menu.openingHours, input.placedAt)) return left({ type: 'RestaurantClosed' });
+  if (totalInCentsOf(lineItems) < input.menu.minimumOrderInCents) {
+    return left({ type: 'MinimumOrderNotReached' });
+  }
+  return right(lineItems);
+}
+
 export const orderPlacementPolicy = {
   evaluate(input: PlaceOrderInput): Either<OrderPlacementError, readonly OrderLineItem[]> {
     const lineItems = priceLineItems(input);
     if (lineItems.isLeft()) return lineItems;
     if (!isComplete(input.deliveryAddress)) return left({ type: 'IncompleteDeliveryAddress' });
-    return lineItems;
+    return meetRestaurantRules(input, lineItems.success);
   },
 };

@@ -26,18 +26,12 @@ export interface OrderRpcServiceSettings {
   readonly getOrder: GetOrderQueryHandler;
 }
 
+const invalidArgumentFailures: ReadonlySet<PlaceOrderError['type']> = new Set<
+  PlaceOrderError['type']
+>(['EmptyOrder', 'InvalidQuantity', 'DuplicateMenuItem', 'IncompleteDeliveryAddress']);
+
 function toConnectCode(error: PlaceOrderError): Code {
-  switch (error.type) {
-    case 'EmptyOrder':
-    case 'InvalidQuantity':
-    case 'DuplicateMenuItem':
-    case 'IncompleteDeliveryAddress':
-      return Code.InvalidArgument;
-    case 'UnknownRestaurant':
-    case 'UnknownMenuItem':
-    case 'IdempotencyKeyReused':
-      return Code.FailedPrecondition;
-  }
+  return invalidArgumentFailures.has(error.type) ? Code.InvalidArgument : Code.FailedPrecondition;
 }
 
 type PlaceOrderFailureReason = PlaceOrderError['type'] | InvalidPlaceOrderRequest['type'];
