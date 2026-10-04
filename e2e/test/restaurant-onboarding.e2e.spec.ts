@@ -49,8 +49,8 @@ describe('restaurant onboarding and menu revision', () => {
       'fooddelivery.restaurant.v1.MenuRevised',
       'fooddelivery.restaurant.v1.MenuRevised',
     ]);
-    expect(await stack.describeTopicConfiguration(restaurantStateTopic)).toContain(
-      'cleanup.policy=compact',
+    expect(await stack.describeTopicConfiguration(restaurantStateTopic)).toMatch(
+      /cleanup\.policy=compact\s/,
     );
   });
 
@@ -85,5 +85,6 @@ describe('restaurant onboarding and menu revision', () => {
 
     expect(response.status).toBe(401);
     expect(response.headers.get('content-type')).toBe('application/problem+json');
+    expect(response.headers.get('x-correlation-id')).toBeNull();
   });
 });
