@@ -1,0 +1,47 @@
+{
+  "restaurant": {
+    "restaurantId": "0199a5d0-0000-7000-8000-0000000000b1",
+    "version": 2,
+    "name": "Pizzaria Bella",
+    "category": "Pizza",
+    "address": {
+      "street": "Avenida Paulista",
+      "number": "1000",
+      "city": "Sao Paulo",
+      "postalCode": "01310-100",
+      "location": {
+        "latitude": -23.5614,
+        "longitude": -46.6559
+      }
+    },
+    "timeZone": "America/Sao_Paulo",
+    "openingHours": [
+      {
+        "dayOfWeek": "DAY_OF_WEEK_FRIDAY",
+        "opensAt": "18:00",
+        "closesAt": "23:30"
+      },
+      {
+        "dayOfWeek": "DAY_OF_WEEK_SATURDAY",
+        "opensAt": "18:00",
+        "closesAt": "02:00"
+      }
+    ],
+    "minimumOrderInCents": "2000",
+    "currency": "BRL",
+    "menuItems": [
+      {
+        "menuItemId": "0199a5d0-0000-7000-8000-000000000d01",
+        "name": "Margherita",
+        "priceInCents": "4500",
+        "isAvailable": true
+      },
+      {
+        "menuItemId": "0199a5d0-0000-7000-8000-000000000d02",
+        "name": "Guarana",
+        "priceInCents": "800"
+      }
+    ]
+  },
+  "revisedAt": "2026-10-04T12:30:00Z"
+}
