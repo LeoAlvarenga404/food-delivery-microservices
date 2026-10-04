@@ -19,17 +19,14 @@ import {
   readConsumerBffConfiguration,
   type ConsumerBffConfiguration,
 } from './consumer-bff.config.ts';
-import {
-  createOrderServiceAccess,
-  type OrderServiceAccess,
-} from './http/order-service-access.adapter.ts';
 import { problemDetails, sendProblemDetails } from './http/problem-details.adapter.ts';
+import { createServiceAccess, type ServiceAccess } from './http/service-access.adapter.ts';
 import { traceContextInterceptor } from './http/trace-context-interceptor.adapter.ts';
 import { orderRoutes } from './orders/order.routes.ts';
 
 export interface ConsumerBffSettings {
   readonly orderService: Client<typeof OrderService>;
-  readonly orderServiceAccess: OrderServiceAccess;
+  readonly serviceAccess: ServiceAccess;
   readonly logger: Logger;
   readonly generateCorrelationId: () => string;
 }
@@ -94,17 +91,15 @@ export async function createConsumerBffServer(
   });
   await server.register(orderRoutes, {
     orderService: settings.orderService,
-    orderServiceAccess: settings.orderServiceAccess,
+    serviceAccess: settings.serviceAccess,
   });
   server.get('/health', { schema: { hide: true } }, () => ({ status: 'ok' }));
   server.get('/openapi.json', { schema: { hide: true } }, () => server.swagger());
   return server;
 }
 
-function createConfiguredOrderServiceAccess(
-  configuration: ConsumerBffConfiguration,
-): OrderServiceAccess {
-  return createOrderServiceAccess({
+function createConfiguredServiceAccess(configuration: ConsumerBffConfiguration): ServiceAccess {
+  return createServiceAccess({
     verify: createAccessTokenVerifier({
       issuer: configuration.accessTokenIssuer,
       audience: consumerBffClientId,
@@ -134,7 +129,7 @@ export async function startConsumerBff(
   );
   const server = await createConsumerBffServer({
     orderService,
-    orderServiceAccess: createConfiguredOrderServiceAccess(configuration),
+    serviceAccess: createConfiguredServiceAccess(configuration),
     logger,
     generateCorrelationId: generateUuidV7,
   });

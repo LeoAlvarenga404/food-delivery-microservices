@@ -1,10 +1,7 @@
 import type { AccessTokenVerifier, TokenExchange } from '@fd/chassis-auth';
 import { left, right } from '@fd/domain';
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  createOrderServiceAccess,
-  type OrderServiceAccess,
-} from './order-service-access.adapter.ts';
+import { createServiceAccess, type ServiceAccess } from './service-access.adapter.ts';
 
 const verifiedAccessTokens = new Map([
   ['consumer-token', { subject: '0199a5d0-0000-7000-8000-0000000000c1', roles: ['consumer'] }],
@@ -16,7 +13,7 @@ const verifiedAccessTokens = new Map([
 ]);
 
 let exchanges: { readonly subjectToken: string; readonly audience: string }[];
-let orderServiceAccess: OrderServiceAccess;
+let serviceAccess: ServiceAccess;
 
 const verify: AccessTokenVerifier = (accessToken) => {
   const verified = verifiedAccessTokens.get(accessToken);
@@ -38,33 +35,38 @@ const exchange: TokenExchange = (subjectToken, audience) => {
 
 beforeEach(() => {
   exchanges = [];
-  orderServiceAccess = createOrderServiceAccess({ verify, exchange });
+  serviceAccess = createServiceAccess({ verify, exchange });
 });
 
-describe('createOrderServiceAccess', () => {
-  it('exchanges the token of a consumer for an order service token', async () => {
-    const access = await orderServiceAccess('Bearer consumer-token');
+describe('createServiceAccess', () => {
+  it.each(['order-service', 'consumer-service'])(
+    'exchanges the token of a consumer for a token of the %s audience',
+    async (audience) => {
+      const access = await serviceAccess('Bearer consumer-token', audience);
 
-    expect(access).toEqual(right('order-service-token-for-consumer-token'));
-    expect(exchanges).toEqual([{ subjectToken: 'consumer-token', audience: 'order-service' }]);
-  });
+      expect(access).toEqual(right(`${audience}-token-for-consumer-token`));
+      expect(exchanges).toEqual([{ subjectToken: 'consumer-token', audience }]);
+    },
+  );
 
   it.each([
     { scenario: 'no authorization', authorization: undefined },
     { scenario: 'another authorization scheme', authorization: 'Basic Y29uc3VtZXI6c2VjcmV0' },
     { scenario: 'a token the verifier refuses', authorization: 'Bearer expired-token' },
   ])('refuses $scenario as unauthenticated without exchanging', async ({ authorization }) => {
-    expect(await orderServiceAccess(authorization)).toEqual(left({ status: 401 }));
+    expect(await serviceAccess(authorization, 'order-service')).toEqual(left({ status: 401 }));
     expect(exchanges).toEqual([]);
   });
 
   it('refuses a caller without the consumer role as forbidden without exchanging', async () => {
-    expect(await orderServiceAccess('Bearer staff-token')).toEqual(left({ status: 403 }));
+    expect(await serviceAccess('Bearer staff-token', 'order-service')).toEqual(
+      left({ status: 403 }),
+    );
     expect(exchanges).toEqual([]);
   });
 
   it('refuses a token the issuer will not exchange as unauthenticated', async () => {
-    expect(await orderServiceAccess('Bearer refused-exchange-token')).toEqual(
+    expect(await serviceAccess('Bearer refused-exchange-token', 'order-service')).toEqual(
       left({ status: 401 }),
     );
   });
@@ -79,8 +81,8 @@ describe('createOrderServiceAccess', () => {
       failing: { verify, exchange: () => Promise.reject(new Error('token endpoint unreachable')) },
     },
   ])('fails instead of refusing when $failingStep cannot be reached', async ({ failing }) => {
-    await expect(createOrderServiceAccess(failing)('Bearer consumer-token')).rejects.toThrow(
-      'unreachable',
-    );
+    await expect(
+      createServiceAccess(failing)('Bearer consumer-token', 'order-service'),
+    ).rejects.toThrow('unreachable');
   });
 });
