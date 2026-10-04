@@ -1,5 +1,5 @@
 import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
-import { deleteExpiredInboxEntries, withInbox } from '@fd/chassis-inbox';
+import { deleteExpiredInboxEntries } from '@fd/chassis-inbox';
 import { createKafka, startConsumerRunner, type RunningConsumer } from '@fd/chassis-kafka';
 import {
   StartedParts,
@@ -17,7 +17,7 @@ import { v7 as generateUuidV7 } from 'uuid';
 import type { Clock } from '#application/ports/clock.port.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import { GetOrderQueryHandler } from '#application/queries/get-order/get-order.query-handler.ts';
-import { placeOrderSagaReplyConsumer } from '#infrastructure/messaging/inbound/place-order-saga-reply.consumer.ts';
+import { orderInboundConsumer } from '#infrastructure/messaging/inbound/order-inbound.consumer.ts';
 import {
   readOrderServiceConfiguration,
   type OrderServiceConfiguration,
@@ -54,7 +54,6 @@ interface RunningHttpServer {
   readonly url: string;
 }
 
-const placeOrderSagaRepliesTopic = 'order.place-order-saga.replies';
 const sagaDeadlineSweepIntervalInMilliseconds = 1_000;
 
 async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpServer> {
@@ -83,7 +82,7 @@ async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpSer
   }
 }
 
-async function startReplyConsumer(parts: OrderServiceParts): Promise<RunningConsumer> {
+async function startMessageConsumer(parts: OrderServiceParts): Promise<RunningConsumer> {
   const { configuration, logger, database, unitOfWork, clock } = parts;
   return startConsumerRunner({
     kafka: createKafka({
@@ -91,16 +90,13 @@ async function startReplyConsumer(parts: OrderServiceParts): Promise<RunningCons
       bootstrapServers: configuration.kafkaBootstrapServers,
     }),
     groupId: 'order-service',
-    topics: [placeOrderSagaRepliesTopic],
-    handle: withInbox(
-      { database, handlerName: 'place-order-saga-reply', now: () => clock.now() },
-      placeOrderSagaReplyConsumer({
-        unitOfWork,
-        clock,
-        sagaTimeoutsInMilliseconds: configuration.sagaTimeoutsInMilliseconds,
-        logger,
-      }),
-    ),
+    ...orderInboundConsumer({
+      database,
+      unitOfWork,
+      clock,
+      sagaTimeoutsInMilliseconds: configuration.sagaTimeoutsInMilliseconds,
+      logger,
+    }),
     logger,
   });
 }
@@ -163,8 +159,8 @@ async function prepareParts(configuration: OrderServiceConfiguration): Promise<O
 }
 
 async function startResources(parts: OrderServiceParts, started: StartedParts): Promise<string> {
-  const replyConsumer = await startReplyConsumer(parts);
-  started.add(() => replyConsumer.stop());
+  const messageConsumer = await startMessageConsumer(parts);
+  started.add(() => messageConsumer.stop());
   const sagaDeadlineWorker = startSagaDeadlineWorker(parts);
   started.add(() => sagaDeadlineWorker.stop());
   const housekeeping = startPeriodicJob({

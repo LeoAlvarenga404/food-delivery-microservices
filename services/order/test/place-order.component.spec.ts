@@ -32,10 +32,10 @@ import {
 import { sql, type Kysely } from 'kysely';
 import { v7 as generateUuidV7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MenuRevisedSchema } from '@fd/contracts/fooddelivery/restaurant/v1/events_pb.js';
 import type { OrderServiceConfiguration } from '../src/infrastructure/order-service.config.ts';
-import type { DB as OrderDatabase } from '../src/infrastructure/persistence/generated/database.ts';
-import { PostgresRestaurantMenuRepository } from '../src/infrastructure/persistence/postgres-restaurant-menu.repository.ts';
 import { startOrderService, type RunningOrderService } from '../src/main.ts';
+import { snapshotOf } from './support/menu-revised-message.builder.ts';
 import { guaranaId, margheritaId, pizzeriaMenu } from './support/order.builder.ts';
 import { sagaTimeoutsInMilliseconds } from './support/place-order-saga.builder.ts';
 
@@ -48,6 +48,7 @@ interface CommandRow {
 }
 
 const repliesTopic = 'order.place-order-saga.replies';
+const restaurantStateTopic = 'restaurant.restaurant.state';
 const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
 const replyTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
@@ -89,20 +90,48 @@ async function waitForCommand(messageType: string): Promise<CommandRow> {
   });
 }
 
-async function createReplyTopics(): Promise<void> {
+async function createConsumedTopics(): Promise<void> {
   const admin = createKafka({
     clientId: 'component-test',
     bootstrapServers: [kafka.bootstrapServer],
   }).admin();
   await admin.connect();
   await admin.createTopics({
-    topics: [repliesTopic, `${repliesTopic}.order-service.dlq`].map((topic) => ({
-      topic,
-      numPartitions: 1,
-      replicationFactor: 1,
-    })),
+    topics: [repliesTopic, restaurantStateTopic]
+      .flatMap((topic) => [topic, `${topic}.order-service.dlq`])
+      .map((topic) => ({ topic, numPartitions: 1, replicationFactor: 1 })),
   });
   await admin.disconnect();
+}
+
+async function publishMenuRevisionsOfThePizzeria(): Promise<void> {
+  const producer = createKafka({
+    clientId: 'restaurant-double',
+    bootstrapServers: [kafka.bootstrapServer],
+  }).producer();
+  await producer.connect();
+  await producer.send({
+    topic: restaurantStateTopic,
+    messages: [{ ...pizzeriaMenu, version: 1, items: [] }, pizzeriaMenu].map((menu) => ({
+      key: menu.restaurantId,
+      value: Buffer.from(
+        toBinary(MenuRevisedSchema, create(MenuRevisedSchema, { restaurant: snapshotOf(menu) })),
+      ),
+      headers: {
+        'message-id': generateUuidV7(),
+        'message-type': MenuRevisedSchema.typeName,
+        'correlation-id': generateUuidV7(),
+      },
+    })),
+  });
+  await producer.disconnect();
+}
+
+async function readReplicaVersion(): Promise<number | undefined> {
+  const result = await sql<{ readonly version: number }>`
+    select version from restaurant_menus where restaurant_id = ${pizzeriaMenu.restaurantId}
+  `.execute(outboxReader);
+  return result.rows[0]?.version;
 }
 
 async function reply<Schema extends DescMessage>(
@@ -132,16 +161,6 @@ async function reply<Schema extends DescMessage>(
     ],
   });
   await producer.disconnect();
-}
-
-async function seedPizzeriaMenu(): Promise<void> {
-  const database = createDatabase<OrderDatabase>({
-    connectionString: postgres.connectionUri,
-    maximumConnectionCount: 1,
-    onConnectionError: () => undefined,
-  });
-  await new PostgresRestaurantMenuRepository(database).saveIfNewer(pizzeriaMenu);
-  await database.destroy();
 }
 
 function buildPlaceOrderRequest(idempotencyKey: string, paymentToken: string): PlaceOrderRequest {
@@ -230,12 +249,12 @@ beforeAll(async () => {
       return started;
     }),
   ]);
-  await createReplyTopics();
+  await createConsumedTopics();
+  await publishMenuRevisionsOfThePizzeria();
   orderService = await startOrderService(
     serviceConfiguration({ sagaTimeoutsInMilliseconds: componentSagaTimeoutsInMilliseconds }),
   );
   stoppers.push(() => orderService.stop());
-  await seedPizzeriaMenu();
   client = clientFor(await orderServiceTokenOf('consumer-a'));
   outboxReader = createDatabase({
     connectionString: postgres.connectionUri,
@@ -243,6 +262,7 @@ beforeAll(async () => {
     onConnectionError: () => undefined,
   });
   stoppers.push(() => outboxReader.destroy());
+  await waitFor(async () => ((await readReplicaVersion()) === 2 ? true : undefined));
 });
 
 afterAll(async () => {
@@ -258,6 +278,10 @@ afterAll(async () => {
 });
 
 describe('order service', () => {
+  it('builds its menu replica from the earliest offset of the restaurant state topic', async () => {
+    expect(await readReplicaVersion()).toBe(2);
+  });
+
   it('approves a placed order once every participant replied through Kafka', async () => {
     const { orderId } = await client.placeOrder(
       buildPlaceOrderRequest('checkout-component-test', 'tok_visa_4242'),
