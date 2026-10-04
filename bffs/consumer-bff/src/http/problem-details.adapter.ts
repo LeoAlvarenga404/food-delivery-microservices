@@ -22,7 +22,7 @@ const httpStatusByConnectCode = new Map<Code, number>([
   [Code.Unauthenticated, 401],
   [Code.PermissionDenied, 403],
   [Code.NotFound, 404],
-  [Code.AlreadyExists, 422],
+  [Code.AlreadyExists, 409],
   [Code.FailedPrecondition, 422],
   [Code.Unavailable, 503],
   [Code.DeadlineExceeded, 504],

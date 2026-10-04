@@ -304,7 +304,7 @@ describe('order service', () => {
 
     expect(repeated.orderId).toBe(first.orderId);
     await expect(client.placeOrder(different)).rejects.toMatchObject({
-      code: Code.AlreadyExists,
+      code: Code.FailedPrecondition,
     });
   });
 

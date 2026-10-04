@@ -226,7 +226,7 @@ describe('POST /v1/orders', () => {
       title: 'Unprocessable Entity',
     },
     {
-      code: Code.AlreadyExists,
+      code: Code.FailedPrecondition,
       reason: 'IdempotencyKeyReused',
       status: 422,
       title: 'Unprocessable Entity',
@@ -249,6 +249,7 @@ describe('POST /v1/orders', () => {
   it.each([
     { code: Code.Unauthenticated, status: 401 },
     { code: Code.PermissionDenied, status: 403 },
+    { code: Code.AlreadyExists, status: 409 },
     { code: Code.Unavailable, status: 503 },
     { code: Code.DeadlineExceeded, status: 504 },
     { code: Code.Internal, status: 500 },

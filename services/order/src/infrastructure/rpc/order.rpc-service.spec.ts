@@ -373,12 +373,12 @@ describe('OrderService.PlaceOrder', () => {
     });
   });
 
-  it('rejects a reused key carrying a different request as already existing', async () => {
+  it('rejects a reused key carrying a different request as a failed precondition', async () => {
     await client.placeOrder(placeOrderRequest());
 
     await expect(
       client.placeOrder(placeOrderRequest({ paymentToken: 'tok_mastercard_4444' })),
-    ).rejects.toMatchObject({ code: Code.AlreadyExists });
+    ).rejects.toMatchObject({ code: Code.FailedPrecondition });
   });
 
   it.each<{ readonly reason: string; readonly overrides: PlaceOrderRequestInit }>([

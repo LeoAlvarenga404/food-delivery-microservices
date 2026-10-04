@@ -36,9 +36,8 @@ function toConnectCode(error: PlaceOrderError): Code {
       return Code.InvalidArgument;
     case 'UnknownRestaurant':
     case 'UnknownMenuItem':
-      return Code.FailedPrecondition;
     case 'IdempotencyKeyReused':
-      return Code.AlreadyExists;
+      return Code.FailedPrecondition;
   }
 }
 
