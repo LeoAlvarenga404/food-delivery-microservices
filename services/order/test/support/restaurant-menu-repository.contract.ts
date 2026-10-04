@@ -75,6 +75,21 @@ export function describeRestaurantMenuRepositoryContract(
       expect(await menus.findByRestaurantId(menu.restaurantId)).toEqual(menu);
     });
 
+    it('keeps amounts beyond the safe integer range exact', async () => {
+      const menus = createRepository();
+      const largestAmountInCents = 9_223_372_036_854_775_807n;
+      const menu = trattoriaMenu('0199a5d0-0000-7000-8000-0000000001a5', 1);
+      const expensiveMenu = {
+        ...menu,
+        minimumOrderInCents: largestAmountInCents,
+        items: menu.items.map((item) => ({ ...item, priceInCents: largestAmountInCents })),
+      };
+
+      await menus.saveIfNewer(expensiveMenu);
+
+      expect(await menus.findByRestaurantId(menu.restaurantId)).toEqual(expensiveMenu);
+    });
+
     it('returns undefined for a restaurant without a menu replica', async () => {
       const unknownRestaurantId = unwrap(parseRestaurantId('0199a5d0-0000-7000-8000-0000000000ff'));
 
