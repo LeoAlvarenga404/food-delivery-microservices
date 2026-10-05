@@ -238,5 +238,30 @@ export function describeRestaurantSearchIndexContract(
       expect(idsOf(results)).toEqual([pizzeriaId, cantinaId]);
       expect(results.hits.map((hit) => hit.name)).toEqual(['Cantina Nonna', 'Cantina Nonna']);
     });
+
+    it('serves the first load while the second one runs and keeps a revision saved meanwhile', async () => {
+      await searchIndex.save(burgerJoint);
+      let loadCount = 0;
+      let idsDuringSecondLoad: readonly string[] = [];
+
+      await searchIndex.rebuild(async () => {
+        loadCount += 1;
+        if (loadCount === 2) {
+          idsDuringSecondLoad = idsOf(await searchIndex.search(browseEverything));
+          await searchIndex.save(
+            buildSearchableRestaurant({
+              restaurantId: pizzeriaId,
+              name: 'Pizzaria Nova',
+              version: 4,
+            }),
+          );
+        }
+        return [pizzeria];
+      });
+
+      const results = await searchIndex.search(browseEverything);
+      expect(idsDuringSecondLoad).toEqual([pizzeriaId]);
+      expect(results.hits.map((hit) => hit.name)).toEqual(['Pizzaria Nova']);
+    });
   });
 }

@@ -12,6 +12,7 @@ import {
   type RestaurantSearch,
 } from '#application/ports/restaurant-search-index.port.ts';
 import { OpenSearchRestaurantSearchIndex } from './open-search-restaurant-search-index.adapter.ts';
+import { restaurantSearchDocumentPersistenceMapper } from './restaurant-search-document.persistence-mapper.ts';
 
 const fridayEveningInSaoPaulo = new Date('2026-10-02T21:30:00.000Z');
 const browseEverything: RestaurantSearch = {
@@ -110,6 +111,7 @@ describe('OpenSearchRestaurantSearchIndex', () => {
       });
 
       await expect(answering.search(browseEverything)).rejects.toThrow(failure);
+      await expect(answering.save(buildSearchableRestaurant())).rejects.toThrow(failure);
       await answeringClient.close();
       searchEngine.close();
     },
@@ -127,6 +129,68 @@ describe('OpenSearchRestaurantSearchIndex', () => {
     expect(aliased).toHaveLength(1);
     expect(aliased[0]).not.toBe(`${indexAlias}-initial`);
     expect(previousExists.body).toBe(false);
+  });
+
+  it('keeps one index behind the alias when createIfMissing runs again after a rebuild', async () => {
+    const searchIndex = await createSearchIndex();
+    const indexAlias = `restaurants-${String(createdIndexCount)}`;
+    await searchIndex.rebuild(() => Promise.resolve([]));
+
+    await searchIndex.createIfMissing();
+
+    const aliased = Object.keys((await client.indices.getAlias({ name: indexAlias })).body);
+    expect(aliased).toHaveLength(1);
+    expect(await searchIndex.save(buildSearchableRestaurant())).toBe(true);
+  });
+
+  it('waits for a rebuild instead of creating an index when the one behind the alias is lost', async () => {
+    const searchIndex = await createSearchIndex();
+    const indexAlias = `restaurants-${String(createdIndexCount)}`;
+    await client.indices.delete({ index: `${indexAlias}-initial` });
+
+    await expect(searchIndex.save(buildSearchableRestaurant())).rejects.toThrow(
+      SearchIndexUnavailableError,
+    );
+    await expect(searchIndex.search(browseEverything)).rejects.toThrow(SearchIndexUnavailableError);
+    const isIndexCreated = (await client.indices.exists({ index: indexAlias })).body;
+    await searchIndex.rebuild(() => Promise.resolve([buildSearchableRestaurant()]));
+
+    const results = await searchIndex.search(browseEverything);
+    const indices = Object.keys((await client.indices.get({ index: `${indexAlias}-*` })).body);
+    expect(isIndexCreated).toBe(false);
+    expect(results.hits).toHaveLength(1);
+    expect(indices).toHaveLength(1);
+  });
+
+  it('escapes the markup of a name it highlights', async () => {
+    const searchIndex = await createSearchIndex();
+    await searchIndex.save(
+      buildSearchableRestaurant({ name: 'Pizzaria <img src=x onerror=alert(1)>' }),
+    );
+
+    const results = await searchIndex.search({ ...browseEverything, text: 'pizzaria' });
+
+    expect(results.hits.map((hit) => hit.highlights)).toEqual([
+      ['<em>Pizzaria</em> &lt;img src=x onerror=alert(1)&gt;'],
+    ]);
+  });
+
+  it('answers a restaurant whose time zone the search engine does not know as closed', async () => {
+    const searchIndex = await createSearchIndex();
+    const restaurant = buildSearchableRestaurant();
+    await client.index({
+      index: `restaurants-${String(createdIndexCount)}`,
+      id: restaurant.restaurantId,
+      body: {
+        ...restaurantSearchDocumentPersistenceMapper.toDocument(restaurant),
+        timeZone: 'Mars/Olympus',
+      },
+      refresh: true,
+    });
+
+    const results = await searchIndex.search(browseEverything);
+
+    expect(results.hits.map((hit) => hit.isOpenNow)).toEqual([false]);
   });
 });
 

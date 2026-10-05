@@ -37,6 +37,7 @@ function hasErrorType(error: unknown, errorType: string): boolean {
 function isUnavailable(error: unknown): boolean {
   if (unreachableErrors.some((errorClass) => error instanceof errorClass)) return true;
   if (!(error instanceof errors.ResponseError)) return false;
+  if (hasErrorType(error, 'index_not_found_exception')) return true;
   return error.statusCode === 429 || error.statusCode >= 500;
 }
 
@@ -111,6 +112,7 @@ export class OpenSearchRestaurantSearchIndex implements RestaurantSearchIndex {
       id: restaurant.restaurantId,
       version: restaurant.version,
       version_type: 'external',
+      require_alias: index === this.#indexAlias,
       body: restaurantSearchDocumentPersistenceMapper.toDocument(restaurant),
       refresh: this.#shouldRefreshOnWrite,
     });
@@ -126,8 +128,9 @@ export class OpenSearchRestaurantSearchIndex implements RestaurantSearchIndex {
   }
 
   async #indicesBehindAlias(): Promise<string[]> {
+    const { body: hasAlias } = await this.#client.indices.existsAlias({ name: this.#indexAlias });
+    if (!hasAlias) return [];
     const response = await this.#client.indices.getAlias({ name: this.#indexAlias });
-    const body: unknown = response.body;
-    return typeof body === 'object' && body !== null ? Object.keys(body) : [];
+    return Object.keys(response.body);
   }
 }

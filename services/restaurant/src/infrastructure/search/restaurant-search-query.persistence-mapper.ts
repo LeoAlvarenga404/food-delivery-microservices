@@ -9,8 +9,13 @@ import {
 } from './restaurant-search-document.persistence-mapper.ts';
 
 const isOpenNowSource = `
-  ZonedDateTime local = Instant.ofEpochMilli(params.searchedAtInMilliseconds)
-    .atZone(ZoneId.of(doc['timeZone'].value));
+  ZonedDateTime local;
+  try {
+    local = Instant.ofEpochMilli(params.searchedAtInMilliseconds)
+      .atZone(ZoneId.of(doc['timeZone'].value));
+  } catch (DateTimeException unknownZone) {
+    return 0;
+  }
   long minuteOfWeek = (local.getDayOfWeek().getValue() - 1) * 1440L
     + local.getHour() * 60L + local.getMinute();
   for (long code : doc['openingPeriodCodes']) {
@@ -135,7 +140,11 @@ export function toSearchRequestBody(search: RestaurantSearch): object {
     query: scoredQuery(search),
     ...(search.category !== undefined && { post_filter: { term: { category: search.category } } }),
     aggs: { categories: { terms: { field: 'category', size: 20 } } },
-    highlight: { fields: { name: {}, menuItemNames: {} }, require_field_match: false },
+    highlight: {
+      fields: { name: {}, menuItemNames: {} },
+      require_field_match: false,
+      encoder: 'html',
+    },
     script_fields: { isOpenNow: { script: isOpenNowScript(search.searchedAt) } },
     _source: ['restaurantId', 'name', 'category'],
     sort: ['_score', { restaurantId: 'asc' }],
