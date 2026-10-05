@@ -3,6 +3,7 @@ export interface CatalogueRule {
   readonly pathPattern: RegExp;
   readonly allowedRoles: readonly string[];
   readonly allowedRolelessNames: readonly string[] | 'any' | 'test-files';
+  readonly allowedExtensions?: readonly string[];
 }
 
 const domainRoles = [
@@ -41,6 +42,10 @@ const infrastructureRoles = [
 const testSupportRoles = ['repository', 'adapter', 'fake', 'builder', 'contract'];
 
 const bffRoles = ['routes', 'message-mapper', 'adapter', 'config'];
+
+const frontendRoles = ['component', 'hook', 'action', 'adapter', 'message-mapper', 'config'];
+
+const frontendExtensions = ['.ts', '.tsx'];
 
 export const fileNameCatalogue: readonly CatalogueRule[] = [
   {
@@ -98,8 +103,22 @@ export const fileNameCatalogue: readonly CatalogueRule[] = [
     allowedRolelessNames: 'test-files',
   },
   {
+    description: 'frontend routes',
+    pathPattern: /^frontends\/[^/]+\/src\/app\//,
+    allowedRoles: [],
+    allowedRolelessNames: ['page', 'layout', 'route'],
+    allowedExtensions: frontendExtensions,
+  },
+  {
+    description: 'frontend source',
+    pathPattern: /^frontends\/[^/]+\/src\//,
+    allowedRoles: frontendRoles,
+    allowedRolelessNames: [],
+    allowedExtensions: frontendExtensions,
+  },
+  {
     description: 'end-to-end tests',
-    pathPattern: /^e2e\/test\//,
+    pathPattern: /^e2e\/(?:test|browser)\//,
     allowedRoles: testSupportRoles,
     allowedRolelessNames: 'test-files',
   },
