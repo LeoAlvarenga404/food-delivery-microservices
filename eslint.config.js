@@ -84,6 +84,10 @@ const readableSyntax = [
     selector: `:matches(ImportSpecifier, ImportDefaultSpecifier, ImportNamespaceSpecifier) > Identifier.local[name=/${forbiddenIdentifierPattern}/]`,
     message: 'Use a descriptive import alias.',
   },
+  {
+    selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+    message: 'Render user text as React text (ADR-0046).',
+  },
 ];
 
 export default defineConfig(
@@ -204,7 +208,7 @@ export default defineConfig(
     rules: { 'max-lines-per-function': 'off', 'max-lines': 'off' },
   },
   {
-    files: ['**/vitest.config.ts', '**/next.config.ts', '**/playwright.config.ts'],
+    files: ['**/vitest.config.ts', 'frontends/*/next.config.ts', 'e2e/playwright.config.ts'],
     rules: { 'no-restricted-syntax': 'off' },
   },
 );

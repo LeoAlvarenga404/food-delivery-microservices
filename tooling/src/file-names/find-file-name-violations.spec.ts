@@ -191,6 +191,14 @@ describe('findFileNameViolations', () => {
       'directory "[restaurant_id]" is not kebab-case',
     ],
     [
+      'frontends/consumer-web/src/app/restaurants/[RestaurantId]/page.tsx',
+      'directory "[RestaurantId]" is not kebab-case',
+    ],
+    [
+      'frontends/consumer-web/next-page.tsx',
+      'only .ts files are allowed in TypeScript outside catalogued folders',
+    ],
+    [
       'frontends/consumer-web/src/cart/[restaurantId]/cart.hook.ts',
       'directory "[restaurantId]" is not kebab-case',
     ],

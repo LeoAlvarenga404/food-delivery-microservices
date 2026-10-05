@@ -136,7 +136,7 @@ export const fileNameCatalogue: readonly CatalogueRule[] = [
   },
   {
     description: 'TypeScript outside catalogued folders',
-    pathPattern: /\.ts$/,
+    pathPattern: /\.tsx?$/,
     allowedRoles: ['config'],
     allowedRolelessNames: 'any',
   },
