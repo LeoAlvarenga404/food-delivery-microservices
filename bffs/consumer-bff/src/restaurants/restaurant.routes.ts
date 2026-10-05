@@ -21,14 +21,19 @@ const problemResponse = {
 };
 const problemResponses = { '4xx': problemResponse, '5xx': problemResponse };
 
+const queryNumberSchema = z.preprocess(
+  (raw) => (typeof raw === 'string' && raw.trim() === '' ? Number.NaN : raw),
+  z.coerce.number(),
+);
+
 const searchRestaurantsSchema = {
   querystring: z
     .object({
       text: z.string().max(100).default(''),
       category: z.string().max(50).optional(),
-      latitude: z.coerce.number().optional(),
-      longitude: z.coerce.number().optional(),
-      radiusInKilometers: z.coerce.number().optional(),
+      latitude: queryNumberSchema.optional(),
+      longitude: queryNumberSchema.optional(),
+      radiusInKilometers: queryNumberSchema.optional(),
       limit: z.coerce.number().int().min(1).max(50).default(20),
     })
     .refine((query) => (query.latitude === undefined) === (query.longitude === undefined), {

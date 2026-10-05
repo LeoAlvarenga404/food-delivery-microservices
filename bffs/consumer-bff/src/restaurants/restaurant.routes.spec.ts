@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeConsumerService } from '../../test/support/consumer-service.fake.ts';
 import { FakeOrderService } from '../../test/support/order-service.fake.ts';
 import {
+  cantina,
   cantinaId,
   FakeRestaurantCatalogueService,
 } from '../../test/support/restaurant-catalogue-service.fake.ts';
@@ -120,6 +121,9 @@ describe('GET /v1/restaurants', () => {
     { problem: 'a latitude without a longitude', query: 'latitude=-23.55' },
     { problem: 'a longitude without a latitude', query: 'longitude=-46.63' },
     { problem: 'a latitude that is not a number', query: 'latitude=north&longitude=-46.63' },
+    { problem: 'an empty latitude and longitude', query: 'latitude=&longitude=' },
+    { problem: 'a blank latitude and longitude', query: 'latitude=%20&longitude=%20' },
+    { problem: 'an empty radius', query: 'latitude=-23.55&longitude=-46.63&radiusInKilometers=' },
     { problem: 'a limit above fifty', query: 'limit=51' },
     { problem: 'a limit of zero', query: 'limit=0' },
     { problem: 'a text above one hundred characters', query: `text=${'a'.repeat(101)}` },
@@ -231,6 +235,16 @@ describe('GET /v1/restaurants/:restaurantId', () => {
       expect(response.json()).toMatchObject({ restaurantId: cantinaId, version: 7 });
     },
   );
+
+  it('follows a new version of the restaurant in its entity tag', async () => {
+    catalogue.restaurants.set(cantinaId, { ...cantina, version: 8 });
+
+    const response = await get(`/v1/restaurants/${cantinaId}`, { 'if-none-match': '"7"' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers.etag).toBe('"8"');
+    expect(response.json()).toMatchObject({ restaurantId: cantinaId, version: 8 });
+  });
 
   it('answers a restaurant that was never onboarded with a not found problem', async () => {
     const response = await get(`/v1/restaurants/${pizzeriaId}`);
