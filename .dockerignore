@@ -12,6 +12,11 @@
 .superpowers
 docs
 packages/contracts/src/generated
+frontends/*/src/generated
+**/.next
+**/next-env.d.ts
+**/playwright-report
+**/test-results
 **/dist
 **/*.tsbuildinfo
 **/*.log

@@ -70,13 +70,32 @@ const namingConventionOptions = [
   },
 ];
 
+const namedExportSyntax = [
+  { selector: 'ExportDefaultDeclaration', message: 'Use named exports.' },
+  { selector: "ExportSpecifier[exported.name='default']", message: 'Use named exports.' },
+];
+
+const readableSyntax = [
+  {
+    selector: `CatchClause > Identifier.param[name=/${forbiddenIdentifierPattern}/]`,
+    message: 'Use a descriptive catch binding.',
+  },
+  {
+    selector: `:matches(ImportSpecifier, ImportDefaultSpecifier, ImportNamespaceSpecifier) > Identifier.local[name=/${forbiddenIdentifierPattern}/]`,
+    message: 'Use a descriptive import alias.',
+  },
+];
+
 export default defineConfig(
   {
     ignores: [
       '**/node_modules/**',
       '**/coverage/**',
       '**/.turbo/**',
+      '**/.next/**',
+      '**/next-env.d.ts',
       'packages/contracts/src/generated/**',
+      'frontends/*/src/generated/**',
       'services/*/src/infrastructure/persistence/generated/database.ts',
       '**/*.js',
       '**/*.cjs',
@@ -84,7 +103,7 @@ export default defineConfig(
     ],
   },
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     extends: [
       eslint.configs.recommended,
       tseslint.configs.strictTypeChecked,
@@ -103,19 +122,7 @@ export default defineConfig(
       complexity: ['error', 8],
       'max-lines-per-function': ['error', { max: 30, skipBlankLines: true, skipComments: true }],
       'max-lines': ['error', { max: 200, skipBlankLines: true, skipComments: true }],
-      'no-restricted-syntax': [
-        'error',
-        { selector: 'ExportDefaultDeclaration', message: 'Use named exports.' },
-        { selector: "ExportSpecifier[exported.name='default']", message: 'Use named exports.' },
-        {
-          selector: `CatchClause > Identifier.param[name=/${forbiddenIdentifierPattern}/]`,
-          message: 'Use a descriptive catch binding.',
-        },
-        {
-          selector: `:matches(ImportSpecifier, ImportDefaultSpecifier, ImportNamespaceSpecifier) > Identifier.local[name=/${forbiddenIdentifierPattern}/]`,
-          message: 'Use a descriptive import alias.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...namedExportSyntax, ...readableSyntax],
       '@typescript-eslint/max-params': ['error', { max: 3 }],
       '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
       '@typescript-eslint/consistent-type-imports': 'error',
@@ -161,11 +168,39 @@ export default defineConfig(
     },
   },
   {
+    files: ['frontends/*/src/**/*.tsx'],
+    rules: {
+      '@typescript-eslint/naming-convention': [
+        'error',
+        {
+          selector: 'function',
+          format: ['camelCase', 'PascalCase'],
+          custom: { regex: forbiddenIdentifierPattern, match: false },
+        },
+        ...namingConventionOptions,
+      ],
+    },
+  },
+  {
+    files: ['frontends/*/src/app/**/page.tsx', 'frontends/*/src/app/**/layout.tsx'],
+    rules: { 'no-restricted-syntax': ['error', ...readableSyntax] },
+  },
+  {
+    files: ['frontends/*/src/app/**/route.ts'],
+    rules: {
+      '@typescript-eslint/naming-convention': [
+        'error',
+        { selector: 'function', modifiers: ['exported'], format: ['UPPER_CASE'] },
+        ...namingConventionOptions,
+      ],
+    },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.contract.ts', '**/*.builder.ts'],
     rules: { 'max-lines-per-function': 'off', 'max-lines': 'off' },
   },
   {
-    files: ['**/vitest.config.ts'],
+    files: ['**/vitest.config.ts', '**/next.config.ts', '**/playwright.config.ts'],
     rules: { 'no-restricted-syntax': 'off' },
   },
 );

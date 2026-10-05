@@ -25,6 +25,7 @@ jobs:
       - run: pnpm lint:files
       - run: pnpm lint:architecture
       - run: pnpm turbo run lint typecheck test:unit test:golden
+      - run: pnpm --filter @fd/consumer-web build
       - run: pnpm turbo run test:integration test:component --concurrency=2
       - if: github.event_name == 'pull_request'
         name: buf breaking
