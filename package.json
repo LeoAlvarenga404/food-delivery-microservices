@@ -15,6 +15,7 @@
     "test:golden": "turbo run test:golden",
     "test:component": "turbo run test:component --concurrency=2",
     "test:e2e": "pnpm --filter @fd/e2e test:e2e",
+    "test:browser": "pnpm --filter @fd/e2e test:browser",
     "lint:files": "node tooling/src/file-names/check-file-names.cli.ts",
     "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra services bffs e2e frontends --config .dependency-cruiser.cjs",
     "format": "prettier --write .",

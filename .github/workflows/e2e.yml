@@ -18,9 +18,11 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @fd/e2e exec playwright install --with-deps chromium
       - run: cp infra/.env.example infra/.env
       - run: pnpm stack:up
       - run: pnpm test:e2e
+      - run: pnpm test:browser
       - if: failure()
         run: docker compose -f infra/compose.yaml --profile core --profile auth --profile search --profile apps logs --no-color --tail 200
       - if: always()
