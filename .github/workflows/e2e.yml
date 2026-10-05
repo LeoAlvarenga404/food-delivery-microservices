@@ -22,6 +22,6 @@ jobs:
       - run: pnpm stack:up
       - run: pnpm test:e2e
       - if: failure()
-        run: docker compose -f infra/compose.yaml --profile core --profile auth --profile apps logs --no-color --tail 200
+        run: docker compose -f infra/compose.yaml --profile core --profile auth --profile search --profile apps logs --no-color --tail 200
       - if: always()
         run: pnpm stack:down --volumes

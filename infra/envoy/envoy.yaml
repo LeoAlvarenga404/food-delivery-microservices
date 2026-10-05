@@ -94,6 +94,17 @@ static_resources:
                             cache_duration: 300s
                             async_fetch: {}
                       rules:
+                        # ADR-0045: the restaurant catalogue is read without a token
+                        - match:
+                            path: /v1/restaurants
+                            headers:
+                              - name: ':method'
+                                string_match: { exact: GET }
+                        - match:
+                            safe_regex: { regex: '/v1/restaurants/[^/]+' }
+                            headers:
+                              - name: ':method'
+                                string_match: { exact: GET }
                         - match: { prefix: /v1/ }
                           requires: { provider_name: keycloak }
                   - name: envoy.filters.http.router
