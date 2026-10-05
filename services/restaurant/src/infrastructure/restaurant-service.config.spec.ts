@@ -67,7 +67,15 @@ describe('readRestaurantServiceConfiguration', () => {
     },
     {
       problem: 'missing kafka bootstrap servers',
+      variables: { ...requiredVariables, KAFKA_BOOTSTRAP_SERVERS: undefined },
+    },
+    {
+      problem: 'blank kafka bootstrap servers',
       variables: { ...requiredVariables, KAFKA_BOOTSTRAP_SERVERS: ' , ' },
+    },
+    {
+      problem: 'a missing OpenSearch url',
+      variables: { ...requiredVariables, OPENSEARCH_URL: undefined },
     },
     {
       problem: 'an OpenSearch url that is not an http url',

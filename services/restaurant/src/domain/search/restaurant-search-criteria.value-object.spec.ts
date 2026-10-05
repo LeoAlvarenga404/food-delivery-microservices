@@ -78,16 +78,30 @@ describe('parseRestaurantSearchCriteria', () => {
     },
     {
       field: 'origin',
+      criteria: { ...nearPaulista, origin: { latitude: -90.000001, longitude: 0 } },
+    },
+    {
+      field: 'origin',
+      criteria: { ...nearPaulista, origin: { latitude: 0, longitude: 180.000001 } },
+    },
+    {
+      field: 'origin',
       criteria: { ...nearPaulista, origin: { latitude: Number.NaN, longitude: 0 } },
+    },
+    {
+      field: 'origin',
+      criteria: { ...nearPaulista, origin: { latitude: 0, longitude: Number.NaN } },
     },
     { field: 'radiusInKilometers', criteria: { ...nearPaulista, radiusInKilometers: 50.01 } },
     { field: 'radiusInKilometers', criteria: { ...nearPaulista, radiusInKilometers: 0 } },
+    { field: 'radiusInKilometers', criteria: { ...nearPaulista, radiusInKilometers: -5 } },
     { field: 'radiusInKilometers', criteria: { ...nearPaulista, radiusInKilometers: Number.NaN } },
     {
       field: 'radiusInKilometers',
       criteria: { ...nearPaulista, origin: undefined, radiusInKilometers: 5 },
     },
     { field: 'limit', criteria: { ...nearPaulista, limit: 0 } },
+    { field: 'limit', criteria: { ...nearPaulista, limit: -1 } },
     { field: 'limit', criteria: { ...nearPaulista, limit: 51 } },
     { field: 'limit', criteria: { ...nearPaulista, limit: 2.5 } },
   ])('refuses an invalid $field', ({ field, criteria }) => {

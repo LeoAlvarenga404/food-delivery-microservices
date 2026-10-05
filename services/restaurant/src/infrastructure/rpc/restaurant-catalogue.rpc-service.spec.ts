@@ -180,6 +180,15 @@ describe('RestaurantCatalogueService.SearchRestaurants while the search index is
 
     expect(error.code).toBe(Code.Unavailable);
   });
+
+  it('answers an internal error when the search fails for another reason', async () => {
+    const searchIndex = new RecordingSearchIndex(cannedResults);
+    searchIndex.search = () => Promise.reject(new Error('unexpected search failure'));
+
+    const error = await rejectionOf(clientWith(searchIndex).searchRestaurants({ limit: 20 }));
+
+    expect(error.code).toBe(Code.Internal);
+  });
 });
 
 describe('RestaurantCatalogueService.GetPublicRestaurant', () => {
@@ -193,6 +202,13 @@ describe('RestaurantCatalogueService.GetPublicRestaurant', () => {
       version: 3,
       name: 'Pizzaria Bella',
       category: 'Pizza',
+      address: {
+        street: 'Avenida Paulista',
+        number: '1000',
+        city: 'Sao Paulo',
+        postalCode: '01310-100',
+        location: { latitude: -23.5614, longitude: -46.6559 },
+      },
       timeZone: 'America/Sao_Paulo',
       openingHours: [
         { dayOfWeek: DayOfWeek.FRIDAY, opensAt: '18:00', closesAt: '23:30' },
@@ -201,8 +217,18 @@ describe('RestaurantCatalogueService.GetPublicRestaurant', () => {
       minimumOrderInCents: 2000n,
       currency: 'BRL',
       menuItems: [
-        { name: 'Margherita', priceInCents: 4500n, isAvailable: true },
-        { name: 'Guarana', priceInCents: 800n, isAvailable: false },
+        {
+          menuItemId: '0199a5d0-0000-7000-8000-000000000d01',
+          name: 'Margherita',
+          priceInCents: 4500n,
+          isAvailable: true,
+        },
+        {
+          menuItemId: '0199a5d0-0000-7000-8000-000000000d02',
+          name: 'Guarana',
+          priceInCents: 800n,
+          isAvailable: false,
+        },
       ],
     });
   });

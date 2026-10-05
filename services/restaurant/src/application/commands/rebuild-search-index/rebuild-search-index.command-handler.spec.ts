@@ -32,19 +32,20 @@ describe('RebuildSearchIndexCommandHandler', () => {
 
     const restaurantCount = await handler.execute();
 
-    const results = await searchIndex.search({
-      text: '',
-      category: undefined,
-      origin: undefined,
-      radiusInKilometers: undefined,
-      limit: 20,
-      searchedAt: new Date('2026-10-02T21:30:00.000Z'),
-    });
+    const idsFoundBy = async (text: string): Promise<readonly string[]> => {
+      const results = await searchIndex.search({
+        text,
+        category: undefined,
+        origin: undefined,
+        radiusInKilometers: undefined,
+        limit: 20,
+        searchedAt: new Date('2026-10-02T21:30:00.000Z'),
+      });
+      return results.hits.map((hit) => hit.restaurantId);
+    };
     expect(restaurantCount).toBe(2);
-    expect(results.hits.map((hit) => hit.restaurantId)).toEqual([
-      pizzeria.toSnapshot().restaurantId,
-      burgerJointId,
-    ]);
+    expect(await idsFoundBy('')).toEqual([pizzeria.toSnapshot().restaurantId, burgerJointId]);
+    expect(await idsFoundBy('guarana')).toEqual([burgerJointId]);
     expect(await searchIndex.save({ ...pizzeria.toSnapshot(), version: 4 })).toBe(false);
   });
 });

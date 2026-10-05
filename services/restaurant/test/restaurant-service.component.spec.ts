@@ -1,4 +1,7 @@
+import { execFile } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { create, fromBinary } from '@bufbuild/protobuf';
 import {
   Code,
@@ -431,6 +434,30 @@ describe('restaurant service', () => {
     expect(await waitForSearchHit('sushi', restaurantId)).toBe('Sushi Bar');
   });
 
+  it('rebuilds the search index when main.ts runs with the rebuild-search-index argument', async () => {
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      ['src/main.ts', 'rebuild-search-index'],
+      {
+        cwd: fileURLToPath(new URL('..', import.meta.url)),
+        timeout: 30_000,
+        env: {
+          ...process.env,
+          RESTAURANT_DATABASE_URL: postgres.connectionUri,
+          RESTAURANT_SERVICE_HOST: '127.0.0.1',
+          RESTAURANT_SERVICE_PORT: new URL(restaurantService.url).port,
+          LOG_LEVEL: 'info',
+          ACCESS_TOKEN_ISSUER: keycloak.issuer,
+          ACCESS_TOKEN_JWKS_URL: keycloak.jwksUrl,
+          KAFKA_BOOTSTRAP_SERVERS: kafka.bootstrapServer,
+          OPENSEARCH_URL: openSearch.url,
+        },
+      },
+    );
+
+    expect(stdout).toContain('"msg":"search index rebuilt"');
+  });
+
   it('answers its health endpoint', async () => {
     const response = await fetch(`${restaurantService.url}/health`);
 
@@ -478,5 +505,21 @@ describe('restaurant service', () => {
     await delay(500);
     expect(spans.spansNamed('housekeeping')).toHaveLength(housekeepingRuns.length);
     expect(housekeepingRuns.map((run) => run.status.code)).not.toContain(SpanStatusCode.ERROR);
+  });
+
+  it('leaves its consumer group once stopped', async () => {
+    const databaseUrl = await createEmptyDatabase('restaurant_group_left');
+    const stoppableService = await startRestaurantService(serviceConfiguration({ databaseUrl }));
+
+    await stoppableService.stop();
+
+    const admin = createKafka({
+      clientId: 'group-reader',
+      bootstrapServers: [kafka.bootstrapServer],
+    }).admin();
+    await admin.connect();
+    const { groups } = await admin.describeGroups(['restaurant-service']);
+    await admin.disconnect();
+    expect(groups[0]?.members).toHaveLength(1);
   });
 });

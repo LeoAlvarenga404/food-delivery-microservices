@@ -66,11 +66,12 @@ describe('postgres restaurant repository during revisions', () => {
     const disagreeingReads: (Restaurant | undefined)[] = [];
 
     while (!revisionProgress.isDone) {
-      const [byId, byMember] = await Promise.all([
+      const [byId, byMember, every] = await Promise.all([
         restaurants.findById(pizzeriaId),
         restaurants.findByMember(staffAId),
+        restaurants.findAll(),
       ]);
-      disagreeingReads.push(...[byId, ...byMember].filter(disagreesWithItsVersion));
+      disagreeingReads.push(...[byId, ...byMember, ...every].filter(disagreesWithItsVersion));
     }
     await revisions;
 

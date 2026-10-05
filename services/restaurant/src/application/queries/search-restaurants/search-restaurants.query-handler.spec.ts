@@ -9,7 +9,7 @@ import { SearchRestaurantsQueryHandler } from './search-restaurants.query-handle
 const pizzeriaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const pizzaQuery: SearchRestaurantsQuery = {
   text: ' bella ',
-  category: undefined,
+  category: ' Pizza ',
   origin: undefined,
   radiusInKilometers: undefined,
   limit: 10,

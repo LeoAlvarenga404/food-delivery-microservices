@@ -12,6 +12,7 @@ import {
   buildMenuRevisedMessage,
   menuRevisedOf,
 } from '../../../../test/support/menu-revised-message.builder.ts';
+import { InMemoryRestaurantSearchIndex } from '../../../../test/support/in-memory-restaurant-search-index.adapter.ts';
 import { buildSearchableRestaurant } from '../../../../test/support/searchable-restaurant.builder.ts';
 import { OpenSearchRestaurantSearchIndex } from '#infrastructure/search/open-search-restaurant-search-index.adapter.ts';
 import { menuRevisedConsumer } from './menu-revised.consumer.ts';
@@ -120,6 +121,18 @@ describe('menuRevisedConsumer', () => {
       TransientMessageFailure,
     );
     await unreachableClient.close();
+  });
+
+  it('leaves any other failure of the search index to the failure classification', async () => {
+    const failingIndex = new InMemoryRestaurantSearchIndex();
+    const failure = new Error('unexpected search index failure');
+    failingIndex.save = () => Promise.reject(failure);
+    const handleWithFailingIndex = menuRevisedConsumer({
+      searchIndex: failingIndex,
+      logger: captureLogger(),
+    });
+
+    await expect(handleWithFailingIndex(revisionOf('Pizzaria Bella', 1))).rejects.toBe(failure);
   });
 
   it('dead-letters a snapshot it cannot read and leaves the index as it was', async () => {
