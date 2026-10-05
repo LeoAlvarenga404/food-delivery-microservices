@@ -65,6 +65,32 @@
       ]
     },
     {
+      "clientId": "consumer-web",
+      "publicClient": false,
+      "secret": "${CONSUMER_WEB_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8080/auth/callback"],
+      "defaultClientScopes": ["basic", "roles"],
+      "optionalClientScopes": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/"
+      },
+      "protocolMappers": [
+        {
+          "name": "consumer-bff audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "consumer-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "restaurant-bff",
       "publicClient": false,
       "secret": "${RESTAURANT_BFF_CLIENT_SECRET}",

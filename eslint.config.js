@@ -196,6 +196,10 @@ export default defineConfig(
     },
   },
   {
+    files: ['frontends/*/src/session/keycloak-login.adapter.ts'],
+    rules: { '@typescript-eslint/no-deprecated': 'off' },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.contract.ts', '**/*.builder.ts'],
     rules: { 'max-lines-per-function': 'off', 'max-lines': 'off' },
   },
