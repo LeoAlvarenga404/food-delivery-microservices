@@ -9,6 +9,9 @@ static_resources:
               typed_config:
                 '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: edge
+                normalize_path: true
+                merge_slashes: true
+                path_with_escaped_slashes_action: REJECT_REQUEST
                 access_log:
                   - name: envoy.access_loggers.stdout
                     typed_config:
@@ -101,11 +104,12 @@ static_resources:
                               - name: ':method'
                                 string_match: { exact: GET }
                         - match:
-                            safe_regex: { regex: '/v1/restaurants/[^/]+' }
+                            safe_regex:
+                              regex: '/v1/restaurants/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
                             headers:
                               - name: ':method'
                                 string_match: { exact: GET }
-                        - match: { prefix: /v1/ }
+                        - match: { prefix: /v1/, case_sensitive: false }
                           requires: { provider_name: keycloak }
                   - name: envoy.filters.http.router
                     typed_config:
