@@ -3,7 +3,10 @@ import { startOpenSearchContainer, type StartedOpenSearch } from '@fd/chassis-te
 import { Client, errors } from '@opensearch-project/opensearch';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { describeRestaurantSearchIndexContract } from '../../../test/support/restaurant-search-index.contract.ts';
-import { buildSearchableRestaurant } from '../../../test/support/searchable-restaurant.builder.ts';
+import {
+  buildSearchableRestaurant,
+  paulista,
+} from '../../../test/support/searchable-restaurant.builder.ts';
 import {
   SearchIndexUnavailableError,
   type RestaurantSearch,
@@ -124,5 +127,122 @@ describe('OpenSearchRestaurantSearchIndex', () => {
     expect(aliased).toHaveLength(1);
     expect(aliased[0]).not.toBe(`${indexAlias}-initial`);
     expect(previousExists.body).toBe(false);
+  });
+});
+
+describe('OpenSearchRestaurantSearchIndex relevance', () => {
+  let searchIndex: OpenSearchRestaurantSearchIndex;
+
+  async function namesFoundBy(search: Partial<RestaurantSearch>): Promise<readonly string[]> {
+    const results = await searchIndex.search({ ...browseEverything, ...search });
+    return results.hits.map((hit) => hit.name);
+  }
+
+  beforeAll(async () => {
+    searchIndex = await createSearchIndex();
+    const restaurants = [
+      {
+        restaurantId: '0199a5d0-0000-7000-8000-0000000001a1',
+        name: 'Cantina Leonardo',
+        menuItems: [
+          {
+            menuItemId: '0199a5d0-0000-7000-8000-000000000d09',
+            name: 'Moqueca',
+            priceInCents: 8900n,
+            isAvailable: true,
+          },
+        ],
+      },
+      {
+        restaurantId: '0199a5d0-0000-7000-8000-0000000001a2',
+        name: 'Açaí da Praia',
+        category: 'Sobremesas',
+      },
+      {
+        restaurantId: '0199a5d0-0000-7000-8000-0000000001a3',
+        name: 'X-Burger do Zé',
+        category: 'Lanches',
+      },
+      { restaurantId: '0199a5d0-0000-7000-8000-0000000001a4', name: 'Pizzaria Bella' },
+      {
+        restaurantId: '0199a5d0-0000-7000-8000-0000000001a5',
+        name: 'Sushi Bar',
+        category: 'Japonesa',
+      },
+    ];
+    for (const restaurant of restaurants) {
+      await searchIndex.save(buildSearchableRestaurant(restaurant));
+    }
+  });
+
+  it.each([
+    { typed: 'leoanrdo', expected: 'Cantina Leonardo', rule: 'a transposition in a long word' },
+    { typed: 'suhsi', expected: 'Sushi Bar', rule: 'a transposition in a short word' },
+    { typed: 'acai', expected: 'Açaí da Praia', rule: 'accents folded on both sides' },
+    { typed: 'ac', expected: 'Açaí da Praia', rule: 'accents folded while typing' },
+    { typed: 'hamburguer', expected: 'X-Burger do Zé', rule: 'a synonym' },
+    { typed: 'pizz', expected: 'Pizzaria Bella', rule: 'a prefix while typing' },
+  ])('finds $expected by "$typed" through $rule', async ({ typed, expected }) => {
+    expect(await namesFoundBy({ text: typed })).toEqual([expected]);
+  });
+
+  it('keeps the first letter of a word exact', async () => {
+    expect(await namesFoundBy({ text: 'zella' })).toEqual([]);
+  });
+
+  it('finds the restaurant that sells a dish and marks the matched fragment', async () => {
+    const results = await searchIndex.search({ ...browseEverything, text: 'moqueca' });
+
+    expect(results.hits.map(({ name, highlights }) => ({ name, highlights }))).toEqual([
+      { name: 'Cantina Leonardo', highlights: ['<em>Moqueca</em>'] },
+    ]);
+  });
+
+  it('suggests the corrected spelling of a misspelled query', async () => {
+    const results = await searchIndex.search({ ...browseEverything, text: 'pizaria bela' });
+
+    expect(results.suggestion).toBe('pizzaria bella');
+  });
+});
+
+describe('OpenSearchRestaurantSearchIndex ranking', () => {
+  let searchIndex: OpenSearchRestaurantSearchIndex;
+  const farOpenId = '0199a5d0-0000-7000-8000-0000000002a1';
+  const nearClosedId = '0199a5d0-0000-7000-8000-0000000002a2';
+  const nearOpenId = '0199a5d0-0000-7000-8000-0000000002a3';
+
+  beforeAll(async () => {
+    searchIndex = await createSearchIndex();
+    await searchIndex.save(
+      buildSearchableRestaurant({
+        restaurantId: farOpenId,
+        name: 'Pizzaria Roma',
+        location: { latitude: -23.65, longitude: -46.7 },
+      }),
+    );
+    await searchIndex.save(
+      buildSearchableRestaurant({
+        restaurantId: nearClosedId,
+        name: 'Pizzaria Roma',
+        openingHours: [{ dayOfWeek: 'MONDAY', opensAt: '11:00', closesAt: '15:00' }],
+      }),
+    );
+    await searchIndex.save(
+      buildSearchableRestaurant({ restaurantId: nearOpenId, name: 'Pizzaria Roma' }),
+    );
+  });
+
+  it('ranks open restaurants above a closed one nearby, the nearer open one first', async () => {
+    const results = await searchIndex.search({
+      ...browseEverything,
+      text: 'roma',
+      origin: paulista,
+    });
+
+    expect(results.hits.map((hit) => hit.restaurantId)).toEqual([
+      nearOpenId,
+      farOpenId,
+      nearClosedId,
+    ]);
   });
 });
