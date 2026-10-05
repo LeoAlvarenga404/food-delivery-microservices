@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { z } from 'zod';
+import type { OrderPlacement } from '../consumer-api/consumer-api.adapter.ts';
 
 const cartSchema = z.object({
   restaurantId: z.uuid(),
@@ -27,6 +28,8 @@ export interface CartAddition {
   readonly priceInCents: string;
 }
 
+export type Delivery = Pick<OrderPlacement, 'deliveryAddress' | 'paymentToken'>;
+
 export interface CartState {
   readonly cart: Cart | undefined;
   readonly saveCart: (cart: Cart | undefined) => void;
@@ -53,13 +56,7 @@ export function addToCart(
 ): Cart {
   const lines = cart?.restaurantId === addition.restaurantId ? cart.lines : [];
   const { restaurantId, restaurantName, currency } = addition;
-  return {
-    restaurantId,
-    restaurantName,
-    currency,
-    lines: addLine(lines, addition),
-    checkoutKey,
-  };
+  return { restaurantId, restaurantName, currency, lines: addLine(lines, addition), checkoutKey };
 }
 
 export function cartTotalInCents(cart: Cart): string {
@@ -68,6 +65,15 @@ export function cartTotalInCents(cart: Cart): string {
     0n,
   );
   return totalInCents.toString();
+}
+
+export function toOrderPlacement(cart: Cart, delivery: Delivery): OrderPlacement {
+  return {
+    restaurantId: cart.restaurantId,
+    lineItems: cart.lines.map(({ menuItemId, quantity }) => ({ menuItemId, quantity })),
+    ...delivery,
+    idempotencyKey: cart.checkoutKey,
+  };
 }
 
 export function parseStoredCart(stored: string | null): Cart | undefined {

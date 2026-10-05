@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { describeProblem, formatAmount } from './consumer-api-view.message-mapper.ts';
+import {
+  describeProblem,
+  describeRejectionReason,
+  formatAmount,
+} from './consumer-api-view.message-mapper.ts';
 
 describe('formatAmount', () => {
   it.each([
@@ -9,6 +13,17 @@ describe('formatAmount', () => {
     ['123456789', 'BRL', 'R$1,234,567.89'],
   ])('formats %s cents of %s as %s', (amountInCents, currency, expected) => {
     expect(formatAmount(amountInCents, currency)).toBe(expected);
+  });
+});
+
+describe('describeRejectionReason', () => {
+  it.each([
+    ['PAYMENT_DECLINED', 'The card was declined. (PAYMENT_DECLINED)'],
+    ['CONSUMER_NOT_FOUND', 'Register your profile before ordering. (CONSUMER_NOT_FOUND)'],
+    ['TICKET_REFUSED', 'The restaurant refused the order. (TICKET_REFUSED)'],
+    ['SOMETHING_NEW', 'The order was rejected. (SOMETHING_NEW)'],
+  ])('describes %s', (rejectionReason, expected) => {
+    expect(describeRejectionReason(rejectionReason)).toBe(expected);
   });
 });
 

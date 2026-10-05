@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { addToCart, cartTotalInCents, parseStoredCart, type CartAddition } from './cart.hook.ts';
+import {
+  addToCart,
+  cartTotalInCents,
+  parseStoredCart,
+  toOrderPlacement,
+  type CartAddition,
+} from './cart.hook.ts';
 
 const margherita: CartAddition = {
   restaurantId: '0199a5d0-0000-7000-8000-00000000c001',
@@ -52,18 +58,8 @@ describe('addToCart', () => {
 
   it('counts an item added again and adds another item of the restaurant as a new line', () => {
     expect(cartOfTwoMargheritasAndOneCalabresa().lines).toEqual([
-      {
-        menuItemId: margherita.menuItemId,
-        name: 'Margherita',
-        priceInCents: '4500',
-        quantity: 2,
-      },
-      {
-        menuItemId: calabresa.menuItemId,
-        name: 'Calabresa',
-        priceInCents: '5200',
-        quantity: 1,
-      },
+      { menuItemId: margherita.menuItemId, name: 'Margherita', priceInCents: '4500', quantity: 2 },
+      { menuItemId: calabresa.menuItemId, name: 'Calabresa', priceInCents: '5200', quantity: 1 },
     ]);
   });
 
@@ -82,14 +78,7 @@ describe('addToCart', () => {
       restaurantId: temaki.restaurantId,
       restaurantName: 'Sushi Kaze',
       currency: 'USD',
-      lines: [
-        {
-          menuItemId: temaki.menuItemId,
-          name: 'Temaki',
-          priceInCents: '3100',
-          quantity: 1,
-        },
-      ],
+      lines: [{ menuItemId: temaki.menuItemId, name: 'Temaki', priceInCents: '3100', quantity: 1 }],
       checkoutKey: secondKey,
     });
   });
@@ -108,6 +97,33 @@ describe('cartTotalInCents', () => {
   });
 });
 
+describe('toOrderPlacement', () => {
+  it('orders the lines of the cart under its checkout key, so a retried cart is one order', () => {
+    const deliveryAddress = {
+      street: 'Rua Augusta',
+      number: '1500',
+      city: 'Sao Paulo',
+      postalCode: '01304-001',
+    };
+
+    const placement = toOrderPlacement(cartOfTwoMargheritasAndOneCalabresa(), {
+      deliveryAddress,
+      paymentToken: 'tok_visa_0001',
+    });
+
+    expect(placement).toEqual({
+      restaurantId: margherita.restaurantId,
+      lineItems: [
+        { menuItemId: margherita.menuItemId, quantity: 2 },
+        { menuItemId: calabresa.menuItemId, quantity: 1 },
+      ],
+      deliveryAddress,
+      paymentToken: 'tok_visa_0001',
+      idempotencyKey: thirdKey,
+    });
+  });
+});
+
 describe('parseStoredCart', () => {
   const storedCart = addToCart(undefined, margherita, firstKey);
 
@@ -121,10 +137,7 @@ describe('parseStoredCart', () => {
     ['a cart without a checkout key', JSON.stringify({ ...storedCart, checkoutKey: undefined })],
     [
       'a line with no quantity',
-      JSON.stringify({
-        ...storedCart,
-        lines: [{ ...storedCart.lines[0], quantity: 0 }],
-      }),
+      JSON.stringify({ ...storedCart, lines: [{ ...storedCart.lines[0], quantity: 0 }] }),
     ],
     [
       'a currency that is not a three-letter code',
