@@ -11,6 +11,7 @@ import {
 import type { LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FakeConsumerService } from '../../test/support/consumer-service.fake.ts';
+import { FakeRestaurantCatalogueService } from '../../test/support/restaurant-catalogue-service.fake.ts';
 import { fakeServiceAccess } from '../../test/support/service-access.fake.ts';
 import { FakeOrderService, placedOrderId } from '../../test/support/order-service.fake.ts';
 import { createConsumerBffServer, type ConsumerBffServer } from '../main.ts';
@@ -66,6 +67,7 @@ beforeEach(async () => {
   server = await createConsumerBffServer({
     orderService: orderService.client(),
     consumerService: new FakeConsumerService().client(),
+    restaurantCatalogueService: new FakeRestaurantCatalogueService().client(),
     serviceAccess: fakeServiceAccess,
     logger: captureLogger(),
     generateCorrelationId: () => generatedCorrelationId,

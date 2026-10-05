@@ -7,6 +7,8 @@ export interface ConsumerBffConfiguration {
   readonly orderServiceTimeoutInMilliseconds: number;
   readonly consumerServiceUrl: string;
   readonly consumerServiceTimeoutInMilliseconds: number;
+  readonly restaurantServiceUrl: string;
+  readonly restaurantServiceTimeoutInMilliseconds: number;
   readonly accessTokenIssuer: string;
   readonly accessTokenJwksUrl: string;
   readonly tokenExchangeUrl: string;
@@ -28,6 +30,8 @@ const consumerBffEnvironmentSchema = z.object({
   ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS: serviceTimeoutInMilliseconds,
   CONSUMER_SERVICE_URL: environmentVariables.httpUrl,
   CONSUMER_SERVICE_TIMEOUT_IN_MILLISECONDS: serviceTimeoutInMilliseconds,
+  RESTAURANT_SERVICE_URL: environmentVariables.httpUrl,
+  RESTAURANT_SERVICE_TIMEOUT_IN_MILLISECONDS: serviceTimeoutInMilliseconds,
   ACCESS_TOKEN_ISSUER: environmentVariables.httpUrl,
   ACCESS_TOKEN_JWKS_URL: environmentVariables.httpUrl,
   TOKEN_EXCHANGE_URL: environmentVariables.httpUrl,
@@ -46,6 +50,8 @@ export function readConsumerBffConfiguration(
     orderServiceTimeoutInMilliseconds: variables.ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS,
     consumerServiceUrl: variables.CONSUMER_SERVICE_URL,
     consumerServiceTimeoutInMilliseconds: variables.CONSUMER_SERVICE_TIMEOUT_IN_MILLISECONDS,
+    restaurantServiceUrl: variables.RESTAURANT_SERVICE_URL,
+    restaurantServiceTimeoutInMilliseconds: variables.RESTAURANT_SERVICE_TIMEOUT_IN_MILLISECONDS,
     accessTokenIssuer: variables.ACCESS_TOKEN_ISSUER,
     accessTokenJwksUrl: variables.ACCESS_TOKEN_JWKS_URL,
     tokenExchangeUrl: variables.TOKEN_EXCHANGE_URL,

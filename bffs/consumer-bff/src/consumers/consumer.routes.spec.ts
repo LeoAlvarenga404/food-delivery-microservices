@@ -13,6 +13,7 @@ import {
   registeredConsumerId,
 } from '../../test/support/consumer-service.fake.ts';
 import { FakeOrderService } from '../../test/support/order-service.fake.ts';
+import { FakeRestaurantCatalogueService } from '../../test/support/restaurant-catalogue-service.fake.ts';
 import { fakeServiceAccess } from '../../test/support/service-access.fake.ts';
 import type { ServiceAccess } from '../http/service-access.adapter.ts';
 import { createConsumerBffServer, type ConsumerBffServer } from '../main.ts';
@@ -49,6 +50,7 @@ function serverWith(serviceAccess: ServiceAccess): Promise<ConsumerBffServer> {
   return createConsumerBffServer({
     orderService: new FakeOrderService().client(),
     consumerService: consumerService.client(),
+    restaurantCatalogueService: new FakeRestaurantCatalogueService().client(),
     serviceAccess,
     logger: createLogger({ serviceName: 'consumer-bff', level: 'silent' }),
     generateCorrelationId: () => '0199a5d0-0000-7000-8000-0000000000e9',

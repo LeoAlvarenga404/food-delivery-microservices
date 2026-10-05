@@ -2,6 +2,7 @@ import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
 import { createAccessTokenVerifier, readBearerToken } from '@fd/chassis-auth';
 import { ConsumerService } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
+import { RestaurantCatalogueService } from '@fd/contracts/fooddelivery/restaurant/v1/catalogue_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
 import {
   recordSpans,
@@ -13,12 +14,17 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { startConsumerBff, type RunningConsumerBff } from '../src/main.ts';
 import { FakeConsumerService, registeredConsumerId } from './support/consumer-service.fake.ts';
 import { FakeOrderService, placedOrderId } from './support/order-service.fake.ts';
+import {
+  cantinaId,
+  FakeRestaurantCatalogueService,
+} from './support/restaurant-catalogue-service.fake.ts';
 
 const orderServiceTimeoutInMilliseconds = 300;
 const spans = recordSpans();
 
 let orderService: FakeOrderService;
 let consumerService: FakeConsumerService;
+let restaurantCatalogue: FakeRestaurantCatalogueService;
 let servicesServer: FastifyInstance;
 let keycloak: StartedKeycloak;
 let consumerBff: RunningConsumerBff;
@@ -55,11 +61,13 @@ beforeAll(async () => {
   consumerToken = await keycloak.signIn('consumer-a');
   orderService = new FakeOrderService();
   consumerService = new FakeConsumerService();
+  restaurantCatalogue = new FakeRestaurantCatalogueService();
   servicesServer = fastify();
   await servicesServer.register(fastifyConnectPlugin, {
     routes: (router) => {
       router.service(OrderService, orderService.implementation());
       router.service(ConsumerService, consumerService.implementation());
+      router.service(RestaurantCatalogueService, restaurantCatalogue.implementation());
     },
   });
   const servicesUrl = await servicesServer.listen({ host: '127.0.0.1', port: 0 });
@@ -68,6 +76,8 @@ beforeAll(async () => {
     orderServiceTimeoutInMilliseconds,
     consumerServiceUrl: servicesUrl,
     consumerServiceTimeoutInMilliseconds: 5000,
+    restaurantServiceUrl: servicesUrl,
+    restaurantServiceTimeoutInMilliseconds: 5000,
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
@@ -166,6 +176,21 @@ describe('consumer bff', () => {
     expect(verified.isRight() && verified.success.subject).toBe(
       '0199a5d0-0000-7000-8000-0000000000c1',
     );
+  });
+
+  it('answers a public restaurant over HTTP without a token and revalidates it by its version', async () => {
+    const restaurantUrl = `${consumerBff.url}/v1/restaurants/${cantinaId}`;
+
+    const first = await fetch(restaurantUrl);
+    const revalidated = await fetch(restaurantUrl, {
+      headers: { 'if-none-match': first.headers.get('etag') ?? '' },
+    });
+
+    expect(first.status).toBe(200);
+    expect(first.headers.get('etag')).toBe('"7"');
+    expect(revalidated.status).toBe(304);
+    expect(await revalidated.text()).toBe('');
+    expect(restaurantCatalogue.receivedAuthorizations).toEqual([null, null]);
   });
 
   it('answers its health endpoint', async () => {

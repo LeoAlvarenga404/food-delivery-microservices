@@ -8,6 +8,7 @@ import { createLogger, type Logger } from '@fd/chassis-observability';
 import { traceContextInterceptor } from '@fd/chassis-rpc';
 import { ConsumerService } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
+import { RestaurantCatalogueService } from '@fd/contracts/fooddelivery/restaurant/v1/catalogue_pb.js';
 import { fastify, LogController, type FastifyInstance, type RawServerDefault } from 'fastify';
 import {
   jsonSchemaTransform,
@@ -25,10 +26,12 @@ import { consumerRoutes } from './consumers/consumer.routes.ts';
 import { problemDetails, sendProblemDetails } from './http/problem-details.adapter.ts';
 import { createServiceAccess, type ServiceAccess } from './http/service-access.adapter.ts';
 import { orderRoutes } from './orders/order.routes.ts';
+import { restaurantRoutes } from './restaurants/restaurant.routes.ts';
 
 export interface ConsumerBffSettings {
   readonly orderService: Client<typeof OrderService>;
   readonly consumerService: Client<typeof ConsumerService>;
+  readonly restaurantCatalogueService: Client<typeof RestaurantCatalogueService>;
   readonly serviceAccess: ServiceAccess;
   readonly logger: Logger;
   readonly generateCorrelationId: () => string;
@@ -100,6 +103,9 @@ export async function createConsumerBffServer(
     consumerService: settings.consumerService,
     serviceAccess: settings.serviceAccess,
   });
+  await server.register(restaurantRoutes, {
+    restaurantCatalogueService: settings.restaurantCatalogueService,
+  });
   server.get('/health', { schema: { hide: true } }, () => ({ status: 'ok' }));
   server.get('/openapi.json', { schema: { hide: true } }, () => server.swagger());
   return server;
@@ -132,9 +138,10 @@ function createServiceTransport(baseUrl: string, timeoutInMilliseconds: number):
 
 function createServiceClients(
   configuration: ConsumerBffConfiguration,
-): Pick<ConsumerBffSettings, 'orderService' | 'consumerService'> {
+): Pick<ConsumerBffSettings, 'orderService' | 'consumerService' | 'restaurantCatalogueService'> {
   const { orderServiceUrl, orderServiceTimeoutInMilliseconds } = configuration;
   const { consumerServiceUrl, consumerServiceTimeoutInMilliseconds } = configuration;
+  const { restaurantServiceUrl, restaurantServiceTimeoutInMilliseconds } = configuration;
   return {
     orderService: createClient(
       OrderService,
@@ -143,6 +150,10 @@ function createServiceClients(
     consumerService: createClient(
       ConsumerService,
       createServiceTransport(consumerServiceUrl, consumerServiceTimeoutInMilliseconds),
+    ),
+    restaurantCatalogueService: createClient(
+      RestaurantCatalogueService,
+      createServiceTransport(restaurantServiceUrl, restaurantServiceTimeoutInMilliseconds),
     ),
   };
 }

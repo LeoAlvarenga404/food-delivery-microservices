@@ -4,6 +4,7 @@ import { readConsumerBffConfiguration } from './consumer-bff.config.ts';
 const requiredVariables = {
   ORDER_SERVICE_URL: 'http://127.0.0.1:4001',
   CONSUMER_SERVICE_URL: 'http://127.0.0.1:4002',
+  RESTAURANT_SERVICE_URL: 'http://127.0.0.1:4005',
   ACCESS_TOKEN_ISSUER: 'http://localhost:8180/realms/food-delivery',
   ACCESS_TOKEN_JWKS_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
   TOKEN_EXCHANGE_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/token',
@@ -24,6 +25,8 @@ describe('readConsumerBffConfiguration', () => {
       orderServiceTimeoutInMilliseconds: 5000,
       consumerServiceUrl: 'http://127.0.0.1:4002',
       consumerServiceTimeoutInMilliseconds: 5000,
+      restaurantServiceUrl: 'http://127.0.0.1:4005',
+      restaurantServiceTimeoutInMilliseconds: 5000,
       ...accessSettings,
       host: '127.0.0.1',
       port: 4000,
@@ -39,6 +42,8 @@ describe('readConsumerBffConfiguration', () => {
         ORDER_SERVICE_TIMEOUT_IN_MILLISECONDS: '2500',
         CONSUMER_SERVICE_URL: 'http://consumer-service:4002',
         CONSUMER_SERVICE_TIMEOUT_IN_MILLISECONDS: '1500',
+        RESTAURANT_SERVICE_URL: 'http://restaurant-service:4005',
+        RESTAURANT_SERVICE_TIMEOUT_IN_MILLISECONDS: '2000',
         CONSUMER_BFF_HOST: '0.0.0.0',
         CONSUMER_BFF_PORT: '8000',
         LOG_LEVEL: 'warn',
@@ -48,6 +53,8 @@ describe('readConsumerBffConfiguration', () => {
       orderServiceTimeoutInMilliseconds: 2500,
       consumerServiceUrl: 'http://consumer-service:4002',
       consumerServiceTimeoutInMilliseconds: 1500,
+      restaurantServiceUrl: 'http://restaurant-service:4005',
+      restaurantServiceTimeoutInMilliseconds: 2000,
       ...accessSettings,
       host: '0.0.0.0',
       port: 8000,
@@ -71,6 +78,10 @@ describe('readConsumerBffConfiguration', () => {
     {
       problem: 'a consumer service url of another kind',
       variables: { ...requiredVariables, CONSUMER_SERVICE_URL: 'grpc://consumer:4002' },
+    },
+    {
+      problem: 'a missing restaurant service url',
+      variables: { ...requiredVariables, RESTAURANT_SERVICE_URL: undefined },
     },
     {
       problem: 'a missing token exchange url',

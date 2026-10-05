@@ -2,6 +2,7 @@ import { STATUS_CODES } from 'node:http';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { RegisterConsumerFailureSchema } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { PlaceOrderFailureSchema } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
+import { SearchRestaurantsFailureSchema } from '@fd/contracts/fooddelivery/restaurant/v1/catalogue_pb.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -41,6 +42,7 @@ function fromConnectError(error: ConnectError): ProblemDetails {
   const [failure] = [
     ...error.findDetails(PlaceOrderFailureSchema),
     ...error.findDetails(RegisterConsumerFailureSchema),
+    ...error.findDetails(SearchRestaurantsFailureSchema),
   ];
   return problemDetails(status, failure === undefined ? {} : { reason: failure.reason });
 }
