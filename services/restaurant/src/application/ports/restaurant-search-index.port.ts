@@ -26,6 +26,10 @@ export interface RestaurantSearchResults {
   readonly suggestion: string | undefined;
 }
 
+export class SearchIndexUnavailableError extends Error {
+  override readonly name = 'SearchIndexUnavailableError';
+}
+
 export interface RestaurantSearchIndex {
   save(restaurant: SearchableRestaurant): Promise<boolean>;
   search(search: RestaurantSearch): Promise<RestaurantSearchResults>;

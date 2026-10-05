@@ -29,6 +29,7 @@
     "@fd/chassis-rpc": "workspace:*",
     "@fd/contracts": "workspace:*",
     "@fd/domain": "workspace:*",
+    "@opensearch-project/opensearch": "3.9.0",
     "fastify": "5.12.5",
     "kysely": "0.29.6",
     "uuid": "14.0.2",

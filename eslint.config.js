@@ -147,6 +147,20 @@ export default defineConfig(
     },
   },
   {
+    files: ['services/*/src/infrastructure/search/*.ts'],
+    rules: {
+      '@typescript-eslint/naming-convention': [
+        'error',
+        {
+          selector: 'objectLiteralProperty',
+          format: ['camelCase', 'snake_case'],
+          leadingUnderscore: 'allow',
+        },
+        ...namingConventionOptions,
+      ],
+    },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.contract.ts', '**/*.builder.ts'],
     rules: { 'max-lines-per-function': 'off', 'max-lines': 'off' },
   },
