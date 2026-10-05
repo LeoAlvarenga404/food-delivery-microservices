@@ -101,6 +101,20 @@ async function placeCart(page: Page, paymentToken: string): Promise<void> {
   await expect(page).toHaveURL(/\/orders\/[0-9a-f-]{36}$/);
 }
 
+async function keepRefusedCart(page: Page): Promise<void> {
+  await page.goto(`/restaurants/${restaurantId}`);
+  await page.getByRole('button', { name: 'Add Guarana to the cart' }).click();
+  await page.getByRole('link', { name: 'Cart' }).click();
+  await fillFields(page, [...deliveryAddressFields, ['Card token', 'tok_visa_0001']]);
+  await page.getByRole('button', { name: 'Place the order' }).click();
+  const cart = page.getByRole('region', { name: 'Cart' });
+  await expect(cart.getByRole('alert')).toHaveText(
+    'The order is below the minimum of the restaurant.',
+  );
+  await expect(cart).toContainText('1 x Guarana');
+  await page.getByRole('button', { name: 'Empty the cart' }).click();
+}
+
 async function orderCalabresa(page: Page, paymentToken: string): Promise<string> {
   await page.goto(`/restaurants/${restaurantId}`);
   await page.getByRole('button', { name: 'Add Calabresa to the cart' }).click();
@@ -152,7 +166,7 @@ test('finds a restaurant by a misspelled dish and opens its menu without signing
   expect(await page.context().cookies(siteUrl)).toEqual([]);
 });
 
-test('registers, orders with an approved card sent twice and a declined card, and keeps every token on the server', async ({
+test('registers, keeps a refused cart, orders with an approved card sent twice and a declined card, and keeps every token on the server', async ({
   page,
 }) => {
   const { username } = await administration.createConsumer();
@@ -167,6 +181,7 @@ test('registers, orders with an approved card sent twice and a declined card, an
   await page.getByRole('button', { name: 'Register' }).click();
   await expect(page.getByRole('heading', { name: 'Your profile' })).toBeVisible();
   await expect(page.getByRole('definition')).toContainText(['Bruna Lima']);
+  await keepRefusedCart(page);
 
   const approvedCart = await orderCalabresa(page, 'tok_visa_0001');
   await expect(page.locator('main strong')).toHaveText('APPROVED', {
