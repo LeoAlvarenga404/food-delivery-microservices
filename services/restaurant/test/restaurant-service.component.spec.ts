@@ -9,15 +9,21 @@ import {
 } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
 import { createTokenExchange } from '@fd/chassis-auth';
+import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
   recordSpans,
   SpanStatusCode,
+  startKafkaContainer,
   startKeycloakContainer,
+  startOpenSearchContainer,
   startPostgresContainer,
+  type StartedKafka,
   type StartedKeycloak,
+  type StartedOpenSearch,
   type StartedPostgres,
 } from '@fd/chassis-testing';
+import { RestaurantCatalogueService } from '@fd/contracts/fooddelivery/restaurant/v1/catalogue_pb.js';
 import {
   DayOfWeek,
   MenuRevisedSchema,
@@ -31,12 +37,19 @@ import {
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RestaurantServiceConfiguration } from '../src/infrastructure/restaurant-service.config.ts';
-import { startRestaurantService, type RunningRestaurantService } from '../src/main.ts';
+import {
+  rebuildSearchIndex,
+  startRestaurantService,
+  type RunningRestaurantService,
+} from '../src/main.ts';
 
 interface OutboxRow {
+  readonly id: string;
   readonly topic: string;
   readonly aggregateId: string;
+  readonly messageType: string;
   readonly payload: Uint8Array;
+  readonly correlationId: string;
   readonly actorId: string | null;
 }
 
@@ -65,6 +78,8 @@ const spans = recordSpans();
 
 let postgres: StartedPostgres;
 let keycloak: StartedKeycloak;
+let kafka: StartedKafka;
+let openSearch: StartedOpenSearch;
 let restaurantService: RunningRestaurantService;
 let staffAClient: Client<typeof RestaurantService>;
 let outboxReader: Kysely<unknown>;
@@ -110,16 +125,120 @@ function serviceConfiguration(
     housekeepingIntervalInMilliseconds: 3_600_000,
     accessTokenIssuer: keycloak.issuer,
     accessTokenJwksUrl: keycloak.jwksUrl,
+    kafkaBootstrapServers: [kafka.bootstrapServer],
+    openSearchUrl: openSearch.url,
     ...overrides,
   };
 }
 
 async function readOutbox(restaurantId: string): Promise<readonly OutboxRow[]> {
   const result = await sql<OutboxRow>`
-    select topic, aggregate_id, payload, actor_id from outbox
+    select id, topic, aggregate_id, message_type, payload, correlation_id, actor_id from outbox
     where aggregate_id = ${restaurantId} order by id
   `.execute(outboxReader);
   return result.rows;
+}
+
+async function createStateTopics(): Promise<void> {
+  const admin = createKafka({
+    clientId: 'component-test',
+    bootstrapServers: [kafka.bootstrapServer],
+  }).admin();
+  await admin.connect();
+  await admin.createTopics({
+    topics: [
+      'restaurant.restaurant.state',
+      'restaurant.restaurant.state.restaurant-service.dlq',
+    ].map((topic) => ({ topic, numPartitions: 1, replicationFactor: 1 })),
+  });
+  await admin.disconnect();
+}
+
+async function relayOutboxToKafka(restaurantId: string): Promise<void> {
+  const producer = createKafka({
+    clientId: 'outbox-relay-double',
+    bootstrapServers: [kafka.bootstrapServer],
+  }).producer();
+  await producer.connect();
+  await producer.send({
+    topic: 'restaurant.restaurant.state',
+    messages: (await readOutbox(restaurantId)).map((row) => ({
+      key: row.aggregateId,
+      value: Buffer.from(row.payload),
+      headers: {
+        'message-id': row.id,
+        'message-type': row.messageType,
+        'correlation-id': row.correlationId,
+      },
+    })),
+  });
+  await producer.disconnect();
+}
+
+const unreadableStateMessageId = '0199a5d0-0000-7000-8000-0000000000f1';
+
+async function publishUnreadableStateRecord(restaurantId: string): Promise<void> {
+  const producer = createKafka({
+    clientId: 'unreadable-state-producer',
+    bootstrapServers: [kafka.bootstrapServer],
+  }).producer();
+  await producer.connect();
+  await producer.send({
+    topic: 'restaurant.restaurant.state',
+    messages: [
+      {
+        key: restaurantId,
+        value: Buffer.of(0xff),
+        headers: {
+          'message-id': unreadableStateMessageId,
+          'message-type': MenuRevisedSchema.typeName,
+          'correlation-id': '0199a5d0-0000-7000-8000-0000000000f2',
+        },
+      },
+    ],
+  });
+  await producer.disconnect();
+}
+
+async function readFirstStateDeadLetterMessageId(): Promise<string | undefined> {
+  const reader = createKafka({
+    clientId: 'dead-letter-reader',
+    bootstrapServers: [kafka.bootstrapServer],
+  }).consumer({ kafkaJS: { groupId: 'dead-letter-reader', fromBeginning: true } });
+  await reader.connect();
+  await reader.subscribe({ topic: 'restaurant.restaurant.state.restaurant-service.dlq' });
+  const messageIds: string[] = [];
+  await reader.run({
+    eachMessage: ({ message }) => {
+      messageIds.push(message.headers?.['message-id']?.toString() ?? 'no message id');
+      return Promise.resolve();
+    },
+  });
+  try {
+    const deadline = Date.now() + 30_000;
+    while (messageIds.length === 0 && Date.now() < deadline) await delay(250);
+    return messageIds[0];
+  } finally {
+    await reader.disconnect();
+  }
+}
+
+function publicCatalogueClient(): Client<typeof RestaurantCatalogueService> {
+  return createClient(
+    RestaurantCatalogueService,
+    createConnectTransport({ baseUrl: restaurantService.url, httpVersion: '1.1' }),
+  );
+}
+
+async function waitForSearchHit(text: string, restaurantId: string): Promise<string> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const { hits } = await publicCatalogueClient().searchRestaurants({ text, limit: 50 });
+    const hit = hits.find((found) => found.restaurantId === restaurantId);
+    if (hit !== undefined) return hit.name;
+    await delay(250);
+  }
+  throw new Error(`${restaurantId} was not found by "${text}" in time`);
 }
 
 async function countConnectionsTo(databaseName: string): Promise<number> {
@@ -175,10 +294,13 @@ function started<Started extends { readonly stop: () => Promise<void> }>(
 }
 
 beforeAll(async () => {
-  [postgres, keycloak] = await Promise.all([
+  [postgres, keycloak, kafka, openSearch] = await Promise.all([
     started(startPostgresContainer()),
     started(startKeycloakContainer()),
+    started(startKafkaContainer()),
+    started(startOpenSearchContainer()),
   ]);
+  await createStateTopics();
   restaurantService = await started(startRestaurantService(serviceConfiguration()));
   outboxReader = createDatabase({
     connectionString: postgres.connectionUri,
@@ -258,6 +380,55 @@ describe('restaurant service', () => {
     await expect(clientFor(restaurantBffToken).listMemberships({})).rejects.toMatchObject({
       code: Code.Unauthenticated,
     });
+  });
+
+  it('projects the snapshots its outbox relays past a state record it dead-letters', async () => {
+    const { restaurantId } = await staffAClient.onboardRestaurant({
+      ...pizzeria,
+      name: 'Cantina Leonardo',
+    });
+    await staffAClient.reviseMenu({
+      restaurantId,
+      menuItems: [{ ...margherita, name: 'Moqueca' }],
+    });
+
+    await publishUnreadableStateRecord(restaurantId);
+    await relayOutboxToKafka(restaurantId);
+
+    expect(await waitForSearchHit('leoanrdo', restaurantId)).toBe('Cantina Leonardo');
+    expect(await waitForSearchHit('moqueca', restaurantId)).toBe('Cantina Leonardo');
+    expect(await readFirstStateDeadLetterMessageId()).toBe(unreadableStateMessageId);
+  });
+
+  it('answers the public catalogue without an access token while staff calls still need one', async () => {
+    const { restaurantId } = await staffAClient.onboardRestaurant(pizzeria);
+    await staffAClient.reviseMenu({ restaurantId, menuItems: [margherita] });
+    const anonymousStaffClient = createClient(
+      RestaurantService,
+      createConnectTransport({ baseUrl: restaurantService.url, httpVersion: '1.1' }),
+    );
+
+    const { restaurant } = await publicCatalogueClient().getPublicRestaurant({ restaurantId });
+
+    expect(restaurant).toMatchObject({ restaurantId, version: 2, menuItems: [margherita] });
+    await expect(anonymousStaffClient.listMemberships({})).rejects.toMatchObject({
+      code: Code.Unauthenticated,
+    });
+  });
+
+  it('rebuilds the search index from every restaurant stored in Postgres', async () => {
+    const { restaurantId } = await staffAClient.onboardRestaurant({
+      ...pizzeria,
+      name: 'Sushi Bar',
+    });
+    const storedCount = await sql<{ readonly restaurantCount: bigint }>`
+      select count(*) as restaurant_count from restaurants
+    `.execute(outboxReader);
+
+    const restaurantCount = await rebuildSearchIndex(serviceConfiguration());
+
+    expect(restaurantCount).toBe(Number(storedCount.rows[0]?.restaurantCount));
+    expect(await waitForSearchHit('sushi', restaurantId)).toBe('Sushi Bar');
   });
 
   it('answers its health endpoint', async () => {

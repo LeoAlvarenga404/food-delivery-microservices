@@ -38,6 +38,8 @@ function clientWithInterceptors(): ReturnType<typeof createClient<typeof Restaur
       housekeepingIntervalInMilliseconds: 3_600_000,
       accessTokenIssuer: 'http://localhost:8180/realms/food-delivery',
       accessTokenJwksUrl: unreachableKeySetUrl,
+      kafkaBootstrapServers: ['kafka-1:29092'],
+      openSearchUrl: 'http://opensearch:9200',
     },
     createLogger({ serviceName: 'restaurant-service', level: 'info' }, destination),
   );

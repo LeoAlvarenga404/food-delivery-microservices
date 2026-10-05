@@ -6,11 +6,15 @@ const requiredVariables = {
     'postgresql://restaurant_service:secret@127.0.0.1:5436/restaurant_service',
   ACCESS_TOKEN_ISSUER: 'http://localhost:8180/realms/food-delivery',
   ACCESS_TOKEN_JWKS_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
+  KAFKA_BOOTSTRAP_SERVERS: 'kafka-1:29092,kafka-2:29092',
+  OPENSEARCH_URL: 'http://opensearch:9200',
 };
 
-const accessTokenSettings = {
+const connectionSettings = {
   accessTokenIssuer: 'http://localhost:8180/realms/food-delivery',
   accessTokenJwksUrl: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
+  kafkaBootstrapServers: ['kafka-1:29092', 'kafka-2:29092'],
+  openSearchUrl: 'http://opensearch:9200',
 };
 
 describe('readRestaurantServiceConfiguration', () => {
@@ -21,7 +25,7 @@ describe('readRestaurantServiceConfiguration', () => {
       port: 4005,
       logLevel: 'info',
       housekeepingIntervalInMilliseconds: 3_600_000,
-      ...accessTokenSettings,
+      ...connectionSettings,
     });
   });
 
@@ -40,7 +44,7 @@ describe('readRestaurantServiceConfiguration', () => {
       port: 5005,
       logLevel: 'debug',
       housekeepingIntervalInMilliseconds: 60_000,
-      ...accessTokenSettings,
+      ...connectionSettings,
     });
   });
 
@@ -60,6 +64,14 @@ describe('readRestaurantServiceConfiguration', () => {
     {
       problem: 'a missing access token issuer',
       variables: { ...requiredVariables, ACCESS_TOKEN_ISSUER: undefined },
+    },
+    {
+      problem: 'missing kafka bootstrap servers',
+      variables: { ...requiredVariables, KAFKA_BOOTSTRAP_SERVERS: ' , ' },
+    },
+    {
+      problem: 'an OpenSearch url that is not an http url',
+      variables: { ...requiredVariables, OPENSEARCH_URL: 'opensearch:9200' },
     },
     {
       problem: 'a key set url that is not an http url',

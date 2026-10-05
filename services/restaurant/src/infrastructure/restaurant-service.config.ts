@@ -10,6 +10,8 @@ export interface RestaurantServiceConfiguration {
   readonly housekeepingIntervalInMilliseconds: number;
   readonly accessTokenIssuer: string;
   readonly accessTokenJwksUrl: string;
+  readonly kafkaBootstrapServers: readonly string[];
+  readonly openSearchUrl: string;
 }
 
 const restaurantServiceEnvironmentSchema = z.object({
@@ -21,6 +23,8 @@ const restaurantServiceEnvironmentSchema = z.object({
     environmentVariables.durationInMilliseconds.default(3_600_000),
   ACCESS_TOKEN_ISSUER: environmentVariables.httpUrl,
   ACCESS_TOKEN_JWKS_URL: environmentVariables.httpUrl,
+  KAFKA_BOOTSTRAP_SERVERS: environmentVariables.kafkaBootstrapServers,
+  OPENSEARCH_URL: environmentVariables.httpUrl,
 });
 
 export function readRestaurantServiceConfiguration(
@@ -35,5 +39,7 @@ export function readRestaurantServiceConfiguration(
     housekeepingIntervalInMilliseconds: variables.HOUSEKEEPING_INTERVAL_IN_MILLISECONDS,
     accessTokenIssuer: variables.ACCESS_TOKEN_ISSUER,
     accessTokenJwksUrl: variables.ACCESS_TOKEN_JWKS_URL,
+    kafkaBootstrapServers: variables.KAFKA_BOOTSTRAP_SERVERS,
+    openSearchUrl: variables.OPENSEARCH_URL,
   };
 }
