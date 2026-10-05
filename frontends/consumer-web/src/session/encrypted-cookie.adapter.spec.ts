@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { openCookieValue, sealCookieValue } from './encrypted-cookie.adapter.ts';
 
 const secret = 'a-session-secret-of-at-least-32-characters';
-const otherSecret = 'another-session-secret-of-32-characters';
+const otherSecret = 'a-session-secret-of-at-least-32-characterz';
 const payload = {
   accessToken: 'eyJhbGciOiJSUzI1NiJ9.access.signature',
   expiresAtInMilliseconds: 7,

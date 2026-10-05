@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { sealCookieValue } from './encrypted-cookie.adapter.ts';
 import {
   openSession,
@@ -131,6 +131,16 @@ describe('readAccessToken and requireAccessToken', () => {
 
   it('answer no expired access token, so no page sends it to the API', async () => {
     storeSessionCookie(sessionLasting(-1000, 1_500_000));
+
+    await expect(readAccessToken()).resolves.toBeUndefined();
+  });
+
+  it('answer no access token from the moment it expires', async () => {
+    vi.useFakeTimers({ now: session.accessTokenExpiresAtInMilliseconds, toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    storeSessionCookie(session);
 
     await expect(readAccessToken()).resolves.toBeUndefined();
   });

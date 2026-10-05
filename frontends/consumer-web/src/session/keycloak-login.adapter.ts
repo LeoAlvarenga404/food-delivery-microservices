@@ -21,6 +21,8 @@ const millisecondsPerSecond = 1000;
 const authorizationEndpointField = 'authorization_endpoint';
 const tokenEndpointField = 'token_endpoint';
 const endSessionEndpointField = 'end_session_endpoint';
+const keySetField = 'jwks_uri';
+const issuerParameterField = 'authorization_response_iss_parameter_supported';
 
 const loginSchema = z.object({
   state: z.string().min(1),
@@ -36,7 +38,8 @@ const keycloakSessionLifetimeSchema = z.int().positive();
 
 export function toSafeReturnPath(returnTo: string | null, publicUrl: string): string {
   const homeUrl = new URL('/', publicUrl);
-  const target = new URL(returnTo ?? '/', homeUrl);
+  const target = URL.parse(returnTo ?? '/', homeUrl);
+  if (target === null) return '/';
   const isPathOfThisSite = target.origin === homeUrl.origin && !target.pathname.startsWith('//');
   return isPathOfThisSite ? `${target.pathname}${target.search}` : '/';
 }
@@ -50,12 +53,15 @@ function createOpenIdConfiguration(
       issuer: keycloakIssuerUrl,
       [authorizationEndpointField]: `${keycloakIssuerUrl}/protocol/openid-connect/auth`,
       [tokenEndpointField]: keycloakTokenUrl,
+      [keySetField]: new URL('certs', keycloakTokenUrl).href,
       [endSessionEndpointField]: `${keycloakIssuerUrl}/protocol/openid-connect/logout`,
+      [issuerParameterField]: true,
     },
     clientId,
     clientSecret,
   );
   openIdClient.allowInsecureRequests(openIdConfiguration);
+  openIdClient.enableNonRepudiationChecks(openIdConfiguration);
   return openIdConfiguration;
 }
 
