@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package fooddelivery.restaurant.v1;
+
+import "fooddelivery/restaurant/v1/events.proto";
+
+service RestaurantCatalogueService {
+  rpc SearchRestaurants(SearchRestaurantsRequest) returns (SearchRestaurantsResponse);
+  rpc GetPublicRestaurant(GetPublicRestaurantRequest) returns (GetPublicRestaurantResponse);
+}
+
+message SearchRestaurantsRequest {
+  string text = 1;
+  string category = 2;
+  GeoPoint origin = 3;
+  double radius_in_kilometers = 4;
+  int32 limit = 5;
+}
+
+message RestaurantSearchHit {
+  string restaurant_id = 1;
+  string name = 2;
+  string category = 3;
+  bool is_open_now = 4;
+  repeated string highlights = 5;
+}
+
+message CategoryCount {
+  string category = 1;
+  int32 restaurant_count = 2;
+}
+
+message SearchRestaurantsResponse {
+  repeated RestaurantSearchHit hits = 1;
+  repeated CategoryCount categories = 2;
+  string suggestion = 3;
+}
+
+message SearchRestaurantsFailure {
+  string reason = 1;
+}
+
+message GetPublicRestaurantRequest {
+  string restaurant_id = 1;
+}
+
+message GetPublicRestaurantResponse {
+  Restaurant restaurant = 1;
+}
