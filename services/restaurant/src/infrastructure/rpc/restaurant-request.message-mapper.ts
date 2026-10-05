@@ -5,7 +5,9 @@ import {
   type MenuItem,
   type OpeningPeriod,
 } from '@fd/contracts/fooddelivery/restaurant/v1/events_pb.js';
+import type { SearchRestaurantsRequest } from '@fd/contracts/fooddelivery/restaurant/v1/catalogue_pb.js';
 import type { OnboardRestaurantRequest } from '@fd/contracts/fooddelivery/restaurant/v1/service_pb.js';
+import type { SearchRestaurantsQuery } from '#application/queries/search-restaurants/search-restaurants.query.ts';
 import type { RawMenuItem } from '#domain/restaurant/menu-item.value-object.ts';
 import type {
   DayOfWeek,
@@ -73,4 +75,17 @@ export function toRawMenuItems(menuItems: readonly MenuItem[]): readonly RawMenu
     priceInCents,
     isAvailable,
   }));
+}
+
+export function toSearchRestaurantsQuery(
+  request: SearchRestaurantsRequest,
+): SearchRestaurantsQuery {
+  const { origin } = request;
+  return {
+    text: request.text,
+    category: request.category === '' ? undefined : request.category,
+    origin: origin === undefined ? undefined : toRawLocation(origin),
+    radiusInKilometers: request.radiusInKilometers === 0 ? undefined : request.radiusInKilometers,
+    limit: request.limit,
+  };
 }
