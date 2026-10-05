@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ExternalDependencyFailure } from './external-dependency-failure.ts';
 import { classifyFailure, decideFailureHandling } from './failure-handling.ts';
 import { PermanentMessageFailure } from './permanent-message-failure.ts';
+import { TransientMessageFailure } from './transient-message-failure.ts';
 
 function errorWithCode(code: string): Error {
   return Object.assign(new Error(`failed with ${code}`), { code });
@@ -20,6 +21,12 @@ describe('classifyFailure', () => {
     });
 
     expect(classifyFailure(gatewayTimeout)).toBe('external');
+  });
+
+  it('classifies a dependency the handler reports as briefly unavailable as transient', () => {
+    expect(classifyFailure(new TransientMessageFailure('search index unavailable'))).toBe(
+      'transient',
+    );
   });
 
   it.each([

@@ -716,6 +716,9 @@ importers:
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
+      '@fd/chassis-kafka':
+        specifier: workspace:*
+        version: link:../../packages/chassis/kafka
       '@fd/chassis-lifecycle':
         specifier: workspace:*
         version: link:../../packages/chassis/lifecycle

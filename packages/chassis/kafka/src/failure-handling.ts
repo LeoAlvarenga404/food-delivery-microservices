@@ -1,5 +1,6 @@
 import { ExternalDependencyFailure } from './external-dependency-failure.ts';
 import { PermanentMessageFailure } from './permanent-message-failure.ts';
+import { TransientMessageFailure } from './transient-message-failure.ts';
 
 export type FailureClass = 'transient' | 'external' | 'permanent' | 'unknown';
 
@@ -44,6 +45,7 @@ function readErrorCode(error: unknown): string | undefined {
 export function classifyFailure(error: unknown): FailureClass {
   if (error instanceof PermanentMessageFailure) return 'permanent';
   if (error instanceof ExternalDependencyFailure) return 'external';
+  if (error instanceof TransientMessageFailure) return 'transient';
   const code = readErrorCode(error);
   if (code === undefined) return 'unknown';
   const isTransient = transientErrorCodes.has(code) || code.startsWith(connectionExceptionClass);

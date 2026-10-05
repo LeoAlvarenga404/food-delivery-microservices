@@ -17,6 +17,11 @@ import type {
 } from '#domain/restaurant/restaurant-address.value-object.ts';
 import type { RawRestaurantProfile } from '#domain/restaurant/restaurant-profile.value-object.ts';
 
+export type RestaurantProfileContract = Pick<
+  OnboardRestaurantRequest,
+  'name' | 'category' | 'address' | 'timeZone' | 'openingHours' | 'minimumOrderInCents'
+>;
+
 const domainDaysOfWeek: ReadonlyMap<ContractDayOfWeek, DayOfWeek> = new Map([
   [ContractDayOfWeek.MONDAY, 'MONDAY'],
   [ContractDayOfWeek.TUESDAY, 'TUESDAY'],
@@ -50,7 +55,7 @@ function toRawOpeningPeriod(period: OpeningPeriod): RawOpeningPeriod {
   };
 }
 
-export function toRawRestaurantProfile(request: OnboardRestaurantRequest): RawRestaurantProfile {
+export function toRawRestaurantProfile(request: RestaurantProfileContract): RawRestaurantProfile {
   return {
     name: request.name,
     category: request.category,
