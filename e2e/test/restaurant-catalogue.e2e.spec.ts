@@ -27,11 +27,11 @@ describe('restaurant catalogue', () => {
     const revised = await staffAApi.reviseMenu(restaurantId, [
       { ...pizzeriaMenu[0], name: `Torta ${dishWord}` },
     ]);
+    expect(revised.status).toBe(200);
 
     const found = await catalogue.waitForHit(dishWord, restaurantId);
     const foundMisspelled = await catalogue.waitForHit(misspelledDishWord, restaurantId);
 
-    expect(revised.status).toBe(200);
     expect(found).toMatchObject({ restaurantId, name: 'Pizzaria Bella', category: 'Pizza' });
     expect(found.highlights).toContain(`Torta <em>${dishWord}</em>`);
     expect(foundMisspelled.restaurantId).toBe(restaurantId);
@@ -56,6 +56,7 @@ describe('restaurant catalogue', () => {
       menuItems: pizzeriaMenu,
     });
     expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get('etag')).toBe('"2"');
     expect(await unchanged.text()).toBe('');
     expect(changed.status).toBe(200);
     expect(changed.headers.get('etag')).toBe('"3"');
@@ -72,6 +73,8 @@ describe('restaurant catalogue', () => {
     const order = await fetch(`${edgeUrl}/v1/orders/${randomUUID()}`);
     const restaurantPost = await fetch(`${edgeUrl}/v1/restaurants`, { method: 'POST' });
     const nestedRestaurantPath = await fetch(`${edgeUrl}/v1/restaurants/${randomUUID()}/orders`);
+    const upperCaseOrderPath = await fetch(`${edgeUrl}/V1/orders/${randomUUID()}`);
+    const escapedSlashPath = await fetch(`${edgeUrl}/v1/restaurants/${randomUUID()}%2Forders`);
 
     expect(search.status).toBe(200);
     expect(search.headers.get('x-correlation-id')).not.toBeNull();
@@ -88,9 +91,11 @@ describe('restaurant catalogue', () => {
       title: 'Not Found',
       status: 404,
     });
-    for (const refused of [order, restaurantPost, nestedRestaurantPath]) {
+    for (const refused of [order, restaurantPost, nestedRestaurantPath, upperCaseOrderPath]) {
       expect(refused.status).toBe(401);
       expect(refused.headers.get('x-correlation-id')).toBeNull();
     }
+    expect(escapedSlashPath.status).toBe(400);
+    expect(escapedSlashPath.headers.get('x-correlation-id')).toBeNull();
   });
 });
