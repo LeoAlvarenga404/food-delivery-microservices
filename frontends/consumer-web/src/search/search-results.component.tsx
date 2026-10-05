@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { createConsumerApi } from '../consumer-api/consumer-api.adapter.ts';
-import { describeProblem } from '../consumer-api/consumer-api-view.message-mapper.ts';
+import { createConsumerApi, searchRestaurants } from '../consumer-api/consumer-api.adapter.ts';
 import { toHighlightSegments } from './search-highlight.message-mapper.ts';
 
 function Highlight({ highlight }: { readonly highlight: string }): ReactNode {
@@ -24,15 +23,8 @@ function Suggestion({ suggestion }: { readonly suggestion: string | undefined })
 }
 
 export async function SearchResults({ text }: { readonly text: string }): Promise<ReactNode> {
-  const {
-    data: results,
-    error,
-    response,
-  } = await createConsumerApi().GET('/v1/restaurants', {
-    params: { query: { text } },
-  });
-  if (results === undefined)
-    return <p role="alert">{describeProblem(response.status, error.reason)}</p>;
+  const results = await searchRestaurants(createConsumerApi(), text);
+  if ('problem' in results) return <p role="alert">{results.problem}</p>;
   return (
     <section aria-label="Search results">
       <Suggestion suggestion={results.suggestion} />

@@ -1,4 +1,5 @@
 import createClient, { type Client } from 'openapi-fetch';
+import { z } from 'zod';
 import { readConsumerWebConfiguration } from '../consumer-web.config.ts';
 import type { paths } from '../generated/consumer-api.ts';
 import { describeProblem } from './consumer-api-view.message-mapper.ts';
@@ -19,10 +20,15 @@ export type PlacementResult = { readonly orderId: string } | Refusal;
 
 export type RegistrationResult = { readonly consumerId: string } | Refusal;
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export type SearchResults =
+  paths['/v1/restaurants']['get']['responses'][200]['content']['application/json'];
+
+type Problem = { readonly reason?: string } | undefined;
+
+const uuidSchema = z.uuid();
 
 export function isUuid(candidate: string): boolean {
-  return uuidPattern.test(candidate);
+  return uuidSchema.safeParse(candidate).success;
 }
 
 export function createConsumerApi(accessToken?: string): ConsumerApi {
@@ -33,9 +39,22 @@ export function createConsumerApi(accessToken?: string): ConsumerApi {
   });
 }
 
-function toRefusal(response: Response, problem: { readonly reason?: string } | undefined): Refusal {
+function toRefusal(response: Response, problem: Problem): Refusal {
   if (response.status === 401) return { isSignInRequired: true };
   return { problem: describeProblem(response.status, problem?.reason) };
+}
+
+export async function searchRestaurants(
+  api: ConsumerApi,
+  text: string,
+): Promise<SearchResults | { readonly problem: string }> {
+  const {
+    data: results,
+    error,
+    response,
+  } = await api.GET('/v1/restaurants', { params: { query: { text } } });
+  const problem: Problem = error;
+  return results ?? { problem: describeProblem(response.status, problem?.reason) };
 }
 
 export async function sendOrderPlacement(

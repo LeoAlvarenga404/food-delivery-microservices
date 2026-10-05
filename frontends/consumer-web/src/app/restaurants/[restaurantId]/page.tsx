@@ -2,7 +2,10 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AddToCartButton } from '../../../cart/add-to-cart.component.tsx';
 import { createConsumerApi, isUuid } from '../../../consumer-api/consumer-api.adapter.ts';
-import { formatAmount } from '../../../consumer-api/consumer-api-view.message-mapper.ts';
+import {
+  describeProblem,
+  formatAmount,
+} from '../../../consumer-api/consumer-api-view.message-mapper.ts';
 
 async function readRestaurant(restaurantId: string) {
   if (!isUuid(restaurantId)) notFound();
@@ -11,10 +14,7 @@ async function readRestaurant(restaurantId: string) {
     { params: { path: { restaurantId } } },
   );
   if (response.status === 404) notFound();
-  if (restaurant === undefined) {
-    throw new Error(`reading the restaurant answered ${String(response.status)}`);
-  }
-  return restaurant;
+  return restaurant ?? { problem: describeProblem(response.status, undefined) };
 }
 
 export default async function RestaurantPage({
@@ -23,6 +23,7 @@ export default async function RestaurantPage({
   readonly params: Promise<{ readonly restaurantId: string }>;
 }): Promise<ReactNode> {
   const restaurant = await readRestaurant((await params).restaurantId);
+  if ('problem' in restaurant) return <p role="alert">{restaurant.problem}</p>;
   const { restaurantId, name: restaurantName, currency } = restaurant;
   return (
     <main>

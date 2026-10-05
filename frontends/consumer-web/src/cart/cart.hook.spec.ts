@@ -140,6 +140,10 @@ describe('parseStoredCart', () => {
       JSON.stringify({ ...storedCart, lines: [{ ...storedCart.lines[0], quantity: 0 }] }),
     ],
     [
+      'a price that is not a whole number of cents',
+      JSON.stringify({ ...storedCart, lines: [{ ...storedCart.lines[0], priceInCents: '45.00' }] }),
+    ],
+    [
       'a currency that is not a three-letter code',
       JSON.stringify({ ...storedCart, currency: 'X' }),
     ],

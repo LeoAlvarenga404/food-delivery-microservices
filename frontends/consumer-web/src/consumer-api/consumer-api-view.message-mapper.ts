@@ -18,13 +18,21 @@ const refusalDescriptions = new Map([
   ],
   ['ConsumerAlreadyRegistered', 'You are already registered.'],
   ['InvalidSearchCriteria', 'The search is not valid.'],
+  ['InvalidConsumerName', 'Check the name.'],
+  ['InvalidEmail', 'Check the email.'],
+  ['InvalidAddress', 'Check the address.'],
+  ['InvalidAddressCount', 'Give between one and five addresses.'],
 ]);
 
-const centsPerUnit = 100;
+const centsPerUnit = 100n;
 
 export function formatAmount(amountInCents: string, currency: string): string {
-  const amount = Number(amountInCents) / centsPerUnit;
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+  const cents = BigInt(amountInCents);
+  const fraction = String(cents % centsPerUnit).padStart(2, '0');
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency })
+    .formatToParts(cents / centsPerUnit)
+    .map((part) => (part.type === 'fraction' ? fraction : part.value))
+    .join('');
 }
 
 export function describeRejectionReason(rejectionReason: string): string {

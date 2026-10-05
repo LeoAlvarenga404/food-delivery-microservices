@@ -2,12 +2,14 @@ import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { createConsumerApi, isUuid } from '../../../consumer-api/consumer-api.adapter.ts';
 import {
+  describeProblem,
   describeRejectionReason,
   formatAmount,
 } from '../../../consumer-api/consumer-api-view.message-mapper.ts';
 import { redirectToSignIn, requireAccessToken } from '../../../session/session-cookie.adapter.ts';
 
 const refreshIntervalInSeconds = 1;
+const busyStatuses = new Set([503, 504]);
 
 async function readOrder(orderId: string) {
   const accessToken = await requireAccessToken(`/orders/${orderId}`);
@@ -18,8 +20,24 @@ async function readOrder(orderId: string) {
   );
   if (response.status === 401) redirectToSignIn(`/orders/${orderId}`);
   if (response.status === 404) notFound();
-  if (order === undefined) throw new Error(`reading the order answered ${String(response.status)}`);
-  return order;
+  if (order !== undefined) return order;
+  if (!busyStatuses.has(response.status)) {
+    throw new Error(`reading the order answered ${String(response.status)}`);
+  }
+  return { problem: describeProblem(response.status, undefined) };
+}
+
+function Reload({ isPending }: { readonly isPending: boolean }): ReactNode {
+  return isPending ? <meta httpEquiv="refresh" content={String(refreshIntervalInSeconds)} /> : null;
+}
+
+function BusyOrder({ problem }: { readonly problem: string }): ReactNode {
+  return (
+    <main>
+      <Reload isPending />
+      <p role="alert">{problem}</p>
+    </main>
+  );
 }
 
 export default async function OrderPage({
@@ -28,10 +46,10 @@ export default async function OrderPage({
   readonly params: Promise<{ readonly orderId: string }>;
 }): Promise<ReactNode> {
   const order = await readOrder((await params).orderId);
-  const isPending = order.status === 'APPROVAL_PENDING';
+  if ('problem' in order) return <BusyOrder problem={order.problem} />;
   return (
     <main>
-      {isPending ? <meta httpEquiv="refresh" content={String(refreshIntervalInSeconds)} /> : null}
+      <Reload isPending={order.status === 'APPROVAL_PENDING'} />
       <h1>Your order</h1>
       <p>
         Status: <strong>{order.status}</strong>

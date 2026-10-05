@@ -2,6 +2,8 @@ import createClient from 'openapi-fetch';
 import { describe, expect, it } from 'vitest';
 import type { paths } from '../generated/consumer-api.ts';
 import {
+  isUuid,
+  searchRestaurants,
   sendConsumerRegistration,
   sendOrderPlacement,
   type ConsumerApi,
@@ -10,7 +12,7 @@ import {
 
 interface Answer {
   readonly status: number;
-  readonly body: object;
+  readonly body?: object;
 }
 
 const placement: OrderPlacement = {
@@ -47,14 +49,12 @@ class FakeEdge {
       baseUrl: 'http://edge.test',
       fetch: (request) => {
         this.requests.push(request);
-        const isProblem = this.#answer.status >= 400;
+        const { status, body } = this.#answer;
+        const contentType = status >= 400 ? 'application/problem+json' : 'application/json';
+        const headers =
+          body === undefined ? { 'content-length': '0' } : { 'content-type': contentType };
         return Promise.resolve(
-          new Response(JSON.stringify(this.#answer.body), {
-            status: this.#answer.status,
-            headers: {
-              'content-type': isProblem ? 'application/problem+json' : 'application/json',
-            },
-          }),
+          new Response(body === undefined ? null : JSON.stringify(body), { status, headers }),
         );
       },
     });
@@ -67,6 +67,36 @@ function problem(status: number, title: string, reason?: string): Answer {
     body: { type: 'about:blank', title, status, ...(reason === undefined ? {} : { reason }) },
   };
 }
+
+describe('isUuid', () => {
+  it('accepts an id the API accepts', () => {
+    expect(isUuid('0199a5d0-0000-7000-8000-00000000c001')).toBe(true);
+  });
+
+  it.each(['12345678-1234-1234-1234-123456789012', '0199a5d0-0000-7000-8000-00000000c00'])(
+    'refuses %s, which the API would refuse with 400',
+    (candidate) => {
+      expect(isUuid(candidate)).toBe(false);
+    },
+  );
+});
+
+describe('searchRestaurants', () => {
+  it('answers the results of the search', async () => {
+    const edge = new FakeEdge({ status: 200, body: { restaurants: [] } });
+
+    await expect(searchRestaurants(edge.api(), 'pizza')).resolves.toEqual({ restaurants: [] });
+    expect(edge.requests[0]?.url).toBe('http://edge.test/v1/restaurants?text=pizza');
+  });
+
+  it('describes a busy edge that answers without a body', async () => {
+    const edge = new FakeEdge({ status: 503 });
+
+    await expect(searchRestaurants(edge.api(), 'pizza')).resolves.toEqual({
+      problem: 'The service is busy. Try again in a moment.',
+    });
+  });
+});
 
 describe('sendOrderPlacement', () => {
   it('sends the idempotency key as the Idempotency-Key header and the order without it', async () => {
