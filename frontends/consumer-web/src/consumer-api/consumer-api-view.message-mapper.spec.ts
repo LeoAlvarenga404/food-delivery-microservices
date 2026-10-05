@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { describeProblem } from './consumer-api-view.message-mapper.ts';
+import { describeProblem, formatAmount } from './consumer-api-view.message-mapper.ts';
+
+describe('formatAmount', () => {
+  it.each([
+    ['4500', 'BRL', 'R$45.00'],
+    ['5', 'BRL', 'R$0.05'],
+    ['0', 'USD', '$0.00'],
+    ['123456789', 'BRL', 'R$1,234,567.89'],
+  ])('formats %s cents of %s as %s', (amountInCents, currency, expected) => {
+    expect(formatAmount(amountInCents, currency)).toBe(expected);
+  });
+});
 
 describe('describeProblem', () => {
   it.each([
