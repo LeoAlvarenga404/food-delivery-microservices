@@ -108,6 +108,22 @@ export function describeRestaurantRepositoryContract(
       await expect(restaurants.save(onboardRestaurant())).rejects.toThrow(ConcurrencyConflictError);
     });
 
+    it('finds every restaurant in id order, each with its own menu and version', async () => {
+      await restaurants.save(onboardRestaurant({ restaurantId: burgerJointId, owner: staffBId }));
+      await restaurants.save(onboardRestaurant());
+
+      const everyRestaurant = await restaurants.findAll();
+
+      expect(everyRestaurant.map((restaurant) => restaurant.toSnapshot())).toEqual([
+        { ...onboardRestaurant().toSnapshot(), version: 1 },
+        {
+          ...onboardRestaurant({ restaurantId: burgerJointId, owner: staffBId }).toSnapshot(),
+          version: 1,
+        },
+        sushiBar.toSnapshot(),
+      ]);
+    });
+
     it('finds the restaurants of a member in id order and none for a stranger', async () => {
       await restaurants.save(onboardRestaurant());
       await restaurants.save(onboardRestaurant({ restaurantId: burgerJointId, owner: staffBId }));

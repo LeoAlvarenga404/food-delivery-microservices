@@ -52,6 +52,7 @@ export class InMemoryUnitOfWork implements UnitOfWork {
       restaurants: {
         findById: (restaurantId) => this.restaurants.findById(restaurantId),
         findByMember: (staffMemberId) => this.restaurants.findByMember(staffMemberId),
+        findAll: () => this.restaurants.findAll(),
         save: async (restaurant) => {
           await this.restaurants.save(restaurant);
           savedRestaurants.push(restaurant);

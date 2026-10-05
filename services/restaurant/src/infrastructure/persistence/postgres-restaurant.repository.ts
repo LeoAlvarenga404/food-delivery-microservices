@@ -61,6 +61,20 @@ export class PostgresRestaurantRepository implements RestaurantRepository {
     });
   }
 
+  findAll(): Promise<readonly Restaurant[]> {
+    return this.#readFromOneSnapshot(async (database) => {
+      const restaurants = await database
+        .selectFrom('restaurants')
+        .select('restaurantId')
+        .orderBy('restaurantId')
+        .execute();
+      const found = await Promise.all(
+        restaurants.map(({ restaurantId }) => findRestaurant(database, restaurantId)),
+      );
+      return found.filter((restaurant) => restaurant !== undefined);
+    });
+  }
+
   async save(restaurant: Restaurant): Promise<void> {
     const rows = restaurantPersistenceMapper.toPersistence(restaurant);
     if (rows.restaurant.version === 0) {

@@ -26,6 +26,7 @@ function trackSavedRestaurants(
   return {
     findById: (restaurantId) => restaurants.findById(restaurantId),
     findByMember: (staffMemberId) => restaurants.findByMember(staffMemberId),
+    findAll: () => restaurants.findAll(),
     save: async (restaurant) => {
       await restaurants.save(restaurant);
       track(restaurant);

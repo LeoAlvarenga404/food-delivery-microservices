@@ -38,6 +38,16 @@ export class InMemoryRestaurantRepository implements RestaurantRepository {
     );
   }
 
+  findAll(): Promise<readonly Restaurant[]> {
+    return Promise.resolve(
+      [...this.rows.values()]
+        .toSorted((first, second) =>
+          first.restaurant.restaurantId.localeCompare(second.restaurant.restaurantId),
+        )
+        .map((stored) => restaurantPersistenceMapper.toDomain(stored)),
+    );
+  }
+
   save(restaurant: Restaurant): Promise<void> {
     const rows = restaurantPersistenceMapper.toPersistence(restaurant);
     const { restaurantId, version } = rows.restaurant;
