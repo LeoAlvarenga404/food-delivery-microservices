@@ -1,5 +1,5 @@
 import { left, right, type Either } from '@fd/domain';
-import type { GeoPoint } from '../restaurant/restaurant-address.value-object.ts';
+import type { GeoPoint } from '#domain/restaurant/restaurant-address.value-object.ts';
 
 export interface RestaurantSearchCriteria {
   readonly text: string;
