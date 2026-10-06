@@ -9,6 +9,8 @@ import {
 
 const consumerApi = new HttpConsumerApi('consumer-a');
 const stack = new DockerComposeStack();
+const kafkaNodes = ['kafka-1', 'kafka-2', 'kafka-3'];
+const controllerElectionLimitInMilliseconds = 60_000;
 let stoppedKafkaNode = 'no node';
 let pizzeriaOrder: PizzeriaOrder;
 
@@ -25,6 +27,17 @@ afterAll(async () => {
 });
 
 describe('placing an order while the active Kafka controller is stopped', () => {
+  it('elects one of the two remaining nodes as the active controller', async () => {
+    const remainingNode = kafkaNodes.find((kafkaNode) => kafkaNode !== stoppedKafkaNode);
+
+    await expect
+      .poll(() => stack.findActiveKafkaController(remainingNode), {
+        timeout: controllerElectionLimitInMilliseconds,
+        interval: 1_000,
+      })
+      .not.toBe(stoppedKafkaNode);
+  });
+
   it('still approves the order with the two remaining nodes', async () => {
     const response = await consumerApi.placeOrder(pizzeriaOrder, {
       'idempotency-key': randomUUID(),

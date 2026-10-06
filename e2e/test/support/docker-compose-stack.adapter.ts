@@ -64,11 +64,11 @@ export class DockerComposeStack {
     );
   }
 
-  async findActiveKafkaController(): Promise<string> {
+  async findActiveKafkaController(askedNode = 'kafka-1'): Promise<string> {
     const output = await this.#compose([
-      ...kafkaToolPrefix,
+      ...['exec', '-T', askedNode],
       '/opt/kafka/bin/kafka-metadata-quorum.sh',
-      ...kafkaBootstrapServer,
+      ...['--bootstrap-server', `${askedNode}:29092`],
       'describe',
       '--status',
     ]);
