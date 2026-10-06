@@ -8,6 +8,8 @@ import {
   type RestaurantApi,
 } from './restaurant-api/restaurant-api.adapter.ts';
 import { readRestaurantPortalConfiguration } from './restaurant-portal.config.ts';
+import { MenuPage } from './restaurants/menu-editor.component.tsx';
+import { OnboardingForm } from './restaurants/onboarding-form.component.tsx';
 import { RestaurantSelector } from './restaurants/restaurant-selector.component.tsx';
 import {
   buildSignOutUrl,
@@ -26,6 +28,16 @@ function createPortalRouter(
   return createRouter({
     routeTree: rootRoute.addChildren([
       createRoute({ getParentRoute, path: '/', component: () => <RestaurantSelector api={api} /> }),
+      createRoute({
+        getParentRoute,
+        path: '/restaurants/new',
+        component: () => <OnboardingForm api={api} />,
+      }),
+      createRoute({
+        getParentRoute,
+        path: '/restaurants/$restaurantId',
+        component: () => <MenuPage api={api} />,
+      }),
     ]),
   });
 }
