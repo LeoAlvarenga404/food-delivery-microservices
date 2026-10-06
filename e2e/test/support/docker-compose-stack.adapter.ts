@@ -1,11 +1,7 @@
-import { execFile } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import { z } from 'zod';
+import { runInComposeProject } from './compose-project.adapter.ts';
 
-const runFile = promisify(execFile);
-const composeFilePath = fileURLToPath(new URL('../../../infra/compose.yaml', import.meta.url));
 const electionDeadlineInMilliseconds = 90_000;
 const electionRetryPauseInMilliseconds = 2_000;
 const electionAttemptTimeoutInMilliseconds = 30_000;
@@ -185,24 +181,6 @@ export class DockerComposeStack {
   }
 
   async #compose(commandArguments: readonly string[], timeoutInMilliseconds = 0): Promise<string> {
-    const { stdout } = await runFile(
-      'docker',
-      [
-        'compose',
-        '--file',
-        composeFilePath,
-        '--profile',
-        'core',
-        '--profile',
-        'auth',
-        '--profile',
-        'search',
-        '--profile',
-        'apps',
-        ...commandArguments,
-      ],
-      { timeout: timeoutInMilliseconds },
-    );
-    return stdout;
+    return runInComposeProject(commandArguments, timeoutInMilliseconds);
   }
 }
