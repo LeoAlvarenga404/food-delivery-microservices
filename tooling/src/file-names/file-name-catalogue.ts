@@ -110,6 +110,13 @@ export const fileNameCatalogue: readonly CatalogueRule[] = [
     allowedExtensions: frontendExtensions,
   },
   {
+    description: 'frontend entry',
+    pathPattern: /^frontends\/[^/]+\/src\/main\.tsx?$/,
+    allowedRoles: [],
+    allowedRolelessNames: ['main'],
+    allowedExtensions: ['.tsx'],
+  },
+  {
     description: 'frontend source',
     pathPattern: /^frontends\/[^/]+\/src\//,
     allowedRoles: frontendRoles,

@@ -62,6 +62,10 @@ describe('findFileNameViolations', () => {
     'frontends/consumer-web/src/session/session-cookie.adapter.ts',
     'frontends/consumer-web/src/search/search-highlight.message-mapper.ts',
     'frontends/consumer-web/src/consumer-web.config.ts',
+    'frontends/restaurant-portal/src/main.tsx',
+    'frontends/restaurant-portal/vite.config.ts',
+    'frontends/restaurant-portal/index.html',
+    'frontends/restaurant-portal/nginx.conf',
     'infra/docker/Dockerfile',
     'infra/envoy/envoy.yaml',
   ])('accepts %s', (path) => {
@@ -206,6 +210,11 @@ describe('findFileNameViolations', () => {
       'services/order/src/domain/order/order.aggregate.tsx',
       'only .ts files are allowed in service domain layer',
     ],
+    [
+      'frontends/restaurant-portal/src/restaurants/main.tsx',
+      'file "main.tsx" needs a role suffix in frontend source',
+    ],
+    ['frontends/restaurant-portal/src/main.ts', 'only .tsx files are allowed in frontend entry'],
     [
       'e2e/browser/consumer-web.ts',
       'file "consumer-web.ts" needs a role suffix in end-to-end tests',
