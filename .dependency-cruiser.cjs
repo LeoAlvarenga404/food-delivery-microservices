@@ -104,7 +104,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: ['(^|/)\\.next/', 'next-env\\.d\\.ts$'] },
+    exclude: { path: ['(^|/)\\.next/', '^frontends/[^/]+/dist/', 'next-env\\.d\\.ts$'] },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.base.json' },
     enhancedResolveOptions: {

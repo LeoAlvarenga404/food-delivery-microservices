@@ -183,6 +183,17 @@ export default defineConfig(
         },
         ...namingConventionOptions,
       ],
+      '@typescript-eslint/restrict-template-expressions': [
+        'error',
+        {
+          allowAny: false,
+          allowBoolean: false,
+          allowNever: false,
+          allowNullish: false,
+          allowNumber: true,
+          allowRegExp: false,
+        },
+      ],
     },
   },
   {
@@ -208,7 +219,12 @@ export default defineConfig(
     rules: { 'max-lines-per-function': 'off', 'max-lines': 'off' },
   },
   {
-    files: ['**/vitest.config.ts', 'frontends/*/next.config.ts', 'e2e/playwright.config.ts'],
+    files: [
+      '**/vitest.config.ts',
+      'frontends/*/next.config.ts',
+      'frontends/*/vite.config.ts',
+      'e2e/playwright.config.ts',
+    ],
     rules: { 'no-restricted-syntax': 'off' },
   },
 );
