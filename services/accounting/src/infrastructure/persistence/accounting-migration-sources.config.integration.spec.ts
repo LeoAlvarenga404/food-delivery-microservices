@@ -29,6 +29,7 @@ describe('accountingMigrationSources', () => {
   it('applies the outbox, inbox and accounting migrations', () => {
     expect(appliedMigrations).toEqual([
       'accounting/0001-create-payments-table',
+      'accounting/0002-add-payment-restaurant-and-delivery-fee',
       'inbox/0001-create-inbox-table',
       'outbox/0001-create-outbox-table',
     ]);

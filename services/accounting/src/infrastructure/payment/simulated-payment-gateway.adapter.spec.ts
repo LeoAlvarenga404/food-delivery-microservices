@@ -25,8 +25,7 @@ function request(
 ): PaymentAuthorizationRequest {
   return {
     idempotencyKey: '0199a5d0-0000-7000-8000-0000000000b1:AuthorizePayment',
-    amountInCents: 9800n,
-    currency: 'BRL',
+    amount: { amountInCents: 9800n, currency: 'BRL' },
     paymentToken: 'tok_visa_4242',
     ...overrides,
   };
@@ -54,7 +53,7 @@ describe('SimulatedPaymentGateway', () => {
 
     await gateway.authorize(request());
     const repeated = await gateway.authorize(
-      request({ paymentToken: 'tok_visa_0002', amountInCents: 1n }),
+      request({ paymentToken: 'tok_visa_0002', amount: { amountInCents: 1n, currency: 'BRL' } }),
     );
 
     expect(repeated).toEqual(right({ authorizationId: 'authorization-1' }));

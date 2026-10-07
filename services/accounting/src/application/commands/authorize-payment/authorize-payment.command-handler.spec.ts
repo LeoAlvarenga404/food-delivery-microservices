@@ -10,6 +10,7 @@ import {
   unwrap,
 } from '../../../../test/support/payment.builder.ts';
 import { parsePaymentId } from '#domain/payment/payment-id.value-object.ts';
+import type { PaymentGateway } from '#application/ports/payment-gateway.port.ts';
 import type { Clock } from '#application/ports/clock.port.ts';
 import type { IdGenerator } from '#application/ports/id-generator.port.ts';
 import type { AccountingReply } from '#application/ports/reply-sender.port.ts';
@@ -17,12 +18,13 @@ import type { AuthorizePaymentCommand } from './authorize-payment.command.ts';
 import { AuthorizePaymentCommandHandler } from './authorize-payment.command-handler.ts';
 
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
-const { consumerId, amountInCents, currency, authorizedAt } = authorizePaymentInput();
+const { consumerId, restaurantId, amount, deliveryFee, authorizedAt } = authorizePaymentInput();
 const command: AuthorizePaymentCommand = {
   orderId,
   consumerId,
-  amountInCents,
-  currency,
+  restaurantId,
+  amount,
+  deliveryFee,
   paymentToken: 'tok_visa_4242',
   sagaId,
   metadata: {
@@ -37,7 +39,7 @@ const clock: Clock = { now: () => authorizedAt };
 
 function authorizePayment(
   unitOfWork: InMemoryUnitOfWork,
-  paymentGateway: FakePaymentGateway,
+  paymentGateway: PaymentGateway,
 ): AuthorizePaymentCommandHandler {
   return new AuthorizePaymentCommandHandler({ unitOfWork, paymentGateway, idGenerator, clock });
 }
@@ -54,8 +56,7 @@ describe('AuthorizePaymentCommandHandler', () => {
     expect(paymentGateway.requests).toEqual([
       {
         idempotencyKey: `${sagaId}:AuthorizePayment`,
-        amountInCents,
-        currency,
+        amount,
         paymentToken: 'tok_visa_4242',
       },
     ]);
@@ -66,6 +67,19 @@ describe('AuthorizePaymentCommandHandler', () => {
     });
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
     expect(unitOfWork.executedMetadata).toEqual([command.metadata]);
+  });
+
+  it('treats an authorization the gateway answered without a reference as a bug and records nothing', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    const blankReferenceGateway: PaymentGateway = {
+      authorize: () => Promise.resolve(right({ authorizationId: ' ' })),
+    };
+
+    const execution = authorizePayment(unitOfWork, blankReferenceGateway).execute(command);
+
+    await expect(execution).rejects.toThrow('without a reference');
+    expect(unitOfWork.payments.rows.size).toBe(0);
+    expect(unitOfWork.replies.sentReplies).toEqual([]);
   });
 
   it('records nothing and replies PaymentFailed when the gateway declines the card', async () => {

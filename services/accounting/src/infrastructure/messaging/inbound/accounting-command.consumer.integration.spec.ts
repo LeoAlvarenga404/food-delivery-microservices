@@ -23,6 +23,7 @@ import {
   authorizePaymentInput,
   orderId,
   paymentId,
+  restaurantId,
 } from '../../../../test/support/payment.builder.ts';
 import { createAccountingUnitOfWork } from '#infrastructure/persistence/accounting-unit-of-work.adapter.ts';
 import { PostgresPaymentRepository } from '#infrastructure/persistence/postgres-payment.repository.ts';
@@ -45,7 +46,9 @@ const { consumerId, authorizedAt, gatewayAuthorizationId } = authorizePaymentInp
 const authorizePayment = {
   orderId,
   consumerId,
+  restaurantId,
   amountInCents: 9800n,
+  deliveryFeeInCents: 800n,
   currency: 'BRL',
   paymentToken: 'tok_visa_4242',
 };

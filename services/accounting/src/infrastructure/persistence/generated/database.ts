@@ -7,9 +7,11 @@ export interface Payments {
   authorizedAt: Timestamp;
   consumerId: string;
   currency: string;
+  deliveryFeeInCents: bigint;
   gatewayAuthorizationId: string;
   orderId: string;
   paymentId: string;
+  restaurantId: string;
   status: string;
   version: number;
 }

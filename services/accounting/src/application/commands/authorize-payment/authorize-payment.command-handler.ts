@@ -7,6 +7,7 @@ import type {
 } from '#application/ports/payment-gateway.port.ts';
 import type { AccountingReply } from '#application/ports/reply-sender.port.ts';
 import type { TransactionScope, UnitOfWork } from '#application/ports/unit-of-work.port.ts';
+import { parseGatewayAuthorizationId } from '#domain/payment/gateway-authorization-id.value-object.ts';
 import type { PaymentId } from '#domain/payment/payment-id.value-object.ts';
 import { Payment } from '#domain/payment/payment.aggregate.ts';
 import type { AuthorizePaymentCommand } from './authorize-payment.command.ts';
@@ -44,7 +45,7 @@ export class AuthorizePaymentCommandHandler {
     scope: TransactionScope,
     command: AuthorizePaymentCommand,
   ): Promise<Either<never, AccountingReply>> {
-    const { orderId, amountInCents, currency, paymentToken, sagaId } = command;
+    const { orderId, amount, paymentToken, sagaId } = command;
     const recorded = await scope.payments.findByOrderId(orderId);
     if (recorded !== undefined) {
       const { paymentId } = recorded.toSnapshot();
@@ -52,8 +53,7 @@ export class AuthorizePaymentCommandHandler {
     }
     const authorization = await this.#dependencies.paymentGateway.authorize({
       idempotencyKey: `${sagaId}:AuthorizePayment`,
-      amountInCents,
-      currency,
+      amount,
       paymentToken,
     });
     if (authorization.isLeft()) {
@@ -69,16 +69,21 @@ export class AuthorizePaymentCommandHandler {
     authorization: GatewayAuthorization,
   ): Promise<PaymentId> {
     const { idGenerator, clock } = this.#dependencies;
-    const { orderId, consumerId, amountInCents, currency } = command;
+    const { orderId, consumerId, restaurantId, amount, deliveryFee } = command;
+    const gatewayAuthorizationId = parseGatewayAuthorizationId(authorization.authorizationId);
+    if (gatewayAuthorizationId.isLeft()) {
+      throw new Error(`the payment gateway authorized order ${orderId} without a reference`);
+    }
     const paymentId = idGenerator.generatePaymentId();
     await scope.payments.save(
       Payment.authorize({
         paymentId,
         orderId,
         consumerId,
-        amountInCents,
-        currency,
-        gatewayAuthorizationId: authorization.authorizationId,
+        restaurantId,
+        amount,
+        deliveryFee,
+        gatewayAuthorizationId: gatewayAuthorizationId.success,
         authorizedAt: clock.now(),
       }),
     );

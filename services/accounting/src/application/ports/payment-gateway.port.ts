@@ -1,10 +1,9 @@
 import type { Either } from '@fd/domain';
-import type { Currency } from '#domain/payment/payment.aggregate.ts';
+import type { Money } from '#domain/payment/money.value-object.ts';
 
 export interface PaymentAuthorizationRequest {
   readonly idempotencyKey: string;
-  readonly amountInCents: bigint;
-  readonly currency: Currency;
+  readonly amount: Money;
   readonly paymentToken: string;
 }
 

@@ -3,9 +3,12 @@ import { authorizePaymentInput, buildPayment } from '../../../test/support/payme
 import { Payment } from './payment.aggregate.ts';
 
 describe('Payment', () => {
-  it('records an authorization the gateway granted, in cents', () => {
+  it('records an authorization the gateway granted, with the restaurant and the delivery fee in cents', () => {
     expect(buildPayment().toSnapshot()).toEqual({
       ...authorizePaymentInput(),
+      restaurantId: '0199a5d0-0000-7000-8000-000000000001',
+      amount: { amountInCents: 9800n, currency: 'BRL' },
+      deliveryFee: { amountInCents: 800n, currency: 'BRL' },
       status: 'AUTHORIZED',
       version: 0,
     });

@@ -28,19 +28,38 @@ describePaymentRepositoryContract(
 
 describe('postgres payments table', () => {
   it.each([
-    { problem: 'a zero amount', amountInCents: 0, currency: 'BRL' },
-    { problem: 'a currency other than BRL', amountInCents: 9800, currency: 'USD' },
-  ])('rejects $problem', async ({ amountInCents, currency }) => {
+    { problem: 'a zero amount', amountInCents: 0, deliveryFeeInCents: 0, currency: 'BRL' },
+    {
+      problem: 'a currency other than BRL',
+      amountInCents: 9800,
+      deliveryFeeInCents: 800,
+      currency: 'USD',
+    },
+    {
+      problem: 'a negative delivery fee',
+      amountInCents: 9800,
+      deliveryFeeInCents: -1,
+      currency: 'BRL',
+    },
+    {
+      problem: 'a delivery fee that leaves nothing for the food',
+      amountInCents: 9800,
+      deliveryFeeInCents: 9800,
+      currency: 'BRL',
+    },
+  ])('rejects $problem', async ({ amountInCents, deliveryFeeInCents, currency }) => {
     const insertion = sql`
       insert into payments (
-        payment_id, order_id, consumer_id, amount_in_cents, currency,
-        gateway_authorization_id, status, authorized_at, version
+        payment_id, order_id, consumer_id, restaurant_id, amount_in_cents,
+        delivery_fee_in_cents, currency, gateway_authorization_id, status, authorized_at, version
       )
       values (
         '0199a5d0-0000-7000-8000-0000000000a1',
         '0199a5d0-0000-7000-8000-0000000000a2',
         '0199a5d0-0000-7000-8000-0000000000a3',
+        '0199a5d0-0000-7000-8000-000000000001',
         ${amountInCents},
+        ${deliveryFeeInCents},
         ${currency},
         'authorization-1',
         'AUTHORIZED',

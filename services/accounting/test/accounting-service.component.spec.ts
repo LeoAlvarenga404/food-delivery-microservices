@@ -74,7 +74,9 @@ async function sendAuthorizePayment(): Promise<void> {
   const authorizePayment = create(AuthorizePaymentSchema, {
     orderId: '0199a5d0-0000-7000-8000-0000000000a1',
     consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
+    restaurantId: '0199a5d0-0000-7000-8000-000000000001',
     amountInCents: 9800n,
+    deliveryFeeInCents: 800n,
     currency: 'BRL',
     paymentToken: 'tok_visa_4242',
   });

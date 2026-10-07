@@ -1,17 +1,20 @@
+import type { ConsumerId } from './consumer-id.value-object.ts';
+import type { GatewayAuthorizationId } from './gateway-authorization-id.value-object.ts';
+import type { Money } from './money.value-object.ts';
 import type { OrderId } from './order-id.value-object.ts';
 import type { PaymentId } from './payment-id.value-object.ts';
-
-export type Currency = 'BRL';
+import type { RestaurantId } from './restaurant-id.value-object.ts';
 
 export type PaymentStatus = 'AUTHORIZED';
 
 export interface AuthorizePaymentInput {
   readonly paymentId: PaymentId;
   readonly orderId: OrderId;
-  readonly consumerId: string;
-  readonly amountInCents: bigint;
-  readonly currency: Currency;
-  readonly gatewayAuthorizationId: string;
+  readonly consumerId: ConsumerId;
+  readonly restaurantId: RestaurantId;
+  readonly amount: Money;
+  readonly deliveryFee: Money;
+  readonly gatewayAuthorizationId: GatewayAuthorizationId;
   readonly authorizedAt: Date;
 }
 

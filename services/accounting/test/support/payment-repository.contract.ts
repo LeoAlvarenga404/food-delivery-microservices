@@ -18,8 +18,11 @@ export function describePaymentRepositoryContract(
       payments = createRepository();
     });
 
-    it('finds a saved payment by its order with the exact amount in cents', async () => {
-      const payment = buildPayment({ amountInCents: amountBeyondSafeIntegerInCents });
+    it('finds a saved payment by its order with the restaurant and the exact amounts in cents', async () => {
+      const payment = buildPayment({
+        amount: { amountInCents: amountBeyondSafeIntegerInCents, currency: 'BRL' },
+        deliveryFee: { amountInCents: 1200n, currency: 'BRL' },
+      });
 
       await payments.save(payment);
 
