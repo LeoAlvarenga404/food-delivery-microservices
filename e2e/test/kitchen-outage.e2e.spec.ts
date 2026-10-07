@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { DockerComposeStack } from './support/docker-compose-stack.adapter.ts';
@@ -13,7 +12,6 @@ const consumerApi = new HttpConsumerApi('consumer-a');
 const stack = new DockerComposeStack();
 const kitchenService = 'kitchen-service';
 const kitchenCommandTopic = 'kitchen.commands';
-const stepTimeoutInMilliseconds = 10_000;
 const recoveryLimitInMilliseconds = 120_000;
 const burstSize = 6;
 const settledOutcomes = [
@@ -52,13 +50,19 @@ async function countKitchenCommands(orderId: string, commandType: string): Promi
   ).length;
 }
 
-async function waitForStepTimeouts(orderId: string, since: Date, count: number): Promise<void> {
+async function waitForStepTimeouts(
+  orderIds: readonly string[],
+  since: Date,
+  count: number,
+): Promise<void> {
   await expect
     .poll(
       async () => {
         const lines = await stack.readLogLinesSince(['order-service'], since);
         return lines.filter(
-          (line) => line.includes(orderId) && line.includes('place order saga step timed out'),
+          (line) =>
+            line.includes('place order saga step timed out') &&
+            orderIds.some((orderId) => line.includes(orderId)),
         ).length;
       },
       { timeout: recoveryLimitInMilliseconds, interval: 1_000 },
@@ -85,7 +89,7 @@ describe('an order whose kitchen goes down in the middle of the saga', () => {
       const orderId = await placeOrder(pizzeriaOrder.paymentToken);
 
       await stack.waitForSagaStep(orderId, 'REJECTING_TICKET');
-      await waitForStepTimeouts(orderId, placedAt, 3);
+      await waitForStepTimeouts([orderId], placedAt, 3);
       await expect(
         consumerApi.waitForOrderStatus(orderId, 'APPROVAL_PENDING'),
       ).resolves.toMatchObject({ status: 'APPROVAL_PENDING' });
@@ -103,6 +107,7 @@ describe('an order whose kitchen goes down in the middle of the saga', () => {
   );
 
   it('settles every order of a burst whose kitchen is killed mid-command, each with a matching ticket', async () => {
+    const placedAt = new Date();
     const orderIds = await Promise.all(
       Array.from({ length: burstSize }, () => placeOrder(pizzeriaOrder.paymentToken)),
     );
@@ -111,7 +116,7 @@ describe('an order whose kitchen goes down in the middle of the saga', () => {
       orderIds.map(async (orderId) => (await readOrder(orderId)).status),
     );
     expect(statusesAtKill).toContain('APPROVAL_PENDING');
-    await delay(stepTimeoutInMilliseconds);
+    await waitForStepTimeouts(orderIds, placedAt, 1);
     await stack.startService(kitchenService);
 
     for (const orderId of orderIds) {
@@ -133,7 +138,7 @@ describe('an order whose kitchen goes down in the middle of the saga', () => {
     await stack.killService(kitchenService);
 
     await stack.waitForSagaStep(orderId, 'APPROVING_TICKET');
-    await waitForStepTimeouts(orderId, placedAt, 2);
+    await waitForStepTimeouts([orderId], placedAt, 2);
     await expect(
       consumerApi.waitForOrderStatus(orderId, 'APPROVAL_PENDING'),
     ).resolves.toMatchObject({ status: 'APPROVAL_PENDING' });
