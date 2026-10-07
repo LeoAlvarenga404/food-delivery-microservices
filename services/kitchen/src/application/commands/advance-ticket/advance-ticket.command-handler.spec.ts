@@ -61,7 +61,7 @@ describe('AdvanceTicketCommandHandler', () => {
     );
 
     expect(outcome).toEqual(
-      right({ ...createTicketInput(), state: { status: 'ACCEPTED', ...acceptance }, version: 1 }),
+      right({ ...createTicketInput(), state: { status: 'ACCEPTED', ...acceptance }, version: 2 }),
     );
     expect((await unitOfWork.tickets.findById(ticketId))?.toSnapshot()).toMatchObject({
       state: { status: 'ACCEPTED', ...acceptance },

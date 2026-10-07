@@ -70,6 +70,7 @@ export class AdvanceTicketCommandHandler {
     const advanced = applyAdvance(ticket, command.advance, this.#dependencies.clock.now());
     if (advanced.isLeft()) return advanced;
     await scope.tickets.save(ticket);
-    return right(ticket.toSnapshot());
+    const snapshot = ticket.toSnapshot();
+    return right({ ...snapshot, version: snapshot.version + 1 });
   }
 }
