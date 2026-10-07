@@ -3,6 +3,7 @@ import { withInbox, type InboxSettings, type TransactionalMessageHandler } from 
 import { PermanentMessageFailure, type MessageHandler } from '@fd/chassis-kafka';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import {
+  AuthorizationVoidedSchema,
   PaymentAuthorizedSchema,
   PaymentFailedSchema,
   PaymentFailureReason,
@@ -30,8 +31,12 @@ import { buildPlaceOrderCommand } from '../../../../test/support/place-order-com
 import { sagaTimeoutsInMilliseconds } from '../../../../test/support/place-order-saga.builder.ts';
 import { buildReplyMessage } from '../../../../test/support/reply-message.builder.ts';
 import type { DB as OrderDatabase } from '#infrastructure/persistence/generated/database.ts';
+import { ApplyPlaceOrderSagaReplyCommandHandler } from '#application/commands/apply-place-order-saga-reply/apply-place-order-saga-reply.command-handler.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
-import { createOrderUnitOfWork } from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
+import {
+  createOrderUnitOfWork,
+  type OrderUnitOfWork,
+} from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
 import { placeOrderSagaReplyConsumer } from './place-order-saga-reply.consumer.ts';
 
@@ -43,9 +48,17 @@ interface OutboxRow {
 }
 
 const orderId = '0199a5d0-0000-7000-8000-0000000000a1';
+const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const repliedAt = new Date('2026-10-02T12:00:30.000Z');
+const deadlineMetadata = {
+  correlationId: '0199a5d0-0000-7000-8000-0000000000e9',
+  causationId: undefined,
+  actorId: undefined,
+  actorType: undefined,
+};
 
 let testDatabase: OrderTestDatabase;
+let unitOfWork: OrderUnitOfWork;
 let handleReply: MessageHandler;
 let consumeReply: TransactionalMessageHandler<OrderDatabase>;
 let inboxSettings: InboxSettings<OrderDatabase>;
@@ -85,6 +98,24 @@ async function readSagaStatus(): Promise<string> {
   return row.status;
 }
 
+async function rejectAtThePaymentDeadline(): Promise<void> {
+  await handleReply(buildReplyMessage(ConsumerVerifiedSchema, { orderId }));
+  await handleReply(buildReplyMessage(TicketCreatedSchema, { orderId, ticketId: 'ticket-1' }));
+  const timeOutPaymentStep = new ApplyPlaceOrderSagaReplyCommandHandler(
+    unitOfWork,
+    new FakeClock(repliedAt),
+    sagaTimeoutsInMilliseconds,
+  );
+  unwrap(
+    await timeOutPaymentStep.execute({
+      sagaId,
+      reply: { type: 'StepTimedOut' },
+      metadata: deadlineMetadata,
+    }),
+  );
+  await handleReply(buildReplyMessage(TicketRejectedSchema, { orderId }));
+}
+
 async function readOrderState() {
   const order = await new PostgresOrderRepository(testDatabase.database).findById(
     buildOrder().toSnapshot().orderId,
@@ -99,7 +130,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await testDatabase.clearWrittenRows();
   logEntries = [];
-  const unitOfWork = createOrderUnitOfWork({
+  unitOfWork = createOrderUnitOfWork({
     database: testDatabase.database,
     generateMessageId: () => {
       messageCount += 1;
@@ -263,6 +294,67 @@ describe('placeOrderSagaReplyConsumer', () => {
     expect(await readOutbox()).toHaveLength(2);
   });
 
+  it('answers the late authorization of an order rejected at the payment deadline with VoidAuthorization', async () => {
+    await rejectAtThePaymentDeadline();
+    const latePaymentAuthorized = buildReplyMessage(PaymentAuthorizedSchema, {
+      orderId,
+      paymentId: 'pay-1',
+    });
+
+    await handleReply(latePaymentAuthorized);
+
+    expect((await readOutbox()).at(-1)).toMatchObject({
+      topic: 'accounting.commands',
+      messageType: 'fooddelivery.accounting.v1.VoidAuthorization',
+      causationId: latePaymentAuthorized.headers.messageId,
+    });
+    expect(await countInboxRows(latePaymentAuthorized.headers.messageId)).toBe(1);
+    expect(await readSagaStatus()).toBe('COMPENSATED');
+    expect(await readOrderState()).toMatchObject({
+      status: 'REJECTED',
+      rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    });
+  });
+
+  it('rolls back the VoidAuthorization and the inbox row when the inbox transaction fails', async () => {
+    await rejectAtThePaymentDeadline();
+    const outboxBeforeLateReply = await readOutbox();
+    const latePaymentAuthorized = buildReplyMessage(PaymentAuthorizedSchema, {
+      orderId,
+      paymentId: 'pay-1',
+    });
+    const failingHandleReply = withInbox(inboxSettings, async (message, transaction) => {
+      await consumeReply(message, transaction);
+      throw new Error('inbox transaction failed');
+    });
+
+    await expect(failingHandleReply(latePaymentAuthorized)).rejects.toThrow(
+      'inbox transaction failed',
+    );
+
+    expect(await readOutbox()).toEqual(outboxBeforeLateReply);
+    expect(await countInboxRows(latePaymentAuthorized.headers.messageId)).toBe(0);
+  });
+
+  it('accepts AuthorizationVoided once the saga is compensated and logs it, sending nothing', async () => {
+    await rejectAtThePaymentDeadline();
+    await handleReply(buildReplyMessage(PaymentAuthorizedSchema, { orderId, paymentId: 'pay-1' }));
+    const outboxBeforeVoided = await readOutbox();
+    const authorizationVoided = buildReplyMessage(AuthorizationVoidedSchema, { orderId });
+
+    await handleReply(authorizationVoided);
+
+    expect(logEntries).toContainEqual(
+      expect.objectContaining({
+        msg: 'place order saga reply applied',
+        messageId: authorizationVoided.headers.messageId,
+        reply: { type: 'AuthorizationVoided' },
+      }),
+    );
+    expect(await readOutbox()).toEqual(outboxBeforeVoided);
+    expect(await readSagaStatus()).toBe('COMPENSATED');
+  });
+
   it('warns about a stray reply for a compensated saga and keeps its inbox row', async () => {
     await handleReply(
       buildReplyMessage(ConsumerVerificationFailedSchema, {
@@ -271,7 +363,7 @@ describe('placeOrderSagaReplyConsumer', () => {
       }),
     );
     const outboxBeforeStrayReply = await readOutbox();
-    const strayReply = buildReplyMessage(PaymentAuthorizedSchema, { orderId, paymentId: 'pay-1' });
+    const strayReply = buildReplyMessage(TicketApprovedSchema, { orderId, ticketId: 'ticket-1' });
 
     await handleReply(strayReply);
 
@@ -282,7 +374,7 @@ describe('placeOrderSagaReplyConsumer', () => {
         failure: {
           type: 'UnexpectedSagaReply',
           step: 'COMPENSATED',
-          replyType: 'PaymentAuthorized',
+          replyType: 'TicketApproved',
         },
       }),
     );

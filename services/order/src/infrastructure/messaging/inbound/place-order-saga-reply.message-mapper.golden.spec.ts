@@ -17,7 +17,7 @@ import {
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import { describe, expect, it } from 'vitest';
 import { buildReplyMessage } from '../../../../test/support/reply-message.builder.ts';
-import type { PlaceOrderSagaReply } from '#application/sagas/place-order/place-order.saga.ts';
+import type { PlaceOrderSagaReply } from '#application/sagas/place-order/place-order.saga-state.ts';
 import { toPlaceOrderSagaReply } from './place-order-saga-reply.message-mapper.ts';
 
 const directory = goldenSamplesDirectory;

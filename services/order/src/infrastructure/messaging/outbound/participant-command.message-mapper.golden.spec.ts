@@ -1,6 +1,9 @@
 import { expectGoldenSample } from '@fd/chassis-testing';
 import { goldenSamplesDirectory } from '@fd/contracts';
-import { AuthorizePaymentSchema } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
+import {
+  AuthorizePaymentSchema,
+  VoidAuthorizationSchema,
+} from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
 import { VerifyConsumerSchema } from '@fd/contracts/fooddelivery/consumer/v1/commands_pb.js';
 import {
   ApproveTicketSchema,
@@ -18,6 +21,7 @@ import {
   toCreateTicket,
   toRejectTicket,
   toVerifyConsumer,
+  toVoidAuthorization,
 } from './participant-command.message-mapper.ts';
 
 const order = buildSagaOrder();
@@ -49,6 +53,13 @@ describe('participant command golden samples', () => {
     await expectGoldenSample(
       { directory, topic: 'kitchen.commands', schema: ApproveTicketSchema },
       toApproveTicket(order),
+    );
+  });
+
+  it('produces the VoidAuthorization sample', async () => {
+    await expectGoldenSample(
+      { directory, topic: 'accounting.commands', schema: VoidAuthorizationSchema },
+      toVoidAuthorization(order),
     );
   });
 

@@ -1,6 +1,7 @@
 import { fromBinary, type DescMessage, type MessageShape } from '@bufbuild/protobuf';
 import { PermanentMessageFailure, type InboundMessage } from '@fd/chassis-kafka';
 import {
+  AuthorizationVoidedSchema,
   PaymentAuthorizedSchema,
   PaymentFailedSchema,
   PaymentFailureReason,
@@ -21,7 +22,7 @@ import type {
   FailureReply,
   PlaceOrderSagaReply,
   SuccessReply,
-} from '#application/sagas/place-order/place-order.saga.ts';
+} from '#application/sagas/place-order/place-order.saga-state.ts';
 import type { OrderRejectionReason } from '#domain/order/order.state.ts';
 
 export interface ReceivedPlaceOrderSagaReply {
@@ -121,6 +122,10 @@ const replyReaders = new Map<string, ReplyReader>([
   [
     TicketRejectedSchema.typeName,
     (payload) => succeeded(decode(TicketRejectedSchema, payload), 'TicketRejected'),
+  ],
+  [
+    AuthorizationVoidedSchema.typeName,
+    (payload) => succeeded(decode(AuthorizationVoidedSchema, payload), 'AuthorizationVoided'),
   ],
 ]);
 

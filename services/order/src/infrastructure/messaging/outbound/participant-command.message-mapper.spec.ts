@@ -6,7 +6,7 @@ import {
   buildSagaOrder,
   sagaPaymentToken,
 } from '../../../../test/support/place-order-saga.builder.ts';
-import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga.ts';
+import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga-state.ts';
 import {
   toAuthorizePayment,
   toParticipantCommandMessage,
@@ -45,6 +45,11 @@ describe('toParticipantCommandMessage', () => {
       command: { type: 'RejectTicket', order },
       topic: 'kitchen.commands',
       messageType: 'fooddelivery.kitchen.v1.RejectTicket',
+    },
+    {
+      command: { type: 'VoidAuthorization', order },
+      topic: 'accounting.commands',
+      messageType: 'fooddelivery.accounting.v1.VoidAuthorization',
     },
   ])('sends $command.type to $topic keyed by the order id', ({ command, topic, messageType }) => {
     const message = toParticipantCommandMessage(command, sagaId);

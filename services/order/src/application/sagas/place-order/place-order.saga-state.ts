@@ -39,6 +39,55 @@ export type PlaceOrderSagaState =
 
 export type PlaceOrderSagaStep = PlaceOrderSagaState['step'];
 
+export interface SuccessReply {
+  readonly type:
+    | 'ConsumerVerified'
+    | 'TicketCreated'
+    | 'PaymentAuthorized'
+    | 'TicketApproved'
+    | 'TicketRejected'
+    | 'AuthorizationVoided';
+}
+
+export interface FailureReply {
+  readonly type: 'ConsumerVerificationFailed' | 'TicketCreationFailed' | 'PaymentFailed';
+  readonly rejectionReason: OrderRejectionReason;
+}
+
+export interface StepTimedOut {
+  readonly type: 'StepTimedOut';
+}
+
+export type PlaceOrderSagaReply = SuccessReply | FailureReply | StepTimedOut;
+
+export type PlaceOrderSagaReplyType = PlaceOrderSagaReply['type'];
+
+export type ParticipantCommand =
+  | {
+      readonly type:
+        'VerifyConsumer' | 'CreateTicket' | 'ApproveTicket' | 'RejectTicket' | 'VoidAuthorization';
+      readonly order: PlaceOrderSagaOrder;
+    }
+  | {
+      readonly type: 'AuthorizePayment';
+      readonly order: PlaceOrderSagaOrder;
+      readonly paymentToken: string;
+    };
+
+export type PlaceOrderSagaCommand =
+  | ParticipantCommand
+  | { readonly type: 'ApproveOrder'; readonly order: PlaceOrderSagaOrder }
+  | {
+      readonly type: 'RejectOrder';
+      readonly order: PlaceOrderSagaOrder;
+      readonly rejectionReason: OrderRejectionReason;
+    };
+
+export interface SagaTransition {
+  readonly state: PlaceOrderSagaState;
+  readonly commands: readonly PlaceOrderSagaCommand[];
+}
+
 export interface PlaceOrderSagaInstance {
   readonly sagaId: string;
   readonly state: PlaceOrderSagaState;
