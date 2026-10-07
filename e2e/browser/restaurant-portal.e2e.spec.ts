@@ -10,11 +10,11 @@ import {
 const portalUrl = process.env['E2E_PORTAL_URL'] ?? 'http://portal.localhost:8080';
 const siteUrl = process.env['E2E_SITE_URL'] ?? 'http://localhost:8080';
 const contentSecurityPolicy =
-  "default-src 'self'; connect-src 'self' http://localhost:8180; frame-ancestors 'none'";
+  "default-src 'self'; connect-src 'self' http://localhost:8180; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 const jsonWebTokenPattern = /eyJ[\w-]+\.eyJ[\w-]+\.[\w-]+/;
 const letters = 'abcdefghijklmnopqrstuvwxyz';
 const restaurantWord = randomLetters(10);
-const restaurantName = `Cantina ${restaurantWord}`;
+const restaurantName = `Cantina <u>${restaurantWord}</u>`;
 const dishName = `Lasagna ${restaurantWord}`;
 const onboardingFields: readonly (readonly [string, string])[] = [
   ['Name', restaurantName],
@@ -124,8 +124,8 @@ test('onboards a restaurant and revises a price, which the consumer site shows o
   page,
   browser,
 }) => {
-  const portalPage = await page.goto(portalUrl);
-  expect(portalPage?.headers()['content-security-policy']).toBe(contentSecurityPolicy);
+  const portalResponse = await page.goto(portalUrl);
+  expect(portalResponse?.headers()['content-security-policy']).toBe(contentSecurityPolicy);
   await signIn(page, 'staff-a');
   await expect(page.getByRole('heading', { name: 'Your restaurants' })).toBeVisible();
   await onboardRestaurant(page);
@@ -137,8 +137,9 @@ test('onboards a restaurant and revises a price, which the consumer site shows o
     ['Price of item 1', '39.90'],
   ]);
   await saveMenu(page, 'Menu saved as version 2.');
-  await page.getByLabel('Price of item 1', { exact: true }).fill('42.50');
+  await page.getByLabel('Price of item 1', { exact: true }).fill('42.5');
   await saveMenu(page, 'Menu saved as version 3.');
+  await expect(page.getByLabel('Price of item 1', { exact: true })).toHaveValue('42.50');
   await page.getByRole('navigation').getByRole('link', { name: 'Your restaurants' }).click();
   await expect(page.getByRole('list', { name: 'Your restaurants' })).toContainText(restaurantName);
   expect(await page.evaluate('JSON.stringify([localStorage, sessionStorage])')).not.toMatch(
