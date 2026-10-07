@@ -12,6 +12,7 @@ import {
   menuOf,
   pizzeriaId,
   staffAId,
+  staffBId,
   unwrap,
 } from '../../../../test/support/restaurant.builder.ts';
 import type { MenuRevised } from '#domain/restaurant/menu-revised.event.ts';
@@ -82,6 +83,18 @@ describe('toRestaurantEventMessages', () => {
     expect(decoded.revisedAt === undefined ? undefined : timestampDate(decoded.revisedAt)).toEqual(
       revisedAt,
     );
+  });
+
+  it('names the members of the restaurant beside the public state, so Kitchen can authorize them', () => {
+    const [message] = toRestaurantEventMessages({
+      ...revisedMenuEvent(),
+      staffMemberIds: [staffAId, staffBId],
+    });
+
+    const decoded = fromBinary(MenuRevisedSchema, message?.payload ?? new Uint8Array());
+
+    expect(decoded.members.map(({ staffMemberId }) => staffMemberId)).toEqual([staffAId, staffBId]);
+    expect(decoded.restaurant).not.toHaveProperty('members');
   });
 
   it.each(contractDaysOfWeek)(

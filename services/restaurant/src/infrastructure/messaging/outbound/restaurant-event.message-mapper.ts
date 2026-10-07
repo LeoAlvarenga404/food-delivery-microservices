@@ -64,6 +64,7 @@ export function toMenuRevisedContract(event: MenuRevised): MenuRevisedContract {
   return create(MenuRevisedSchema, {
     restaurant: toRestaurantContract(event),
     revisedAt: timestampFromDate(event.occurredAt),
+    members: event.staffMemberIds.map((staffMemberId) => ({ staffMemberId })),
   });
 }
 

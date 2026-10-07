@@ -106,6 +106,7 @@ export class Restaurant extends AggregateRoot<RestaurantEvent> {
       restaurantId: this.#restaurantId,
       ...this.#profile,
       menuItems: this.#menuItems,
+      staffMemberIds: this.#members.map(({ staffMemberId }) => staffMemberId),
       version: this.#version + 1,
     });
   }

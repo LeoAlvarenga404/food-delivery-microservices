@@ -36,6 +36,7 @@ describe('Restaurant.onboard', () => {
         restaurantId: pizzeriaId,
         ...pizzeriaProfile,
         menuItems: [],
+        staffMemberIds: [staffAId],
         version: 1,
       },
     ]);
@@ -67,7 +68,13 @@ describe('Restaurant.reviseMenu', () => {
   });
 
   it('records the full public state with the next version', () => {
-    const restaurant = buildRestaurant({ version: 3 });
+    const restaurant = buildRestaurant({
+      version: 3,
+      members: [
+        { staffMemberId: staffAId, role: 'OWNER' },
+        { staffMemberId: staffBId, role: 'OWNER' },
+      ],
+    });
 
     restaurant.reviseMenu(staffAId, menuOf([guarana]), revisedAt);
 
@@ -78,6 +85,7 @@ describe('Restaurant.reviseMenu', () => {
         restaurantId: pizzeriaId,
         ...pizzeriaProfile,
         menuItems: [guarana],
+        staffMemberIds: [staffAId, staffBId],
         version: 4,
       },
     ]);

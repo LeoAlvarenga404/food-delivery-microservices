@@ -61,6 +61,7 @@ describe('OnboardRestaurantCommandHandler', () => {
         restaurantId: pizzeriaId,
         ...pizzeriaProfile,
         menuItems: [],
+        staffMemberIds: [staffAId],
         version: 1,
       },
     ]);
