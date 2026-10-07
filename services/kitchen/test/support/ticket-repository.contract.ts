@@ -1,20 +1,36 @@
 import { ConcurrencyConflictError } from '@fd/chassis-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseOrderId, type OrderId } from '#domain/ticket/order-id.value-object.ts';
+import { parseRestaurantId } from '#domain/ticket/restaurant-id.value-object.ts';
 import { parseTicketId } from '#domain/ticket/ticket-id.value-object.ts';
 import type { Ticket } from '#domain/ticket/ticket.aggregate.ts';
 import type { TicketRepository } from '#domain/ticket/ticket.repository.ts';
+import type { TicketState } from '#domain/ticket/ticket.state.ts';
 import {
   acceptedAt,
   buildTicket,
+  buildTicketIn,
   fifteenMinutes,
   orderId,
   readyBy,
+  restaurantId,
+  ticketId,
   unwrap,
 } from './ticket.builder.ts';
 
 const preparationStartedAt = new Date('2026-10-06T18:02:00.000Z');
 const markedReadyAt = new Date('2026-10-06T18:14:00.000Z');
+const acceptance = { acceptedAt, readyBy };
+
+function ticketNumbered(sequence: number, state: TicketState, otherRestaurantId?: string): Ticket {
+  const hexadecimal = sequence.toString(16).padStart(2, '0');
+  return buildTicketIn(state, {
+    ticketId: unwrap(parseTicketId(`0199a5d0-0000-7000-8000-0000000005${hexadecimal}`)),
+    orderId: unwrap(parseOrderId(`0199a5d0-0000-7000-8000-0000000006${hexadecimal}`)),
+    restaurantId:
+      otherRestaurantId === undefined ? restaurantId : unwrap(parseRestaurantId(otherRestaurantId)),
+  });
+}
 
 async function findStoredTicket(
   tickets: TicketRepository,
@@ -55,6 +71,43 @@ export function describeTicketRepositoryContract(
         ...ticket.toSnapshot(),
         version: 1,
       });
+    });
+
+    it('finds a saved ticket by its id and nothing for an unknown id', async () => {
+      await tickets.save(buildTicket());
+      const unknownTicketId = unwrap(parseTicketId('0199a5d0-0000-7000-8000-0000000000ff'));
+
+      expect((await tickets.findById(ticketId))?.toSnapshot().orderId).toBe(orderId);
+      expect(await tickets.findById(unknownTicketId)).toBeUndefined();
+    });
+
+    it('lists the active tickets of a restaurant in creation order', async () => {
+      const active = [
+        ticketNumbered(5, { status: 'READY_FOR_PICKUP', ...acceptance }),
+        ticketNumbered(2, { status: 'AWAITING_ACCEPTANCE' }),
+        ticketNumbered(4, { status: 'PREPARING', ...acceptance }),
+        ticketNumbered(3, { status: 'ACCEPTED', ...acceptance }),
+      ];
+      const inactive = [
+        ticketNumbered(1, { status: 'CREATE_PENDING' }),
+        ticketNumbered(6, { status: 'REJECTED' }),
+        ticketNumbered(
+          7,
+          { status: 'ACCEPTED', ...acceptance },
+          '0199a5d0-0000-7000-8000-0000000000b7',
+        ),
+      ];
+      for (const ticket of [...active, ...inactive]) await tickets.save(ticket);
+
+      const listed = await tickets.findActiveByRestaurantId(restaurantId);
+
+      expect(listed.map((ticket) => ticket.toSnapshot().state.status)).toEqual([
+        'AWAITING_ACCEPTANCE',
+        'ACCEPTED',
+        'PREPARING',
+        'READY_FOR_PICKUP',
+      ]);
+      expect(listed.map((ticket) => ticket.toSnapshot().version)).toEqual([1, 1, 1, 1]);
     });
 
     it('returns undefined for an order without ticket', async () => {

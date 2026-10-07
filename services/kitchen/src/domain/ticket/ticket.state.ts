@@ -11,3 +11,10 @@ export type TicketState =
     };
 
 export type TicketStatus = TicketState['status'];
+
+export const activeTicketStatuses: readonly TicketStatus[] = [
+  'AWAITING_ACCEPTANCE',
+  'ACCEPTED',
+  'PREPARING',
+  'READY_FOR_PICKUP',
+];

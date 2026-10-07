@@ -56,5 +56,5 @@ export function buildTicketIn(
   state: TicketState,
   overrides: Partial<CreateTicketInput> = {},
 ): Ticket {
-  return Ticket.restore({ ...createTicketInput(overrides), state, version: 1 });
+  return Ticket.restore({ ...createTicketInput(overrides), state, version: 0 });
 }
