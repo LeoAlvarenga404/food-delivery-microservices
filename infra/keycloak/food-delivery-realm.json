@@ -118,6 +118,33 @@
       ]
     },
     {
+      "clientId": "kitchen-display",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://kitchen.localhost:8080/"],
+      "webOrigins": ["http://kitchen.localhost:8080"],
+      "defaultClientScopes": ["basic", "roles"],
+      "optionalClientScopes": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://kitchen.localhost:8080/",
+        "use.refresh.tokens": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "restaurant-bff audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "restaurant-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
       "clientId": "restaurant-bff",
       "publicClient": false,
       "secret": "${RESTAURANT_BFF_CLIENT_SECRET}",

@@ -399,6 +399,17 @@ services:
       <<: *health-timing
       test: ['CMD', 'wget', '--quiet', '--spider', 'http://127.0.0.1:8080/']
 
+  kitchen-display:
+    <<: *application
+    build:
+      context: ..
+      dockerfile: frontends/kitchen-display/Dockerfile
+      args:
+        VITE_KEYCLOAK_ISSUER_URL: http://localhost:8180/realms/food-delivery
+    healthcheck:
+      <<: *health-timing
+      test: ['CMD', 'wget', '--quiet', '--spider', 'http://127.0.0.1:8080/']
+
   envoy:
     <<: *application
     image: envoyproxy/envoy:v1.39.2
@@ -409,6 +420,7 @@ services:
       restaurant-bff: { condition: service_healthy }
       consumer-web: { condition: service_healthy }
       restaurant-portal: { condition: service_healthy }
+      kitchen-display: { condition: service_healthy }
       keycloak: { condition: service_healthy }
       outbox-connectors: { condition: service_completed_successfully }
 
