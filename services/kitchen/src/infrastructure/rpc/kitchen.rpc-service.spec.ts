@@ -252,10 +252,20 @@ describe('KitchenService', () => {
     ]);
   });
 
-  it('refuses a restaurant id that is not a uuid as an invalid argument', async () => {
-    const error = await rejectionOf(clientFor('staff-a-token').listTickets({ restaurantId: 'x' }));
+  it.each([
+    {
+      field: 'restaurant_id',
+      send: (client: Client<typeof KitchenService>) => client.listTickets({ restaurantId: 'x' }),
+    },
+    {
+      field: 'ticket_id',
+      send: (client: Client<typeof KitchenService>) =>
+        client.startPreparingTicket({ restaurantId, ticketId: 'x' }),
+    },
+  ])('refuses a $field that is not a uuid as an invalid argument', async ({ field, send }) => {
+    const error = await rejectionOf(send(clientFor('staff-a-token')));
 
-    expect(error.code).toBe(Code.InvalidArgument);
+    expect([error.code, error.rawMessage]).toEqual([Code.InvalidArgument, field]);
   });
 
   it('answers a ticket changed by someone else meanwhile as aborted, so the display reloads', async () => {

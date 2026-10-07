@@ -1,14 +1,45 @@
-import { fileURLToPath } from 'node:url';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { inboxMigrations } from '@fd/chassis-inbox';
+import { outboxMigrations } from '@fd/chassis-outbox';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
 import { startPostgresContainer, type StartedPostgres } from '@fd/chassis-testing';
+import { sql, type Kysely } from 'kysely';
 import { Cli, TypeScriptSerializer } from 'kysely-codegen';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { kitchenMigrationSources } from './kitchen-migration-sources.config.ts';
 
 const generatedTypesFile = fileURLToPath(new URL('./generated/database.ts', import.meta.url));
+const kitchenMigrationsDirectory = fileURLToPath(new URL('./migrations/', import.meta.url));
+const migrationsSinceTicketLifecycle = new Set([
+  '0003-add-ticket-lifecycle-columns.sql',
+  '0004-create-restaurant-memberships-table.sql',
+]);
 
 let postgres: StartedPostgres;
 let appliedMigrations: readonly string[];
+
+function openDatabase(databaseName: string): Kysely<unknown> {
+  const databaseUrl = new URL(postgres.connectionUri);
+  databaseUrl.pathname = `/${databaseName}`;
+  return createDatabase({
+    connectionString: databaseUrl.toString(),
+    maximumConnectionCount: 1,
+    onConnectionError: () => undefined,
+  });
+}
+
+async function copyKitchenMigrationsBeforeTicketLifecycle(): Promise<URL> {
+  const directory = await mkdtemp(join(tmpdir(), 'kitchen-migrations-'));
+  onTestFinished(() => rm(directory, { recursive: true }));
+  await cp(kitchenMigrationsDirectory, directory, {
+    recursive: true,
+    filter: (source) => !migrationsSinceTicketLifecycle.has(basename(source)),
+  });
+  return pathToFileURL(`${directory}/`);
+}
 
 beforeAll(async () => {
   postgres = await startPostgresContainer();
@@ -50,5 +81,34 @@ describe('kitchenMigrationSources', () => {
     });
 
     await expect(generation).resolves.toContain('export interface DB');
+  });
+
+  it('gives every ticket created before the lifecycle columns the nil consumer id', async () => {
+    const administration = openDatabase('postgres');
+    onTestFinished(() => administration.destroy());
+    await sql`create database consumer_backfill`.execute(administration);
+    const database = openDatabase('consumer_backfill');
+    onTestFinished(() => database.destroy());
+    await migrateToLatest(database, [
+      outboxMigrations,
+      inboxMigrations,
+      { name: 'kitchen', directory: await copyKitchenMigrationsBeforeTicketLifecycle() },
+    ]);
+    await sql`
+      insert into tickets (ticket_id, order_id, restaurant_id, line_items, status, version)
+      values ('0199a5d0-0000-7000-8000-0000000000f1', '0199a5d0-0000-7000-8000-0000000000a1',
+        '0199a5d0-0000-7000-8000-0000000000b1', '[{"name":"Margherita"}]', 'AWAITING_ACCEPTANCE', 1)
+    `.execute(database);
+
+    const backfill = await migrateToLatest(database, kitchenMigrationSources);
+
+    const tickets = await sql<{ readonly consumerId: string }>`
+      select consumer_id from tickets
+    `.execute(database);
+    expect(backfill).toEqual([
+      'kitchen/0003-add-ticket-lifecycle-columns',
+      'kitchen/0004-create-restaurant-memberships-table',
+    ]);
+    expect(tickets.rows).toEqual([{ consumerId: '00000000-0000-0000-0000-000000000000' }]);
   });
 });

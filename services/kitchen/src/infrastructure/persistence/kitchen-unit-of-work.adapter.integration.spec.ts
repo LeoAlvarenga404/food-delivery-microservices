@@ -1,6 +1,8 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { fromBinary } from '@bufbuild/protobuf';
 import { timestampDate } from '@bufbuild/protobuf/wkt';
 import { TicketAcceptedSchema } from '@fd/contracts/fooddelivery/kitchen/v1/events_pb.js';
+import { ConcurrencyConflictError } from '@fd/chassis-postgres';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../../../test/support/clock.fake.ts';
@@ -48,6 +50,19 @@ async function readOutbox(): Promise<readonly OutboxRow[]> {
     from outbox order by id
   `.execute(testDatabase.database);
   return result.rows;
+}
+
+async function waitForBlockedTicketUpdates(expectedCount: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const blocked = await sql`
+      select 1 from pg_stat_activity
+      where wait_event_type = 'Lock' and query ilike 'update "tickets"%'
+    `.execute(testDatabase.database);
+    if (blocked.rows.length === expectedCount) return;
+    await delay(25);
+  }
+  throw new Error(`${String(expectedCount)} ticket updates did not wait for the lock within 5 s`);
 }
 
 function nextMessageId(): string {
@@ -150,15 +165,33 @@ describe('kitchen unit of work', () => {
   });
 
   it('lets one of two simultaneous acceptances win and writes one event, never two', async () => {
-    const outcomes = await Promise.allSettled([
+    const lockHeld = Promise.withResolvers<undefined>();
+    const lockMayBeReleased = Promise.withResolvers<undefined>();
+    const lock = testDatabase.database.transaction().execute(async (transaction) => {
+      await sql`select 1 from tickets where ticket_id = ${ticketId} for update`.execute(
+        transaction,
+      );
+      lockHeld.resolve(undefined);
+      await lockMayBeReleased.promise;
+    });
+    await lockHeld.promise;
+    const racingAcceptances = Promise.allSettled([
       advanceTicket({ type: 'Accept', preparationTimeInMinutes: 15 }),
       advanceTicket({ type: 'Accept', preparationTimeInMinutes: 30 }),
     ]);
+    await waitForBlockedTicketUpdates(2);
+    lockMayBeReleased.resolve(undefined);
+    await lock;
+    const outcomes = await racingAcceptances;
 
     const acceptances = outcomes.filter(
       (outcome) => outcome.status === 'fulfilled' && outcome.value.isRight(),
     );
-    expect(acceptances).toHaveLength(1);
+    const conflicts = outcomes.filter(
+      (outcome) =>
+        outcome.status === 'rejected' && outcome.reason instanceof ConcurrencyConflictError,
+    );
+    expect([acceptances, conflicts].map((outcomesOfKind) => outcomesOfKind.length)).toEqual([1, 1]);
     expect((await readOutbox()).map((row) => row.messageType)).toEqual([
       'fooddelivery.kitchen.v1.TicketAccepted',
     ]);
