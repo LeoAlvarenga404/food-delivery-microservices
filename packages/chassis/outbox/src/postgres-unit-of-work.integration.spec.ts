@@ -1,5 +1,11 @@
+import { runInRootSpan } from '@fd/chassis-observability';
 import { createDatabase, migrateToLatest, runInTransaction } from '@fd/chassis-postgres';
-import { startPostgresContainer, type StartedPostgres } from '@fd/chassis-testing';
+import {
+  recordSpans,
+  startPostgresContainer,
+  traceparentOf,
+  type StartedPostgres,
+} from '@fd/chassis-testing';
 import { AggregateRoot, left, right, type DomainEvent } from '@fd/domain';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -89,12 +95,12 @@ class TabRepository {
 const metadata: MessageMetadata = {
   correlationId: '0192a1b2-0000-7000-8000-0000000000c1',
   causationId: '0192a1b2-0000-7000-8000-0000000000c2',
-  traceparent: undefined,
   actorId: 'consumer-1',
   actorType: 'consumer',
 };
 
 const occurredAt = new Date('2026-10-01T12:00:00.000Z');
+const spans = recordSpans();
 
 function toOutboxMessages(event: TabRenamed): readonly OutboxMessage[] {
   return [
@@ -196,6 +202,23 @@ describe('PostgresUnitOfWork.execute', () => {
         payload: Buffer.from([0x0a, 0x00, 0xff]),
         sagaId: '0192a1b2-0000-7000-8000-0000000000a1',
       }),
+    ]);
+  });
+
+  it('stores the traceparent of the active span on every outbox row it writes', async () => {
+    await runInRootSpan('renaming tab', () =>
+      postgresUnitOfWork().execute(metadata, async (tabs) => {
+        await renameTab(tabs, 'Friday dinner');
+        tabs.enqueueReminder('tab-1');
+        return right(undefined);
+      }),
+    );
+
+    const renamingTabTraceparent = traceparentOf(spans.spansNamed('renaming tab')[0]);
+    const outboxRows = await database.selectFrom('outbox').select('traceparent').execute();
+    expect(outboxRows).toEqual([
+      { traceparent: renamingTabTraceparent },
+      { traceparent: renamingTabTraceparent },
     ]);
   });
 
@@ -340,5 +363,56 @@ describe('PostgresUnitOfWork.executeWithin', () => {
 
     expect(outcome).toEqual(left({ type: 'OuterRejected' }));
     expect(await countRows('markers')).toBe(0);
+  });
+});
+
+describe('PostgresUnitOfWork.joinedTo', () => {
+  it('commits the work with the transaction it joined', async () => {
+    const outboxRowsSeenFromOutside = await runInTransaction(database, async (transaction) => {
+      const outcome = await postgresUnitOfWork()
+        .joinedTo(transaction)
+        .execute(metadata, async (tabs) => {
+          await renameTab(tabs, 'Friday dinner');
+          return right('renamed');
+        });
+      expect(outcome).toEqual(right('renamed'));
+      return countRows('outbox');
+    });
+
+    expect(outboxRowsSeenFromOutside).toBe(0);
+    expect(await countRows('tabs')).toBe(1);
+    expect(await countRows('outbox')).toBe(1);
+  });
+
+  it('rolls the work back with the transaction it joined', async () => {
+    const failing = runInTransaction(database, async (transaction) => {
+      await postgresUnitOfWork()
+        .joinedTo(transaction)
+        .execute(metadata, async (tabs) => {
+          await renameTab(tabs, 'Friday dinner');
+          return right('renamed');
+        });
+      throw new Error('the joined transaction failed');
+    });
+
+    await expect(failing).rejects.toThrow('the joined transaction failed');
+    expect(await countRows('tabs')).toBe(0);
+    expect(await countRows('outbox')).toBe(0);
+  });
+
+  it('discards only its own writes on a left and keeps the joined transaction usable', async () => {
+    await runInTransaction(database, async (transaction) => {
+      await transaction.insertInto('markers').values({ markerId: 'marker-1' }).execute();
+      return postgresUnitOfWork()
+        .joinedTo(transaction)
+        .execute(metadata, async (tabs) => {
+          await renameTab(tabs, 'Friday dinner');
+          return left({ type: 'TabLocked' });
+        });
+    });
+
+    expect(await countRows('markers')).toBe(1);
+    expect(await countRows('tabs')).toBe(0);
+    expect(await countRows('outbox')).toBe(0);
   });
 });

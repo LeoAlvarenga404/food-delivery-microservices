@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { ExternalDependencyFailure } from './external-dependency-failure.ts';
 import { classifyFailure, decideFailureHandling } from './failure-handling.ts';
 import { PermanentMessageFailure } from './permanent-message-failure.ts';
+import { TransientMessageFailure } from './transient-message-failure.ts';
 
 function errorWithCode(code: string): Error {
   return Object.assign(new Error(`failed with ${code}`), { code });
@@ -11,6 +13,20 @@ const almostOne = () => 0.999;
 describe('classifyFailure', () => {
   it('classifies an undecodable or unknown message as permanent', () => {
     expect(classifyFailure(new PermanentMessageFailure('unknown message-type'))).toBe('permanent');
+  });
+
+  it('classifies a failing external dependency as external, even with a network code', () => {
+    const gatewayTimeout = Object.assign(new ExternalDependencyFailure('gateway timed out'), {
+      code: 'ETIMEDOUT',
+    });
+
+    expect(classifyFailure(gatewayTimeout)).toBe('external');
+  });
+
+  it('classifies a dependency the handler reports as briefly unavailable as transient', () => {
+    expect(classifyFailure(new TransientMessageFailure('search index unavailable'))).toBe(
+      'transient',
+    );
   });
 
   it.each([
@@ -48,6 +64,14 @@ describe('decideFailureHandling', () => {
 
   it('dead-letters an unknown failure after the fifth attempt', () => {
     expect(decideFailureHandling('unknown', 5)).toEqual({ kind: 'dead-letter' });
+  });
+
+  it.each([1, 2, 3, 4])('retries an external failure after attempt %i', (attemptCount) => {
+    expect(decideFailureHandling('external', attemptCount).kind).toBe('retry');
+  });
+
+  it('dead-letters an external failure after the fifth attempt', () => {
+    expect(decideFailureHandling('external', 5)).toEqual({ kind: 'dead-letter' });
   });
 
   it('keeps retrying a transient failure without limit', () => {

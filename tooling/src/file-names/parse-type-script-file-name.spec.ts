@@ -15,14 +15,22 @@ describe('parseTypeScriptFileName', () => {
       { concept: 'place-order', role: undefined, testKind: 'component' },
     ],
     ['order.weird.ts', { concept: 'order', role: 'weird', testKind: undefined }],
+    [
+      'add-to-cart.component.tsx',
+      { concept: 'add-to-cart', role: 'component', testKind: undefined },
+    ],
+    ['page.tsx', { concept: 'page', role: undefined, testKind: undefined }],
   ])('parses %s', (fileName, expected) => {
     expect(parseTypeScriptFileName(fileName)).toEqual(expected);
   });
 
-  it.each(['order.json', 'order.aggregate.extra.ts', 'integration.spec.ts', 'spec.ts'])(
-    'rejects %s',
-    (fileName) => {
-      expect(parseTypeScriptFileName(fileName)).toBeUndefined();
-    },
-  );
+  it.each([
+    'order.json',
+    'order.jsx',
+    'order.aggregate.extra.ts',
+    'integration.spec.ts',
+    'spec.ts',
+  ])('rejects %s', (fileName) => {
+    expect(parseTypeScriptFileName(fileName)).toBeUndefined();
+  });
 });

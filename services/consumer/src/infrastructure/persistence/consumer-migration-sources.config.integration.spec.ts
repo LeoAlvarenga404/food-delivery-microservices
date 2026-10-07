@@ -30,6 +30,7 @@ describe('consumerMigrationSources', () => {
     expect(appliedMigrations).toEqual([
       'consumer/0001-create-consumers-table',
       'consumer/0002-seed-consumers',
+      'consumer/0003-add-consumer-registration',
       'inbox/0001-create-inbox-table',
       'outbox/0001-create-outbox-table',
     ]);

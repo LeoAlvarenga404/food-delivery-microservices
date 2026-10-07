@@ -67,8 +67,8 @@ describe('postgres idempotency key store under concurrency', () => {
     expect(isSecondSettled).toBe(false);
     firstMayCommit.resolve(undefined);
 
-    expect(await first).toEqual(firstReservation);
-    expect(await second).toEqual(firstReservation);
+    expect(await first).toEqual({ wasInserted: true, reservation: firstReservation });
+    expect(await second).toEqual({ wasInserted: false, reservation: firstReservation });
   });
 
   it('lets a racing reservation take over the key when the first transaction rolls back', async () => {
@@ -90,8 +90,37 @@ describe('postgres idempotency key store under concurrency', () => {
     firstMayRollBack.resolve(undefined);
 
     await firstOutcome;
-    expect(await second).toEqual(repeatedReservation);
+    expect(await second).toEqual({ wasInserted: true, reservation: repeatedReservation });
     const rows = await testDatabase.database.selectFrom('idempotencyKeys').selectAll().execute();
     expect(rows.map((row) => row.orderId)).toEqual([repeatedReservation.orderId]);
+  });
+});
+
+describe('postgres idempotency key store cleanup', () => {
+  it('deletes the keys reserved more than one day ago and keeps the others', async () => {
+    const now = new Date('2026-10-03T12:00:00.000Z');
+    const store = new PostgresIdempotencyKeyStore(testDatabase.database);
+    const reserveAged = (idempotencyKey: string, ageInMilliseconds: number) =>
+      store.reserve({
+        ...firstReservation,
+        idempotencyKey,
+        createdAt: new Date(now.getTime() - ageInMilliseconds),
+      });
+    await reserveAged('checkout-expired', 86_400_001);
+    await reserveAged('checkout-one-day-old', 86_400_000);
+    await reserveAged('checkout-fresh', 1_000);
+
+    const deletedCount = await store.deleteExpired(now);
+
+    const remaining = await testDatabase.database
+      .selectFrom('idempotencyKeys')
+      .select('idempotencyKey')
+      .orderBy('idempotencyKey')
+      .execute();
+    expect(deletedCount).toBe(1);
+    expect(remaining.map((row) => row.idempotencyKey)).toEqual([
+      'checkout-fresh',
+      'checkout-one-day-old',
+    ]);
   });
 });

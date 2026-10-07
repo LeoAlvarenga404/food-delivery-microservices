@@ -1,0 +1,199 @@
+{
+  "realm": "food-delivery",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "roles": {
+    "realm": [{ "name": "consumer" }, { "name": "restaurant_staff" }, { "name": "courier" }]
+  },
+  "clients": [
+    {
+      "clientId": "e2e",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "consumer-bff audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "consumer-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "restaurant-bff audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "restaurant-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "consumer-bff",
+      "publicClient": false,
+      "secret": "${CONSUMER_BFF_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": { "standard.token.exchange.enabled": "true" },
+      "protocolMappers": [
+        {
+          "name": "order-service audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "order-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "consumer-service audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "consumer-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "consumer-web",
+      "publicClient": false,
+      "secret": "${CONSUMER_WEB_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8080/auth/callback"],
+      "defaultClientScopes": ["basic", "roles"],
+      "optionalClientScopes": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/"
+      },
+      "protocolMappers": [
+        {
+          "name": "consumer-bff audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "consumer-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "restaurant-portal",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://portal.localhost:8080/"],
+      "webOrigins": ["http://portal.localhost:8080"],
+      "defaultClientScopes": ["basic", "roles"],
+      "optionalClientScopes": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://portal.localhost:8080/",
+        "use.refresh.tokens": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "restaurant-bff audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "restaurant-bff",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "restaurant-bff",
+      "publicClient": false,
+      "secret": "${RESTAURANT_BFF_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": { "standard.token.exchange.enabled": "true" },
+      "protocolMappers": [
+        {
+          "name": "restaurant-service audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "restaurant-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "order-service",
+      "bearerOnly": true
+    },
+    {
+      "clientId": "consumer-service",
+      "bearerOnly": true
+    },
+    {
+      "clientId": "restaurant-service",
+      "bearerOnly": true
+    }
+  ],
+  "users": [
+    {
+      "id": "0199a5d0-0000-7000-8000-0000000000c1",
+      "username": "consumer-a",
+      "enabled": true,
+      "email": "consumer-a@food-delivery.test",
+      "emailVerified": true,
+      "firstName": "Consumer",
+      "lastName": "A",
+      "credentials": [{ "type": "password", "value": "consumer-a-password", "temporary": false }],
+      "realmRoles": ["consumer"]
+    },
+    {
+      "id": "0199a5d0-0000-7000-8000-0000000000c2",
+      "username": "consumer-b",
+      "enabled": true,
+      "email": "consumer-b@food-delivery.test",
+      "emailVerified": true,
+      "firstName": "Consumer",
+      "lastName": "B",
+      "credentials": [{ "type": "password", "value": "consumer-b-password", "temporary": false }],
+      "realmRoles": ["consumer"]
+    },
+    {
+      "id": "0199a5d0-0000-7000-8000-0000000000e1",
+      "username": "staff-a",
+      "enabled": true,
+      "email": "staff-a@food-delivery.test",
+      "emailVerified": true,
+      "firstName": "Staff",
+      "lastName": "A",
+      "credentials": [{ "type": "password", "value": "staff-a-password", "temporary": false }],
+      "realmRoles": ["restaurant_staff"]
+    },
+    {
+      "id": "0199a5d0-0000-7000-8000-0000000000e2",
+      "username": "staff-b",
+      "enabled": true,
+      "email": "staff-b@food-delivery.test",
+      "emailVerified": true,
+      "firstName": "Staff",
+      "lastName": "B",
+      "credentials": [{ "type": "password", "value": "staff-b-password", "temporary": false }],
+      "realmRoles": ["restaurant_staff"]
+    }
+  ]
+}

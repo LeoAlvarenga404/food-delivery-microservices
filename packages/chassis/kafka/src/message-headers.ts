@@ -7,14 +7,13 @@ export interface MessageHeaders {
   readonly correlationId: string;
   readonly causationId: string | undefined;
   readonly sagaId: string | undefined;
-  readonly traceparent: string | undefined;
   readonly actorId: string | undefined;
   readonly actorType: string | undefined;
 }
 
 const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function readHeader(rawHeaders: KafkaJS.IHeaders, name: string): string | undefined {
+export function readHeader(rawHeaders: KafkaJS.IHeaders, name: string): string | undefined {
   const header = rawHeaders[name];
   const text = Array.isArray(header) ? header.map(String).join(',') : header?.toString();
   return text === undefined || text.length === 0 ? undefined : text;
@@ -52,7 +51,6 @@ export function parseMessageHeaders(rawHeaders: KafkaJS.IHeaders): MessageHeader
     correlationId: readRequiredIdentifierHeader(rawHeaders, 'correlation-id'),
     causationId: readIdentifierHeader(rawHeaders, 'causation-id'),
     sagaId: readIdentifierHeader(rawHeaders, 'saga-id'),
-    traceparent: readHeader(rawHeaders, 'traceparent'),
     actorId: readHeader(rawHeaders, 'actor-id'),
     actorType: readHeader(rawHeaders, 'actor-type'),
   };

@@ -2,15 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   HttpConsumerApi,
-  pizzeriaOrder,
-  walkingSkeletonConsumerId,
+  openPizzeria,
+  type PizzeriaOrder,
 } from './support/http-consumer-api.adapter.ts';
 
-const consumerApi = new HttpConsumerApi();
+const consumerApi = new HttpConsumerApi('consumer-a');
 const minimumSlowCardExtraDelayInMilliseconds = 6_000;
+let pizzeriaOrder: PizzeriaOrder;
 
 function placementHeaders(idempotencyKey: string): Record<string, string> {
-  return { 'idempotency-key': idempotencyKey, 'x-consumer-id': walkingSkeletonConsumerId };
+  return { 'idempotency-key': idempotencyKey };
 }
 
 async function measureApprovalInMilliseconds(paymentToken: string): Promise<number> {
@@ -24,7 +25,10 @@ async function measureApprovalInMilliseconds(paymentToken: string): Promise<numb
   return Date.now() - placedAtInMilliseconds;
 }
 
-beforeAll(() => consumerApi.waitUntilReachable());
+beforeAll(async () => {
+  await consumerApi.waitUntilReachableAndRegistered();
+  pizzeriaOrder = await openPizzeria();
+});
 
 describe('placing an order through the edge', () => {
   it('approves the order once every participant answered the saga', async () => {
@@ -74,9 +78,7 @@ describe('placing an order through the edge', () => {
   });
 
   it('rejects a placement without Idempotency-Key at the edge before the BFF', async () => {
-    const response = await consumerApi.placeOrder(pizzeriaOrder, {
-      'x-consumer-id': walkingSkeletonConsumerId,
-    });
+    const response = await consumerApi.placeOrder(pizzeriaOrder, {});
 
     expect(response.status).toBe(400);
     expect(response.headers.get('content-type')).toBe('application/problem+json');

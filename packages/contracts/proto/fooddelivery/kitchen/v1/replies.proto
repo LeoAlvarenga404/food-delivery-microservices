@@ -11,3 +11,18 @@ message TicketApproved {
   string order_id = 1;
   string ticket_id = 2;
 }
+
+enum TicketCreationFailureReason {
+  TICKET_CREATION_FAILURE_REASON_UNSPECIFIED = 0;
+  TICKET_CREATION_FAILURE_REASON_EMPTY_TICKET = 1;
+  TICKET_CREATION_FAILURE_REASON_INVALID_QUANTITY = 2;
+}
+
+message TicketCreationFailed {
+  string order_id = 1;
+  TicketCreationFailureReason reason = 2;
+}
+
+message TicketRejected {
+  string order_id = 1;
+}

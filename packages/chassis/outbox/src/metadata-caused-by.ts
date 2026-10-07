@@ -5,7 +5,6 @@ export function metadataCausedBy(headers: MessageHeaders): MessageMetadata {
   return {
     correlationId: headers.correlationId,
     causationId: headers.messageId,
-    traceparent: headers.traceparent,
     actorId: headers.actorId,
     actorType: headers.actorType,
   };

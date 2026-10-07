@@ -46,6 +46,26 @@ describe('findFileNameViolations', () => {
     'e2e/test/place-order.e2e.spec.ts',
     'e2e/test/support/http-consumer-api.adapter.ts',
     'e2e/vitest.config.ts',
+    'e2e/playwright.config.ts',
+    'e2e/browser/consumer-web.e2e.spec.ts',
+    'e2e/browser/support/consumer-web-browser.adapter.ts',
+    'frontends/consumer-web/next.config.ts',
+    'frontends/consumer-web/Dockerfile',
+    'frontends/consumer-web/src/app/layout.tsx',
+    'frontends/consumer-web/src/app/page.tsx',
+    'frontends/consumer-web/src/app/restaurants/[restaurantId]/page.tsx',
+    'frontends/consumer-web/src/app/auth/callback/route.ts',
+    'frontends/consumer-web/src/cart/cart.hook.ts',
+    'frontends/consumer-web/src/cart/cart.hook.spec.ts',
+    'frontends/consumer-web/src/cart/add-to-cart.component.tsx',
+    'frontends/consumer-web/src/orders/place-order.action.ts',
+    'frontends/consumer-web/src/session/session-cookie.adapter.ts',
+    'frontends/consumer-web/src/search/search-highlight.message-mapper.ts',
+    'frontends/consumer-web/src/consumer-web.config.ts',
+    'frontends/restaurant-portal/src/main.tsx',
+    'frontends/restaurant-portal/vite.config.ts',
+    'frontends/restaurant-portal/index.html',
+    'frontends/restaurant-portal/nginx.conf',
     'infra/docker/Dockerfile',
     'infra/envoy/envoy.yaml',
   ])('accepts %s', (path) => {
@@ -149,6 +169,55 @@ describe('findFileNameViolations', () => {
     [
       'packages/contracts/samples/OrderPlaced.json',
       'golden sample must be samples/<topic>/<MessageType>.json',
+    ],
+    [
+      'frontends/consumer-web/src/app/home.tsx',
+      'file "home.tsx" needs a role suffix in frontend routes',
+    ],
+    [
+      'frontends/consumer-web/src/app/cart/cart.component.tsx',
+      'role ".component" is not allowed in frontend routes',
+    ],
+    [
+      'frontends/consumer-web/src/cart/cart.tsx',
+      'file "cart.tsx" needs a role suffix in frontend source',
+    ],
+    [
+      'frontends/consumer-web/src/cart/cart.store.ts',
+      'role ".store" is not allowed in frontend source',
+    ],
+    [
+      'frontends/consumer-web/src/cart/cart.component.jsx',
+      'only .ts and .tsx files are allowed in frontend source',
+    ],
+    [
+      'frontends/consumer-web/src/app/restaurants/[restaurant_id]/page.tsx',
+      'directory "[restaurant_id]" is not kebab-case',
+    ],
+    [
+      'frontends/consumer-web/src/app/restaurants/[RestaurantId]/page.tsx',
+      'directory "[RestaurantId]" is not kebab-case',
+    ],
+    [
+      'frontends/consumer-web/next-page.tsx',
+      'only .ts files are allowed in TypeScript outside catalogued folders',
+    ],
+    [
+      'frontends/consumer-web/src/cart/[restaurantId]/cart.hook.ts',
+      'directory "[restaurantId]" is not kebab-case',
+    ],
+    [
+      'services/order/src/domain/order/order.aggregate.tsx',
+      'only .ts files are allowed in service domain layer',
+    ],
+    [
+      'frontends/restaurant-portal/src/restaurants/main.tsx',
+      'file "main.tsx" needs a role suffix in frontend source',
+    ],
+    ['frontends/restaurant-portal/src/main.ts', 'only .tsx files are allowed in frontend entry'],
+    [
+      'e2e/browser/consumer-web.ts',
+      'file "consumer-web.ts" needs a role suffix in end-to-end tests',
     ],
   ])('rejects %s', (path, expectedReason) => {
     expect(reasonsFor(path)).toEqual([expectedReason]);

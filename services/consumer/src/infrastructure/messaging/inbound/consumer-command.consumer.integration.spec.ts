@@ -3,7 +3,11 @@ import { withInbox, type InboxSettings, type TransactionalMessageHandler } from 
 import { PermanentMessageFailure, type MessageHandler } from '@fd/chassis-kafka';
 import { createLogger } from '@fd/chassis-observability';
 import { VerifyConsumerSchema } from '@fd/contracts/fooddelivery/consumer/v1/commands_pb.js';
-import { ConsumerVerifiedSchema } from '@fd/contracts/fooddelivery/consumer/v1/replies_pb.js';
+import {
+  ConsumerVerificationFailedSchema,
+  ConsumerVerificationFailureReason,
+  ConsumerVerifiedSchema,
+} from '@fd/contracts/fooddelivery/consumer/v1/replies_pb.js';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildCommandMessage } from '../../../../test/support/command-message.builder.ts';
@@ -34,6 +38,7 @@ interface OutboxRow {
 const orderId = '0199a5d0-0000-7000-8000-0000000000a1';
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const blockedConsumerId = unwrap(parseConsumerId('0199a5d0-0000-7000-8000-0000000000c2'));
+const unknownConsumerId = unwrap(parseConsumerId('0199a5d0-0000-7000-8000-0000000000cf'));
 const processedAt = new Date('2026-10-02T12:00:01.000Z');
 
 let testDatabase: ConsumerTestDatabase;
@@ -57,9 +62,17 @@ async function countInboxRows(): Promise<number> {
   return Number(result.rows[0]?.count);
 }
 
+function failingInboxTransaction(): MessageHandler {
+  return withInbox(inboxSettings, async (message, transaction) => {
+    await consumeCommand(message, transaction);
+    throw new Error('inbox transaction failed');
+  });
+}
+
 beforeAll(async () => {
   testDatabase = await startConsumerTestDatabase();
-  await testDatabase.storeConsumers([
+  await testDatabase.replaceConsumers([
+    buildConsumer(),
     buildConsumer({ consumerId: blockedConsumerId, status: 'BLOCKED' }),
   ]);
 });
@@ -132,24 +145,57 @@ describe('consumerCommandConsumer', () => {
       consumerId: activeConsumerId,
       orderId,
     });
-    const failingHandleCommand = withInbox(inboxSettings, async (message, transaction) => {
-      await consumeCommand(message, transaction);
-      throw new Error('inbox transaction failed');
-    });
 
-    await expect(failingHandleCommand(command)).rejects.toThrow('inbox transaction failed');
+    await expect(failingInboxTransaction()(command)).rejects.toThrow('inbox transaction failed');
 
     expect(await readOutbox()).toEqual([]);
     expect(await countInboxRows()).toBe(0);
   });
 
-  it('records a command for a blocked consumer as processed without replying', async () => {
-    await handleCommand(
-      buildCommandMessage(VerifyConsumerSchema, { consumerId: blockedConsumerId, orderId }),
-    );
+  it.each([
+    {
+      consumer: 'a blocked consumer',
+      consumerId: blockedConsumerId,
+      reason: ConsumerVerificationFailureReason.CONSUMER_BLOCKED,
+    },
+    {
+      consumer: 'a consumer it does not know',
+      consumerId: unknownConsumerId,
+      reason: ConsumerVerificationFailureReason.CONSUMER_NOT_FOUND,
+    },
+  ])(
+    'replies ConsumerVerificationFailed for $consumer together with its inbox row',
+    async ({ consumerId, reason }) => {
+      const command = buildCommandMessage(VerifyConsumerSchema, { consumerId, orderId });
+
+      await handleCommand(command);
+
+      const [reply, ...others] = await readOutbox();
+      expect(others).toEqual([]);
+      expect(reply).toMatchObject({
+        topic: 'order.place-order-saga.replies',
+        aggregateId: sagaId,
+        messageType: 'fooddelivery.consumer.v1.ConsumerVerificationFailed',
+        sagaId,
+        causationId: command.headers.messageId,
+      });
+      expect(
+        fromBinary(ConsumerVerificationFailedSchema, reply?.payload ?? new Uint8Array()),
+      ).toMatchObject({ consumerId, orderId, reason });
+      expect(await countInboxRows()).toBe(1);
+    },
+  );
+
+  it('rolls back a failure reply and the inbox row when the inbox transaction fails', async () => {
+    const command = buildCommandMessage(VerifyConsumerSchema, {
+      consumerId: blockedConsumerId,
+      orderId,
+    });
+
+    await expect(failingInboxTransaction()(command)).rejects.toThrow('inbox transaction failed');
 
     expect(await readOutbox()).toEqual([]);
-    expect(await countInboxRows()).toBe(1);
+    expect(await countInboxRows()).toBe(0);
   });
 
   it('dead-letters a command without saga id and keeps it out of the inbox', async () => {

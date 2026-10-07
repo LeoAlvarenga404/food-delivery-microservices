@@ -4,6 +4,11 @@ coverage/
 .turbo/
 *.tsbuildinfo
 packages/contracts/src/generated/
+frontends/*/src/generated/
+.next/
+next-env.d.ts
+playwright-report/
+test-results/
 
 .env
 .env.*

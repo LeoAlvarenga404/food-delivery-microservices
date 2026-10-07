@@ -3,10 +3,15 @@ import { goldenSamplesDirectory } from '@fd/contracts';
 import {
   OrderApprovedSchema,
   OrderPlacedSchema,
+  OrderRejectedSchema,
 } from '@fd/contracts/fooddelivery/order/v1/events_pb.js';
 import { describe, it } from 'vitest';
 import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
-import { toOrderApprovedContract, toOrderPlacedContract } from './order-event.message-mapper.ts';
+import {
+  toOrderApprovedContract,
+  toOrderPlacedContract,
+  toOrderRejectedContract,
+} from './order-event.message-mapper.ts';
 
 const topic = 'order.order.events';
 
@@ -30,6 +35,18 @@ describe('order event golden samples', () => {
     await expectGoldenSample(
       { directory: goldenSamplesDirectory, topic, schema: OrderApprovedSchema },
       toOrderApprovedContract(approved),
+    );
+  });
+
+  it('produces the OrderRejected sample', async () => {
+    const order = buildOrder();
+    unwrap(order.reject('PAYMENT_DECLINED', new Date('2026-10-02T12:00:07.000Z')));
+    const rejected = order.pullRecordedEvents().at(-1);
+    if (rejected?.eventType !== 'OrderRejected') throw new Error('expected OrderRejected');
+
+    await expectGoldenSample(
+      { directory: goldenSamplesDirectory, topic, schema: OrderRejectedSchema },
+      toOrderRejectedContract(rejected),
     );
   });
 });

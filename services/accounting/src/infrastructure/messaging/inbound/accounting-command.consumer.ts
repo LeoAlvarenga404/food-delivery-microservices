@@ -1,13 +1,10 @@
 import type { TransactionalMessageHandler } from '@fd/chassis-inbox';
-import { withCorrelation, type Logger } from '@fd/chassis-observability';
+import { annotateActiveSpan, withCorrelation, type Logger } from '@fd/chassis-observability';
 import { AuthorizePaymentCommandHandler } from '#application/commands/authorize-payment/authorize-payment.command-handler.ts';
 import type { Clock } from '#application/ports/clock.port.ts';
 import type { IdGenerator } from '#application/ports/id-generator.port.ts';
 import type { PaymentGateway } from '#application/ports/payment-gateway.port.ts';
-import {
-  joinTransaction,
-  type AccountingUnitOfWork,
-} from '#infrastructure/persistence/accounting-unit-of-work.adapter.ts';
+import type { AccountingUnitOfWork } from '#infrastructure/persistence/accounting-unit-of-work.adapter.ts';
 import type { DB as AccountingDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { toAuthorizePaymentCommand } from './authorize-payment.message-mapper.ts';
 
@@ -24,6 +21,7 @@ export function accountingCommandConsumer(
 ): TransactionalMessageHandler<AccountingDatabase> {
   return async (message, transaction) => {
     const command = toAuthorizePaymentCommand(message);
+    annotateActiveSpan({ orderId: command.orderId });
     const { messageId, correlationId, causationId } = message.headers;
     const logger = withCorrelation(settings.logger, {
       correlationId,
@@ -33,16 +31,12 @@ export function accountingCommandConsumer(
     });
     const { paymentGateway, idGenerator, clock } = settings;
     const handler = new AuthorizePaymentCommandHandler({
-      unitOfWork: joinTransaction(settings.unitOfWork, transaction),
+      unitOfWork: settings.unitOfWork.joinedTo(transaction),
       paymentGateway,
       idGenerator,
       clock,
     });
     const outcome = await handler.execute(command);
-    if (outcome.isLeft()) {
-      logger.warn({ failure: outcome.failure }, 'payment not authorized, no reply sent');
-      return;
-    }
-    logger.info({ paymentId: outcome.success.paymentId }, 'payment authorized');
+    if (outcome.isRight()) logger.info({ reply: outcome.success }, 'AuthorizePayment answered');
   };
 }

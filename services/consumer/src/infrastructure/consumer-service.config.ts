@@ -8,6 +8,9 @@ export interface ConsumerServiceConfiguration {
   readonly host: string;
   readonly port: number;
   readonly logLevel: LogLevel;
+  readonly housekeepingIntervalInMilliseconds: number;
+  readonly accessTokenIssuer: string;
+  readonly accessTokenJwksUrl: string;
 }
 
 const consumerServiceEnvironmentSchema = z.object({
@@ -16,6 +19,10 @@ const consumerServiceEnvironmentSchema = z.object({
   CONSUMER_SERVICE_HOST: environmentVariables.listenHost,
   CONSUMER_SERVICE_PORT: environmentVariables.listenPort.default(4002),
   LOG_LEVEL: environmentVariables.logLevel,
+  HOUSEKEEPING_INTERVAL_IN_MILLISECONDS:
+    environmentVariables.durationInMilliseconds.default(3_600_000),
+  ACCESS_TOKEN_ISSUER: environmentVariables.httpUrl,
+  ACCESS_TOKEN_JWKS_URL: environmentVariables.httpUrl,
 });
 
 export function readConsumerServiceConfiguration(
@@ -28,5 +35,8 @@ export function readConsumerServiceConfiguration(
     host: variables.CONSUMER_SERVICE_HOST,
     port: variables.CONSUMER_SERVICE_PORT,
     logLevel: variables.LOG_LEVEL,
+    housekeepingIntervalInMilliseconds: variables.HOUSEKEEPING_INTERVAL_IN_MILLISECONDS,
+    accessTokenIssuer: variables.ACCESS_TOKEN_ISSUER,
+    accessTokenJwksUrl: variables.ACCESS_TOKEN_JWKS_URL,
   };
 }

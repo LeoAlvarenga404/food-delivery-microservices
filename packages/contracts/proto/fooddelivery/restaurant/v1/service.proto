@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package fooddelivery.restaurant.v1;
+
+import "fooddelivery/restaurant/v1/events.proto";
+
+service RestaurantService {
+  rpc OnboardRestaurant(OnboardRestaurantRequest) returns (OnboardRestaurantResponse);
+  rpc ReviseMenu(ReviseMenuRequest) returns (ReviseMenuResponse);
+  rpc GetRestaurant(GetRestaurantRequest) returns (GetRestaurantResponse);
+  rpc ListMemberships(ListMembershipsRequest) returns (ListMembershipsResponse);
+}
+
+enum MembershipRole {
+  MEMBERSHIP_ROLE_UNSPECIFIED = 0;
+  MEMBERSHIP_ROLE_OWNER = 1;
+}
+
+message OnboardRestaurantRequest {
+  string name = 1;
+  string category = 2;
+  Address address = 3;
+  string time_zone = 4;
+  repeated OpeningPeriod opening_hours = 5;
+  int64 minimum_order_in_cents = 6;
+}
+
+message OnboardRestaurantResponse {
+  string restaurant_id = 1;
+}
+
+message OnboardRestaurantFailure {
+  string reason = 1;
+}
+
+message ReviseMenuRequest {
+  string restaurant_id = 1;
+  repeated MenuItem menu_items = 2;
+}
+
+message ReviseMenuResponse {
+  int32 version = 1;
+}
+
+message ReviseMenuFailure {
+  string reason = 1;
+}
+
+message GetRestaurantRequest {
+  string restaurant_id = 1;
+}
+
+message GetRestaurantResponse {
+  Restaurant restaurant = 1;
+}
+
+message ListMembershipsRequest {}
+
+message Membership {
+  string restaurant_id = 1;
+  string restaurant_name = 2;
+  MembershipRole role = 3;
+}
+
+message ListMembershipsResponse {
+  repeated Membership memberships = 1;
+}

@@ -40,6 +40,15 @@ describe('outboxConnectors', () => {
         slotName: 'accounting_outbox',
         topicPrefix: 'accounting',
       },
+      {
+        connectorName: 'restaurant-outbox',
+        databaseHost: 'restaurant-db',
+        databaseName: 'restaurant_service',
+        databaseUser: 'restaurant_service',
+        passwordEnvironmentVariable: 'RESTAURANT_DB_PASSWORD',
+        slotName: 'restaurant_outbox',
+        topicPrefix: 'restaurant',
+      },
     ]);
   });
 });

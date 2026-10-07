@@ -66,19 +66,29 @@ module.exports = {
       comment: 'packages, tooling and infrastructure scripts never depend on a service or a BFF',
       severity: 'error',
       from: { path: '^(packages|tooling|infra)/' },
-      to: { path: '^(services|bffs|e2e)/' },
+      to: { path: '^(services|bffs|e2e|frontends)/' },
+    },
+    {
+      name: 'frontends-reach-the-backend-only-over-http',
+      comment: 'ADR-0045: a frontend imports only its own code and its generated client',
+      severity: 'error',
+      from: { path: '^frontends/([^/]+)/' },
+      to: {
+        path: '^(services|bffs|packages|infra|tooling|e2e|frontends)/',
+        pathNot: '^frontends/$1/',
+      },
     },
     {
       name: 'end-to-end-tests-stay-black-box',
       comment: 'design 11: end-to-end tests drive the stack over HTTP and Docker only',
       severity: 'error',
       from: { path: '^e2e/', pathNot: 'vitest\\.config\\.ts$' },
-      to: { path: '^(services|bffs|packages|infra|tooling)/' },
+      to: { path: '^(services|bffs|packages|infra|tooling|frontends)/' },
     },
     {
       name: 'production-code-never-imports-test-code',
       severity: 'error',
-      from: { path: '^(services|bffs)/[^/]+/src/', pathNot: testCode },
+      from: { path: '^(services|bffs|frontends)/[^/]+/src/', pathNot: testCode },
       to: { path: testCode },
     },
     {
@@ -94,12 +104,13 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
+    exclude: { path: ['(^|/)\\.next/', '^frontends/[^/]+/dist/', 'next-env\\.d\\.ts$'] },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.base.json' },
     enhancedResolveOptions: {
       exportsFields: ['exports'],
       conditionNames: ['import', 'default'],
-      extensions: ['.ts', '.js'],
+      extensions: ['.ts', '.tsx', '.js'],
     },
   },
 };

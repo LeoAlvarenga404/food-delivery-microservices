@@ -8,9 +8,22 @@ import type { DB as ConsumerDatabase } from '#infrastructure/persistence/generat
 
 export interface ConsumerTestDatabase {
   readonly database: Kysely<ConsumerDatabase>;
-  readonly storeConsumers: (consumers: readonly Consumer[]) => Promise<void>;
+  readonly replaceConsumers: (consumers: readonly Consumer[]) => Promise<void>;
   readonly clearWrittenRows: () => Promise<void>;
   readonly stop: () => Promise<void>;
+}
+
+async function replaceConsumers(
+  database: Kysely<ConsumerDatabase>,
+  consumers: readonly Consumer[],
+): Promise<void> {
+  await sql`truncate consumers`.execute(database);
+  if (consumers.length === 0) return;
+  const rows = consumers.map((consumer) => consumerPersistenceMapper.toPersistence(consumer));
+  await database
+    .insertInto('consumers')
+    .values(rows.map((row) => ({ ...row, addresses: JSON.stringify(row.addresses) })))
+    .execute();
 }
 
 export async function startConsumerTestDatabase(): Promise<ConsumerTestDatabase> {
@@ -23,13 +36,7 @@ export async function startConsumerTestDatabase(): Promise<ConsumerTestDatabase>
   await migrateToLatest(database, consumerMigrationSources);
   return {
     database,
-    storeConsumers: async (consumers) => {
-      await database
-        .insertInto('consumers')
-        .values(consumers.map((consumer) => consumerPersistenceMapper.toPersistence(consumer)))
-        .onConflict((conflict) => conflict.column('consumerId').doNothing())
-        .execute();
-    },
+    replaceConsumers: (consumers) => replaceConsumers(database, consumers),
     clearWrittenRows: async () => {
       await sql`truncate outbox, inbox`.execute(database);
     },

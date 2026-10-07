@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "generate": {
+      "inputs": ["$TURBO_ROOT$/bffs/consumer-bff/openapi.json"],
+      "outputs": ["src/generated/**"]
+    }
+  }
+}

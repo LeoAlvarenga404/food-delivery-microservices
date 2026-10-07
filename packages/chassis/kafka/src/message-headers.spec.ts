@@ -21,7 +21,6 @@ describe('parseMessageHeaders', () => {
       correlationId: '0192a1b2-0000-7000-8000-0000000000c1',
       causationId: undefined,
       sagaId: '0192a1b2-0000-7000-8000-0000000000a1',
-      traceparent: undefined,
       actorId: 'consumer-1',
       actorType: 'consumer',
     });

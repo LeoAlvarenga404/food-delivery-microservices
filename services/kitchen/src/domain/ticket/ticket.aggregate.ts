@@ -61,16 +61,11 @@ export class Ticket {
   }
 
   approve(): Either<InvalidTicketTransition, undefined> {
-    if (this.#status !== 'CREATE_PENDING') {
-      return left({
-        type: 'InvalidTicketTransition',
-        ticketId: this.#ticketId,
-        from: this.#status,
-        to: 'AWAITING_ACCEPTANCE',
-      });
-    }
-    this.#status = 'AWAITING_ACCEPTANCE';
-    return right(undefined);
+    return this.#leaveCreatePending('AWAITING_ACCEPTANCE');
+  }
+
+  reject(): Either<InvalidTicketTransition, undefined> {
+    return this.#leaveCreatePending('REJECTED');
   }
 
   toSnapshot(): TicketSnapshot {
@@ -82,5 +77,18 @@ export class Ticket {
       status: this.#status,
       version: this.#version,
     };
+  }
+
+  #leaveCreatePending(to: TicketStatus): Either<InvalidTicketTransition, undefined> {
+    if (this.#status !== 'CREATE_PENDING') {
+      return left({
+        type: 'InvalidTicketTransition',
+        ticketId: this.#ticketId,
+        from: this.#status,
+        to,
+      });
+    }
+    this.#status = to;
+    return right(undefined);
   }
 }

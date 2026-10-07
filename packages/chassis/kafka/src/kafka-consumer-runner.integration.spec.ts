@@ -1,14 +1,37 @@
 import { randomUUID } from 'node:crypto';
+import { Writable } from 'node:stream';
 import { setTimeout } from 'node:timers/promises';
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
-import { createLogger } from '@fd/chassis-observability';
-import { startKafkaContainer, type StartedKafka } from '@fd/chassis-testing';
+import { activeTraceparent, createLogger } from '@fd/chassis-observability';
+import {
+  recordSpans,
+  SpanKind,
+  SpanStatusCode,
+  startKafkaContainer,
+  traceparentOf,
+  type StartedKafka,
+} from '@fd/chassis-testing';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { createKafka } from './create-kafka.ts';
+import { ExternalDependencyFailure } from './external-dependency-failure.ts';
 import type { InboundMessage, MessageHandler } from './inbound-message.ts';
 import { startConsumerRunner, type RunningConsumer } from './kafka-consumer-runner.ts';
 
-const silentLogger = createLogger({ serviceName: 'runner-test', level: 'silent' });
+const runnerLogEntries: Record<string, unknown>[] = [];
+const runnerLogDestination = new Writable({
+  write(chunk: Buffer, encoding, callback) {
+    const parsed: unknown = JSON.parse(chunk.toString());
+    runnerLogEntries.push(typeof parsed === 'object' && parsed !== null ? { ...parsed } : {});
+    callback();
+  },
+});
+const runnerLogger = createLogger(
+  { serviceName: 'runner-test', level: 'info' },
+  runnerLogDestination,
+);
+const spans = recordSpans();
+const producerTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+const producerSpanId = '00f067aa0ba902b7';
 
 let kafkaContainer: StartedKafka;
 let kafka: KafkaJS.Kafka;
@@ -88,7 +111,7 @@ async function runScenario(
     groupId,
     topics: [topic],
     handle,
-    logger: silentLogger,
+    logger: runnerLogger,
   });
   onTestFinished(() => runner.stop());
   return { topic, groupId, runner };
@@ -123,7 +146,7 @@ describe('startConsumerRunner', () => {
       groupId: 'orphan-service',
       topics: ['orphan.commands'],
       handle: () => Promise.resolve(),
-      logger: silentLogger,
+      logger: runnerLogger,
     });
 
     await expect(starting).rejects.toThrow(
@@ -227,6 +250,38 @@ describe('startConsumerRunner', () => {
     expect(await committedOffset(scenario.groupId, scenario.topic)).toBe('1');
   });
 
+  it('dead-letters a message whose external dependency keeps failing after five attempts and moves on', async () => {
+    const handled: string[] = [];
+    let attemptCount = 0;
+    const scenario = await runScenario(
+      'external',
+      (message) => {
+        handled.push(payloadText(message));
+        if (payloadText(message) !== 'card-0005') return Promise.resolve();
+        attemptCount += 1;
+        const gatewayTimeout = new ExternalDependencyFailure('gateway timed out');
+        return Promise.reject(Object.assign(gatewayTimeout, { code: 'ETIMEDOUT' }));
+      },
+      ['card-0005', 'card-4242'].map((text) => ({
+        key: 'order-1',
+        value: text,
+        headers: headersFor('Sample'),
+      })),
+    );
+
+    await waitUntil(() => handled.includes('card-4242'));
+    const deadLetter = await readFirstMessage(`${scenario.topic}.${scenario.groupId}.dlq`);
+    await scenario.runner.stop();
+
+    expect(attemptCount).toBe(5);
+    expect(handled.at(-1)).toBe('card-4242');
+    expect(deadLetter.value?.toString()).toBe('card-0005');
+    expect(headerOf(deadLetter, 'error-class')).toBe('external');
+    expect(headerOf(deadLetter, 'error-type')).toBe('ExternalDependencyFailure');
+    expect(headerOf(deadLetter, 'attempt-count')).toBe('5');
+    expect(await committedOffset(scenario.groupId, scenario.topic)).toBe('2');
+  });
+
   it('dead-letters a message without a value as a permanent failure', async () => {
     const handled: string[] = [];
     const scenario = await runScenario(
@@ -276,7 +331,7 @@ describe('startConsumerRunner', () => {
         secondRun.push(payloadText(message));
         return Promise.resolve();
       },
-      logger: silentLogger,
+      logger: runnerLogger,
     });
     onTestFinished(() => restarted.stop());
     await waitUntil(() => secondRun.includes('m2'));
@@ -305,5 +360,64 @@ describe('startConsumerRunner', () => {
 
     expect(attemptCount).toBe(1);
     expect(await committedOffset(scenario.groupId, scenario.topic)).not.toBe('1');
+  });
+
+  it('handles each message in a consumer span that continues the trace of its traceparent header', async () => {
+    const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
+    const traceparentsSeenByHandler: (string | undefined)[] = [];
+    const scenario = await runScenario(
+      'traced',
+      () => {
+        traceparentsSeenByHandler.push(activeTraceparent());
+        return Promise.resolve();
+      },
+      ['m0', 'm1'].map((payload) => ({
+        key: 'order-1',
+        value: payload,
+        headers: {
+          ...headersFor('Sample'),
+          'saga-id': sagaId,
+          traceparent: `00-${producerTraceId}-${producerSpanId}-01`,
+        },
+      })),
+    );
+
+    await waitUntil(() => traceparentsSeenByHandler.length === 2);
+    await scenario.runner.stop();
+
+    const consumedSpans = spans.spansNamed('process traced.commands');
+    const consumed = consumedSpans[1];
+    expect(consumed?.kind).toBe(SpanKind.CONSUMER);
+    expect(consumed?.spanContext().traceId).toBe(producerTraceId);
+    expect(consumed?.parentSpanContext?.spanId).toBe(producerSpanId);
+    expect(consumed?.attributes).toEqual({
+      'messaging.system': 'kafka',
+      'messaging.operation.name': 'process',
+      'messaging.destination.name': 'traced.commands',
+      'messaging.destination.partition.id': '0',
+      'messaging.consumer.group.name': 'traced-service',
+      'messaging.kafka.offset': 1,
+      'fooddelivery.saga.id': sagaId,
+    });
+    expect(traceparentsSeenByHandler).toEqual(consumedSpans.map(traceparentOf));
+  });
+
+  it('marks the consumer span of a dead-lettered message as failed', async () => {
+    runnerLogEntries.length = 0;
+    const scenario = await runScenario('failed', () => Promise.resolve(), [
+      { key: 'order-1', value: 'broken', headers: { 'message-id': randomUUID() } },
+    ]);
+
+    await readFirstMessage(`${scenario.topic}.${scenario.groupId}.dlq`);
+    await scenario.runner.stop();
+
+    const [consumed] = spans.spansNamed('process failed.commands');
+    expect(consumed?.status.code).toBe(SpanStatusCode.ERROR);
+    expect(consumed?.events.map((event) => event.attributes?.['exception.message'])).toEqual([
+      'missing required header message-type',
+    ]);
+    expect(runnerLogEntries.find((entry) => entry['msg'] === 'dead-lettered')?.['trace_id']).toBe(
+      consumed?.spanContext().traceId,
+    );
   });
 });

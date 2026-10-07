@@ -1,12 +1,15 @@
-import { left, right } from '@fd/domain';
+import { right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
 import { FakePaymentGateway } from '../../../../test/support/payment-gateway.fake.ts';
 import {
   authorizePaymentInput,
+  buildPayment,
   orderId,
   paymentId,
+  unwrap,
 } from '../../../../test/support/payment.builder.ts';
+import { parsePaymentId } from '#domain/payment/payment-id.value-object.ts';
 import type { Clock } from '#application/ports/clock.port.ts';
 import type { IdGenerator } from '#application/ports/id-generator.port.ts';
 import type { AccountingReply } from '#application/ports/reply-sender.port.ts';
@@ -25,7 +28,6 @@ const command: AuthorizePaymentCommand = {
   metadata: {
     correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
     causationId: '0199a5d0-0000-7000-8000-000000000d03',
-    traceparent: undefined,
     actorId: undefined,
     actorType: undefined,
   },
@@ -66,17 +68,35 @@ describe('AuthorizePaymentCommandHandler', () => {
     expect(unitOfWork.executedMetadata).toEqual([command.metadata]);
   });
 
-  it('records nothing and sends no reply when the gateway declines the card', async () => {
+  it('records nothing and replies PaymentFailed when the gateway declines the card', async () => {
     const unitOfWork = new InMemoryUnitOfWork();
+    const reply: AccountingReply = { type: 'PaymentFailed', orderId };
 
     const outcome = await authorizePayment(unitOfWork, new FakePaymentGateway(true)).execute(
       command,
     );
 
-    expect(outcome).toEqual(
-      left({ type: 'PaymentDeclined', idempotencyKey: `${sagaId}:AuthorizePayment` }),
-    );
+    expect(outcome).toEqual(right(reply));
     expect(unitOfWork.payments.rows.size).toBe(0);
-    expect(unitOfWork.replies.sentReplies).toEqual([]);
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
+  });
+
+  it('answers a repeated AuthorizePayment with the payment it already recorded, without charging again', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    const recordedPaymentId = unwrap(parsePaymentId('0199a5d0-0000-7000-8000-0000000000ea'));
+    await unitOfWork.payments.save(buildPayment({ paymentId: recordedPaymentId }));
+    const paymentGateway = new FakePaymentGateway();
+    const reply: AccountingReply = {
+      type: 'PaymentAuthorized',
+      orderId,
+      paymentId: recordedPaymentId,
+    };
+
+    const outcome = await authorizePayment(unitOfWork, paymentGateway).execute(command);
+
+    expect(outcome).toEqual(right(reply));
+    expect(paymentGateway.requests).toEqual([]);
+    expect(unitOfWork.payments.rows.size).toBe(1);
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 });

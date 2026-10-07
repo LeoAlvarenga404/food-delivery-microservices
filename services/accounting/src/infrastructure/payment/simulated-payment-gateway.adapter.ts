@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { ExternalDependencyFailure } from '@fd/chassis-kafka';
 import { left, right, type Either } from '@fd/domain';
 import type {
   GatewayAuthorization,
@@ -7,7 +8,7 @@ import type {
   PaymentGateway,
 } from '#application/ports/payment-gateway.port.ts';
 
-export class PaymentGatewayTimeoutError extends Error {
+export class PaymentGatewayTimeoutError extends ExternalDependencyFailure {
   override readonly name = 'PaymentGatewayTimeoutError';
   readonly code = 'ETIMEDOUT';
 }

@@ -1,6 +1,8 @@
 import { STATUS_CODES } from 'node:http';
 import { Code, ConnectError } from '@connectrpc/connect';
+import { RegisterConsumerFailureSchema } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { PlaceOrderFailureSchema } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
+import { SearchRestaurantsFailureSchema } from '@fd/contracts/fooddelivery/restaurant/v1/catalogue_pb.js';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import { z } from 'zod';
@@ -19,8 +21,10 @@ type ProblemExplanation = Pick<ProblemDetails, 'detail' | 'reason'>;
 
 const httpStatusByConnectCode = new Map<Code, number>([
   [Code.InvalidArgument, 400],
+  [Code.Unauthenticated, 401],
+  [Code.PermissionDenied, 403],
   [Code.NotFound, 404],
-  [Code.AlreadyExists, 422],
+  [Code.AlreadyExists, 409],
   [Code.FailedPrecondition, 422],
   [Code.Unavailable, 503],
   [Code.DeadlineExceeded, 504],
@@ -35,7 +39,11 @@ export function problemDetails(
 
 function fromConnectError(error: ConnectError): ProblemDetails {
   const status = httpStatusByConnectCode.get(error.code) ?? 500;
-  const [failure] = error.findDetails(PlaceOrderFailureSchema);
+  const [failure] = [
+    ...error.findDetails(PlaceOrderFailureSchema),
+    ...error.findDetails(RegisterConsumerFailureSchema),
+    ...error.findDetails(SearchRestaurantsFailureSchema),
+  ];
   return problemDetails(status, failure === undefined ? {} : { reason: failure.reason });
 }
 

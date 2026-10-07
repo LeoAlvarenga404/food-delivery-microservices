@@ -1,0 +1,45 @@
+{
+  "name": "@fd/restaurant-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#domain/*": "./src/domain/*",
+    "#application/*": "./src/application/*",
+    "#infrastructure/*": "./src/infrastructure/*"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:golden": "vitest run --project golden",
+    "test:component": "vitest run --project component"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
+    "@connectrpc/connect": "2.2.0",
+    "@connectrpc/connect-fastify": "2.2.0",
+    "@fd/chassis-auth": "workspace:*",
+    "@fd/chassis-config": "workspace:*",
+    "@fd/chassis-kafka": "workspace:*",
+    "@fd/chassis-lifecycle": "workspace:*",
+    "@fd/chassis-observability": "workspace:*",
+    "@fd/chassis-outbox": "workspace:*",
+    "@fd/chassis-postgres": "workspace:*",
+    "@fd/chassis-rpc": "workspace:*",
+    "@fd/contracts": "workspace:*",
+    "@fd/domain": "workspace:*",
+    "@opensearch-project/opensearch": "3.9.0",
+    "fastify": "5.12.5",
+    "kysely": "0.29.6",
+    "uuid": "14.0.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@connectrpc/connect-node": "2.2.0",
+    "@fd/chassis-testing": "workspace:*",
+    "kysely-codegen": "0.20.0",
+    "vitest": "5.0.3"
+  }
+}

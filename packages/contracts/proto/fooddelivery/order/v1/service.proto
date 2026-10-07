@@ -30,7 +30,7 @@ message DeliveryAddress {
 
 message PlaceOrderRequest {
   string idempotency_key = 1;
-  string consumer_id = 2;
+  string consumer_id = 2 [deprecated = true];
   string restaurant_id = 3;
   repeated RequestedLineItem line_items = 4;
   DeliveryAddress delivery_address = 5;
@@ -55,4 +55,5 @@ message GetOrderResponse {
   repeated OrderLineItem line_items = 3;
   int64 total_in_cents = 4;
   string currency = 5;
+  OrderRejectionReason rejection_reason = 6;
 }

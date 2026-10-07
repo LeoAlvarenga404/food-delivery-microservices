@@ -4,15 +4,18 @@ import { metadataCausedBy } from '@fd/chassis-outbox';
 import {
   ApproveTicketSchema,
   CreateTicketSchema,
+  RejectTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { isUuid } from '@fd/domain';
 import type { ApproveTicketCommand } from '#application/commands/approve-ticket/approve-ticket.command.ts';
 import type { CreateTicketCommand } from '#application/commands/create-ticket/create-ticket.command.ts';
+import type { RejectTicketCommand } from '#application/commands/reject-ticket/reject-ticket.command.ts';
 import { parseOrderId, type OrderId } from '#domain/ticket/order-id.value-object.ts';
 
 export type KitchenCommand =
   | { readonly type: 'CreateTicket'; readonly command: CreateTicketCommand }
-  | { readonly type: 'ApproveTicket'; readonly command: ApproveTicketCommand };
+  | { readonly type: 'ApproveTicket'; readonly command: ApproveTicketCommand }
+  | { readonly type: 'RejectTicket'; readonly command: RejectTicketCommand };
 
 function decode<Schema extends DescMessage>(
   schema: Schema,
@@ -64,6 +67,15 @@ function toApproveTicketCommand(message: InboundMessage, sagaId: string): Approv
   };
 }
 
+function toRejectTicketCommand(message: InboundMessage, sagaId: string): RejectTicketCommand {
+  const rejectTicket = decode(RejectTicketSchema, message);
+  return {
+    orderId: requireOrderId(rejectTicket.orderId),
+    sagaId,
+    metadata: metadataCausedBy(message.headers),
+  };
+}
+
 export function toKitchenCommand(message: InboundMessage): KitchenCommand {
   const { messageType, sagaId } = message.headers;
   if (sagaId === undefined) throw new PermanentMessageFailure('command without saga-id header');
@@ -72,6 +84,8 @@ export function toKitchenCommand(message: InboundMessage): KitchenCommand {
       return { type: 'CreateTicket', command: toCreateTicketCommand(message, sagaId) };
     case ApproveTicketSchema.typeName:
       return { type: 'ApproveTicket', command: toApproveTicketCommand(message, sagaId) };
+    case RejectTicketSchema.typeName:
+      return { type: 'RejectTicket', command: toRejectTicketCommand(message, sagaId) };
     default:
       throw new PermanentMessageFailure(`unknown kitchen command ${messageType}`);
   }

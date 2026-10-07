@@ -5,6 +5,7 @@ packages:
   - bffs/*
   - tooling
   - e2e
+  - frontends/*
   - infra
 
 onlyBuiltDependencies:

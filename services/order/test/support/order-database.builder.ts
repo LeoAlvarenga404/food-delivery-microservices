@@ -3,6 +3,8 @@ import { startPostgresContainer } from '@fd/chassis-testing';
 import { sql, type Kysely } from 'kysely';
 import type { DB as OrderDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { orderMigrationSources } from '#infrastructure/persistence/order-migration-sources.config.ts';
+import { PostgresRestaurantMenuRepository } from '#infrastructure/persistence/postgres-restaurant-menu.repository.ts';
+import { pizzeriaMenu } from './order.builder.ts';
 
 export interface OrderTestDatabase {
   readonly database: Kysely<OrderDatabase>;
@@ -19,6 +21,7 @@ export async function startOrderTestDatabase(): Promise<OrderTestDatabase> {
     onConnectionError: () => undefined,
   });
   await migrateToLatest(database, orderMigrationSources);
+  await new PostgresRestaurantMenuRepository(database).saveIfNewer(pizzeriaMenu);
   return {
     database,
     connectionUri: postgres.connectionUri,

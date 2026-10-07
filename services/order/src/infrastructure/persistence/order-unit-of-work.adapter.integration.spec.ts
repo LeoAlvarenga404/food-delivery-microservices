@@ -14,13 +14,10 @@ import {
   buildPlaceOrderCommand,
   requestMetadata,
 } from '../../../test/support/place-order-command.builder.ts';
+import { sagaTimeoutsInMilliseconds } from '../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { UnitOfWork } from '#application/ports/unit-of-work.port.ts';
-import {
-  createOrderUnitOfWork,
-  joinTransaction,
-  type OrderUnitOfWork,
-} from './order-unit-of-work.adapter.ts';
+import { createOrderUnitOfWork, type OrderUnitOfWork } from './order-unit-of-work.adapter.ts';
 
 interface OutboxRow {
   readonly topic: string;
@@ -71,7 +68,12 @@ afterAll(async () => {
 });
 
 function placeOrderWith(orderUnitOfWork: UnitOfWork): PlaceOrderCommandHandler {
-  return new PlaceOrderCommandHandler(orderUnitOfWork, new FakeClock(), new FakeIdGenerator());
+  return new PlaceOrderCommandHandler({
+    unitOfWork: orderUnitOfWork,
+    clock: new FakeClock(),
+    idGenerator: new FakeIdGenerator(),
+    sagaTimeoutsInMilliseconds,
+  });
 }
 
 describe('order unit of work', () => {
@@ -116,7 +118,7 @@ describe('order unit of work', () => {
 
   it('commits or rolls back with the transaction it joined', async () => {
     const rollback = runInTransaction(testDatabase.database, async (transaction) => {
-      const placement = await placeOrderWith(joinTransaction(unitOfWork, transaction)).execute(
+      const placement = await placeOrderWith(unitOfWork.joinedTo(transaction)).execute(
         buildPlaceOrderCommand(),
       );
       expect(placement.isRight()).toBe(true);

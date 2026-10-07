@@ -35,7 +35,13 @@ export class PostgresTicketRepository implements TicketRepository {
     await this.#database
       .insertInto('tickets')
       .values({ ...row, lineItems: JSON.stringify(row.lineItems), version: 1 })
-      .execute();
+      .execute()
+      .catch((error: unknown) => {
+        throw ConcurrencyConflictError.fromUniqueViolation(
+          error,
+          `ticket ${row.ticketId} or a ticket for order ${row.orderId} already exists`,
+        );
+      });
   }
 
   async #update(row: TicketRow): Promise<void> {

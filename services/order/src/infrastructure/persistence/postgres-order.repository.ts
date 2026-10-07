@@ -43,7 +43,13 @@ export class PostgresOrderRepository implements OrderRepository {
     await this.#database
       .insertInto('orders')
       .values({ ...rows.order, version: 1 })
-      .execute();
+      .execute()
+      .catch((error: unknown) => {
+        throw ConcurrencyConflictError.fromUniqueViolation(
+          error,
+          `order ${rows.order.orderId} already exists`,
+        );
+      });
     await this.#database.insertInto('orderLineItems').values(rows.lineItems).execute();
   }
 

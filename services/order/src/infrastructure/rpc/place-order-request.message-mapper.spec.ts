@@ -25,11 +25,16 @@ describe('hashPlaceOrderRequest', () => {
     expect(hashPlaceOrderRequest(other)).toBe(hashPlaceOrderRequest(placeOrderRequest()));
   });
 
+  it('ignores a consumer id sent in the request, because the consumer comes from the access token', () => {
+    const other = { ...placeOrderRequest(), consumerId: '0199a5d0-0000-7000-8000-0000000000c2' };
+
+    expect(hashPlaceOrderRequest(other)).toBe(hashPlaceOrderRequest(placeOrderRequest()));
+  });
+
   it('hashes uppercase and lowercase twins of the same request alike', () => {
     const lowercase = placeOrderRequest();
     const uppercase = create(PlaceOrderRequestSchema, {
       ...lowercase,
-      consumerId: lowercase.consumerId.toUpperCase(),
       restaurantId: lowercase.restaurantId.toUpperCase(),
       lineItems: lowercase.lineItems.map((lineItem) => ({
         ...lineItem,

@@ -22,6 +22,13 @@ export type Work<Repositories, Failure, Success> = (
   repositories: Repositories,
 ) => Promise<Either<Failure, Success>>;
 
+export interface JoinedUnitOfWork<Repositories> {
+  execute<Failure, Success>(
+    metadata: MessageMetadata,
+    work: Work<Repositories, Failure, Success>,
+  ): Promise<Either<Failure, Success>>;
+}
+
 interface OutgoingMessageCollector<RecordedEvent extends DomainEvent> {
   readonly trackedAggregates: AggregateRoot<RecordedEvent>[];
   readonly enqueuedMessages: OutboxMessage[];
@@ -41,6 +48,10 @@ export class PostgresUnitOfWork<Schema, Repositories, RecordedEvent extends Doma
     return runInTransaction(this.#settings.database, (transaction) =>
       this.executeWithin(transaction, metadata, work),
     );
+  }
+
+  joinedTo(transaction: Transaction<Schema>): JoinedUnitOfWork<Repositories> {
+    return { execute: (metadata, work) => this.executeWithin(transaction, metadata, work) };
   }
 
   async executeWithin<Failure, Success>(

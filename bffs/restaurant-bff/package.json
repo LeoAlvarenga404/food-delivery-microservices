@@ -1,0 +1,36 @@
+{
+  "name": "@fd/restaurant-bff",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit",
+    "test:golden": "vitest run --project golden",
+    "test:component": "vitest run --project component"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0",
+    "@connectrpc/connect": "2.2.0",
+    "@connectrpc/connect-node": "2.2.0",
+    "@fastify/swagger": "9.9.1",
+    "@fd/chassis-auth": "workspace:*",
+    "@fd/chassis-config": "workspace:*",
+    "@fd/chassis-lifecycle": "workspace:*",
+    "@fd/chassis-observability": "workspace:*",
+    "@fd/chassis-rpc": "workspace:*",
+    "@fd/contracts": "workspace:*",
+    "@fd/domain": "workspace:*",
+    "fastify": "5.12.5",
+    "fastify-type-provider-zod": "7.0.0",
+    "openapi-types": "12.1.3",
+    "uuid": "14.0.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@connectrpc/connect-fastify": "2.2.0",
+    "@fd/chassis-testing": "workspace:*",
+    "vitest": "5.0.3"
+  }
+}

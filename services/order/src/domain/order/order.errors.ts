@@ -16,6 +16,11 @@ export interface UnknownMenuItem {
   readonly menuItemId: MenuItemId;
 }
 
+export interface UnavailableMenuItem {
+  readonly type: 'UnavailableMenuItem';
+  readonly menuItemId: MenuItemId;
+}
+
 export interface DuplicateMenuItem {
   readonly type: 'DuplicateMenuItem';
   readonly menuItemId: MenuItemId;
@@ -25,8 +30,23 @@ export interface IncompleteDeliveryAddress {
   readonly type: 'IncompleteDeliveryAddress';
 }
 
+export interface RestaurantClosed {
+  readonly type: 'RestaurantClosed';
+}
+
+export interface MinimumOrderNotReached {
+  readonly type: 'MinimumOrderNotReached';
+}
+
 export type OrderPlacementError =
-  EmptyOrder | InvalidQuantity | UnknownMenuItem | DuplicateMenuItem | IncompleteDeliveryAddress;
+  | EmptyOrder
+  | InvalidQuantity
+  | UnknownMenuItem
+  | UnavailableMenuItem
+  | DuplicateMenuItem
+  | IncompleteDeliveryAddress
+  | RestaurantClosed
+  | MinimumOrderNotReached;
 
 export interface InvalidOrderTransition {
   readonly type: 'InvalidOrderTransition';

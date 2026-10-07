@@ -14,10 +14,21 @@ export interface FileNameViolation {
 const conventionalFileNames = ['Dockerfile'];
 const packageEntryPathPattern = /^packages\/(?:chassis\/)?[^/]+\/src\/index\.ts$/;
 const migrationFileNamePattern = /^\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.sql$/;
+const frontendRoutesPathPattern = /^frontends\/[^/]+\/src\/app\//;
+const routeParameterSegmentPattern = /^\[[a-z][a-zA-Z0-9]*\]$/;
+const defaultExtensions = ['.ts'];
 
-function findDirectoryReasons(directorySegments: readonly string[]): readonly string[] {
+function isRouteParameterSegment(path: string, segment: string): boolean {
+  return frontendRoutesPathPattern.test(path) && routeParameterSegmentPattern.test(segment);
+}
+
+function findDirectoryReasons(
+  path: string,
+  directorySegments: readonly string[],
+): readonly string[] {
   return directorySegments
     .filter((segment) => !segment.startsWith('.') && !isKebabCase(segment))
+    .filter((segment) => !isRouteParameterSegment(path, segment))
     .map((segment) => `directory "${segment}" is not kebab-case`);
 }
 
@@ -58,7 +69,10 @@ function findCatalogueReasons(
   rule: CatalogueRule,
 ): readonly string[] {
   if (fileName.endsWith('.sql')) return findMigrationReasons(path, fileName);
-  if (!fileName.endsWith('.ts')) return [`only .ts files are allowed in ${rule.description}`];
+  const extensions = rule.allowedExtensions ?? defaultExtensions;
+  if (!extensions.some((extension) => fileName.endsWith(extension))) {
+    return [`only ${extensions.join(' and ')} files are allowed in ${rule.description}`];
+  }
 
   const parsedName = parseTypeScriptFileName(fileName);
   if (parsedName === undefined) return [`file "${fileName}" does not follow <concept>.<role>.ts`];
@@ -93,7 +107,7 @@ function findPathViolations(
   const segments = path.split('/');
   const fileName = segments.at(-1) ?? '';
   const reasons = [
-    ...findDirectoryReasons(segments.slice(0, -1)),
+    ...findDirectoryReasons(path, segments.slice(0, -1)),
     ...findFileReasons(path, fileName, catalogue),
   ];
   return reasons.map((reason) => ({ path, reason }));

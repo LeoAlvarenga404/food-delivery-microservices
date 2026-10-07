@@ -54,6 +54,17 @@ export function describeTicketRepositoryContract(
       expect({ status, version }).toEqual({ status: 'AWAITING_ACCEPTANCE', version: 2 });
     });
 
+    it('saves the rejection of a stored ticket and increments its version', async () => {
+      await tickets.save(buildTicket());
+      const stored = await findStoredTicket(tickets, orderId);
+      unwrap(stored.reject());
+
+      await tickets.save(stored);
+      const { status, version } = (await findStoredTicket(tickets, orderId)).toSnapshot();
+
+      expect({ status, version }).toEqual({ status: 'REJECTED', version: 2 });
+    });
+
     it('rejects a save based on a version another save already replaced', async () => {
       await tickets.save(buildTicket());
       const first = await findStoredTicket(tickets, orderId);
@@ -65,11 +76,22 @@ export function describeTicketRepositoryContract(
       await expect(tickets.save(second)).rejects.toThrow(ConcurrencyConflictError);
     });
 
-    it('refuses a second ticket for the same order', async () => {
+    it('refuses a second ticket for the same order as a concurrency conflict', async () => {
       await tickets.save(buildTicket());
       const otherTicketId = unwrap(parseTicketId('0199a5d0-0000-7000-8000-0000000000f2'));
 
-      await expect(tickets.save(buildTicket({ ticketId: otherTicketId }))).rejects.toThrow();
+      await expect(tickets.save(buildTicket({ ticketId: otherTicketId }))).rejects.toThrow(
+        ConcurrencyConflictError,
+      );
+    });
+
+    it('refuses a new ticket whose id is already stored as a concurrency conflict', async () => {
+      await tickets.save(buildTicket());
+      const otherOrderId = unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000000af'));
+
+      await expect(tickets.save(buildTicket({ orderId: otherOrderId }))).rejects.toThrow(
+        ConcurrencyConflictError,
+      );
     });
   });
 }

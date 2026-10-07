@@ -1,9 +1,17 @@
 import { fromBinary } from '@bufbuild/protobuf';
 import { withInbox, type InboxSettings, type TransactionalMessageHandler } from '@fd/chassis-inbox';
-import { PermanentMessageFailure, type MessageHandler } from '@fd/chassis-kafka';
+import {
+  ExternalDependencyFailure,
+  PermanentMessageFailure,
+  type MessageHandler,
+} from '@fd/chassis-kafka';
 import { createLogger } from '@fd/chassis-observability';
 import { AuthorizePaymentSchema } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
-import { PaymentAuthorizedSchema } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
+import {
+  PaymentAuthorizedSchema,
+  PaymentFailedSchema,
+  PaymentFailureReason,
+} from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -51,6 +59,13 @@ let messageCount = 0;
 async function countRows(table: 'payments' | 'inbox'): Promise<number> {
   const result = await sql`select 1 from ${sql.table(table)}`.execute(testDatabase.database);
   return result.rows.length;
+}
+
+function failingInboxTransaction(): MessageHandler {
+  return withInbox(inboxSettings, async (message, transaction) => {
+    await consumeCommand(message, transaction);
+    throw new Error('inbox transaction failed');
+  });
 }
 
 async function readOutbox(): Promise<readonly OutboxRow[]> {
@@ -136,42 +151,94 @@ describe('accountingCommandConsumer', () => {
     expect(await readOutbox()).toHaveLength(1);
   });
 
+  it('answers a repeated AuthorizePayment again with the payment it recorded', async () => {
+    const first = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
+    const repeated = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
+
+    await handleCommand(first);
+    await handleCommand(repeated);
+
+    const replies = await readOutbox();
+    expect(replies).toHaveLength(2);
+    expect(replies[1]).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      messageType: 'fooddelivery.accounting.v1.PaymentAuthorized',
+      sagaId,
+      correlationId: repeated.headers.correlationId,
+      causationId: repeated.headers.messageId,
+    });
+    expect(
+      fromBinary(PaymentAuthorizedSchema, replies[1]?.payload ?? new Uint8Array()),
+    ).toMatchObject({ orderId, paymentId });
+    expect(await countRows('payments')).toBe(1);
+    expect(await countRows('inbox')).toBe(2);
+  });
+
+  it('rolls back a repeated reply and its inbox row when the inbox transaction fails', async () => {
+    await handleCommand(buildCommandMessage(AuthorizePaymentSchema, authorizePayment));
+    const repeated = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
+
+    await expect(failingInboxTransaction()(repeated)).rejects.toThrow('inbox transaction failed');
+
+    expect(await readOutbox()).toHaveLength(1);
+    expect(await countRows('inbox')).toBe(1);
+  });
+
   it('rolls back the payment, the reply and the inbox row when the inbox transaction fails', async () => {
     const command = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
-    const failingHandleCommand = withInbox(inboxSettings, async (message, transaction) => {
-      await consumeCommand(message, transaction);
-      throw new Error('inbox transaction failed');
-    });
 
-    await expect(failingHandleCommand(command)).rejects.toThrow('inbox transaction failed');
+    await expect(failingInboxTransaction()(command)).rejects.toThrow('inbox transaction failed');
 
     expect(await readOutbox()).toEqual([]);
     expect(await countRows('inbox')).toBe(0);
     expect(await countRows('payments')).toBe(0);
   });
 
-  it('records a declined card as processed without a payment or a reply', async () => {
-    await handleCommand(
-      buildCommandMessage(AuthorizePaymentSchema, {
-        ...authorizePayment,
-        paymentToken: 'tok_visa_0002',
-      }),
-    );
+  it('replies PaymentFailed for a declined card together with its inbox row and no payment', async () => {
+    const command = buildCommandMessage(AuthorizePaymentSchema, {
+      ...authorizePayment,
+      paymentToken: 'tok_visa_0002',
+    });
 
-    expect(await readOutbox()).toEqual([]);
+    await handleCommand(command);
+
+    const [reply, ...others] = await readOutbox();
+    expect(others).toEqual([]);
+    expect(reply).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      messageType: 'fooddelivery.accounting.v1.PaymentFailed',
+      sagaId,
+      causationId: command.headers.messageId,
+    });
+    expect(fromBinary(PaymentFailedSchema, reply?.payload ?? new Uint8Array())).toMatchObject({
+      orderId,
+      reason: PaymentFailureReason.PAYMENT_DECLINED,
+    });
     expect(await countRows('inbox')).toBe(1);
-    expect(
-      await new PostgresPaymentRepository(testDatabase.database).findByOrderId(orderId),
-    ).toBeUndefined();
+    expect(await countRows('payments')).toBe(0);
   });
 
-  it('leaves a gateway timeout to the retries of the consumer runner', async () => {
+  it('rolls back a failure reply and the inbox row when the inbox transaction fails', async () => {
+    const command = buildCommandMessage(AuthorizePaymentSchema, {
+      ...authorizePayment,
+      paymentToken: 'tok_visa_0002',
+    });
+
+    await expect(failingInboxTransaction()(command)).rejects.toThrow('inbox transaction failed');
+
+    expect(await readOutbox()).toEqual([]);
+    expect(await countRows('inbox')).toBe(0);
+  });
+
+  it('leaves a gateway timeout to the bounded retries of the consumer runner', async () => {
     const command = buildCommandMessage(AuthorizePaymentSchema, {
       ...authorizePayment,
       paymentToken: 'tok_visa_0005',
     });
 
-    await expect(handleCommand(command)).rejects.toMatchObject({ code: 'ETIMEDOUT' });
+    await expect(handleCommand(command)).rejects.toThrow(ExternalDependencyFailure);
     expect(await readOutbox()).toEqual([]);
     expect(await countRows('inbox')).toBe(0);
     expect(await countRows('payments')).toBe(0);

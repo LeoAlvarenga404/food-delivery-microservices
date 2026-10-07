@@ -1,8 +1,9 @@
-import { left } from '@fd/domain';
+import { left, right } from '@fd/domain';
 import { describe, expect, it } from 'vitest';
 import {
   buildOrder,
   calabresaId,
+  fridayEveningHours,
   guaranaId,
   margheritaId,
   orderInput,
@@ -10,9 +11,12 @@ import {
   unwrap,
 } from '../../../test/support/order.builder.ts';
 import { Order } from './order.aggregate.ts';
+import type { OrderPlacementError } from './order.errors.ts';
+import type { PlaceOrderInput } from './order-placement.policy.ts';
 
 const placedAt = new Date('2026-10-02T12:00:00.000Z');
 const approvedAt = new Date('2026-10-02T12:00:05.000Z');
+const rejectedAt = new Date('2026-10-02T12:00:07.000Z');
 const frozenLineItems = [
   { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: 4500n, quantity: 2 },
   { menuItemId: guaranaId, name: 'Guarana', unitPriceInCents: 800n, quantity: 1 },
@@ -101,6 +105,81 @@ describe('Order.place', () => {
       );
     },
   );
+
+  it('rejects a menu item the restaurant made unavailable', () => {
+    const menu = {
+      ...pizzeriaMenu,
+      items: pizzeriaMenu.items.map((item) =>
+        item.menuItemId === guaranaId ? { ...item, isAvailable: false } : item,
+      ),
+    };
+
+    expect(Order.place(orderInput({ menu }))).toEqual(
+      left({ type: 'UnavailableMenuItem', menuItemId: guaranaId }),
+    );
+  });
+
+  it('rejects an order placed while the restaurant is closed', () => {
+    const menu = { ...pizzeriaMenu, openingHours: fridayEveningHours };
+
+    expect(Order.place(orderInput({ menu }))).toEqual(left({ type: 'RestaurantClosed' }));
+  });
+
+  it('places an order at the opening minute of the restaurant', () => {
+    const menu = { ...pizzeriaMenu, openingHours: fridayEveningHours };
+    const openingMinute = new Date('2026-10-02T21:00:00.000Z');
+
+    expect(Order.place(orderInput({ menu, placedAt: openingMinute })).isRight()).toBe(true);
+  });
+
+  it('places an order whose total reaches the minimum order exactly', () => {
+    const menu = { ...pizzeriaMenu, minimumOrderInCents: 9800n };
+
+    expect(Order.place(orderInput({ menu })).isRight()).toBe(true);
+  });
+
+  it('rejects an order one cent below the minimum order', () => {
+    const menu = { ...pizzeriaMenu, minimumOrderInCents: 9801n };
+
+    expect(Order.place(orderInput({ menu }))).toEqual(left({ type: 'MinimumOrderNotReached' }));
+  });
+
+  it.each<{
+    readonly precedence: string;
+    readonly overrides: Partial<PlaceOrderInput>;
+    readonly failure: OrderPlacementError;
+  }>([
+    {
+      precedence: 'an unavailable item before a closed restaurant',
+      overrides: {
+        menu: {
+          ...pizzeriaMenu,
+          openingHours: fridayEveningHours,
+          items: pizzeriaMenu.items.map((item) =>
+            item.menuItemId === guaranaId ? { ...item, isAvailable: false } : item,
+          ),
+        },
+      },
+      failure: { type: 'UnavailableMenuItem', menuItemId: guaranaId },
+    },
+    {
+      precedence: 'a closed restaurant before the minimum order',
+      overrides: {
+        menu: { ...pizzeriaMenu, openingHours: fridayEveningHours, minimumOrderInCents: 9801n },
+      },
+      failure: { type: 'RestaurantClosed' },
+    },
+    {
+      precedence: 'an incomplete delivery address before a closed restaurant',
+      overrides: {
+        menu: { ...pizzeriaMenu, openingHours: fridayEveningHours },
+        deliveryAddress: { ...orderInput().deliveryAddress, street: '  ' },
+      },
+      failure: { type: 'IncompleteDeliveryAddress' },
+    },
+  ])('refuses $precedence', ({ overrides, failure }) => {
+    expect(Order.place(orderInput(overrides))).toEqual(left(failure));
+  });
 });
 
 describe('Order.approve', () => {
@@ -134,6 +213,66 @@ describe('Order.approve', () => {
   });
 });
 
+describe('Order.reject', () => {
+  it('rejects a pending order with its reason and records OrderRejected', () => {
+    const order = buildOrder();
+    order.pullRecordedEvents();
+
+    expect(order.reject('PAYMENT_DECLINED', rejectedAt)).toEqual(right(undefined));
+    expect(order.toSnapshot().state).toEqual({
+      status: 'REJECTED',
+      rejectionReason: 'PAYMENT_DECLINED',
+      rejectedAt,
+    });
+    expect(order.pullRecordedEvents()).toEqual([
+      {
+        eventType: 'OrderRejected',
+        occurredAt: rejectedAt,
+        orderId: '0199a5d0-0000-7000-8000-0000000000a1',
+        rejectionReason: 'PAYMENT_DECLINED',
+      },
+    ]);
+  });
+
+  it('refuses to reject an approved order and records nothing', () => {
+    const order = buildOrder();
+    unwrap(order.approve(approvedAt));
+    order.pullRecordedEvents();
+
+    expect(order.reject('PAYMENT_DECLINED', rejectedAt)).toEqual(
+      left({ type: 'InvalidOrderTransition', from: 'APPROVED', to: 'REJECTED' }),
+    );
+    expect(order.toSnapshot().state).toEqual({ status: 'APPROVED', approvedAt });
+    expect(order.pullRecordedEvents()).toEqual([]);
+  });
+
+  it('refuses to reject an order twice and keeps the first reason', () => {
+    const order = buildOrder();
+    unwrap(order.reject('CONSUMER_BLOCKED', rejectedAt));
+    order.pullRecordedEvents();
+
+    expect(order.reject('PAYMENT_DECLINED', new Date('2026-10-02T12:10:00.000Z'))).toEqual(
+      left({ type: 'InvalidOrderTransition', from: 'REJECTED', to: 'REJECTED' }),
+    );
+    expect(order.toSnapshot().state).toEqual({
+      status: 'REJECTED',
+      rejectionReason: 'CONSUMER_BLOCKED',
+      rejectedAt,
+    });
+    expect(order.pullRecordedEvents()).toEqual([]);
+  });
+
+  it('refuses to approve a rejected order', () => {
+    const order = buildOrder();
+    unwrap(order.reject('CONSUMER_NOT_FOUND', rejectedAt));
+
+    expect(order.approve(approvedAt)).toEqual(
+      left({ type: 'InvalidOrderTransition', from: 'REJECTED', to: 'APPROVED' }),
+    );
+    expect(order.toSnapshot().state.status).toBe('REJECTED');
+  });
+});
+
 describe('Order.restore', () => {
   it('rehydrates an approved snapshot without recording events', () => {
     const order = buildOrder();
@@ -144,5 +283,16 @@ describe('Order.restore', () => {
 
     expect(restored.toSnapshot()).toEqual(snapshot);
     expect(restored.pullRecordedEvents()).toEqual([]);
+  });
+
+  it('rehydrates a rejected snapshot that can no longer be approved', () => {
+    const order = buildOrder();
+    unwrap(order.reject('TICKET_REFUSED', rejectedAt));
+    const snapshot = { ...order.toSnapshot(), version: 2 };
+
+    const restored = Order.restore(snapshot);
+
+    expect(restored.toSnapshot()).toEqual(snapshot);
+    expect(restored.approve(approvedAt).isLeft()).toBe(true);
   });
 });

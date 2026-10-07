@@ -1,5 +1,8 @@
 import { createLogger } from '@fd/chassis-observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FakeConsumerService } from '../test/support/consumer-service.fake.ts';
+import { FakeRestaurantCatalogueService } from '../test/support/restaurant-catalogue-service.fake.ts';
+import { fakeServiceAccess } from '../test/support/service-access.fake.ts';
 import { FakeOrderService } from '../test/support/order-service.fake.ts';
 import { createConsumerBffServer, type ConsumerBffServer } from './main.ts';
 
@@ -10,6 +13,9 @@ let server: ConsumerBffServer;
 beforeEach(async () => {
   server = await createConsumerBffServer({
     orderService: new FakeOrderService().client(),
+    consumerService: new FakeConsumerService().client(),
+    restaurantCatalogueService: new FakeRestaurantCatalogueService().client(),
+    serviceAccess: fakeServiceAccess,
     logger: createLogger({ serviceName: 'consumer-bff', level: 'silent' }),
     generateCorrelationId: () => generatedCorrelationId,
   });
@@ -36,12 +42,23 @@ describe('consumer bff server', () => {
     const response = await server.inject({
       method: 'POST',
       url: '/v1/orders',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', authorization: 'Bearer consumer-token' },
       payload: '{"restaurantId":',
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toMatchObject({ title: 'Bad Request', status: 400 });
+  });
+
+  it('refuses an anonymous body that is not JSON before parsing it', async () => {
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/orders',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"restaurantId":',
+    });
+
+    expect(response.statusCode).toBe(401);
   });
 
   it('answers a malformed percent-encoded path with a bad request problem and a correlation id', async () => {
@@ -74,7 +91,12 @@ describe('consumer bff server', () => {
   });
 
   it('echoes the correlation id on a problem', async () => {
-    const response = await server.inject({ method: 'POST', url: '/v1/orders', payload: {} });
+    const response = await server.inject({
+      method: 'POST',
+      url: '/v1/orders',
+      headers: { authorization: 'Bearer consumer-token' },
+      payload: {},
+    });
 
     expect(response.statusCode).toBe(400);
     expect(response.headers['x-correlation-id']).toBe(generatedCorrelationId);
@@ -90,10 +112,7 @@ describe('consumer bff server', () => {
       paths: {
         '/v1/orders': {
           post: {
-            parameters: [
-              { in: 'header', name: 'idempotency-key', required: true },
-              { in: 'header', name: 'x-consumer-id', required: true },
-            ],
+            parameters: [{ in: 'header', name: 'idempotency-key', required: true }],
             requestBody: {
               content: {
                 'application/json': {
@@ -120,12 +139,53 @@ describe('consumer bff server', () => {
     });
   });
 
+  it('documents the rejection reason of an order as an optional enumeration', async () => {
+    const response = await server.inject({ method: 'GET', url: '/openapi.json' });
+
+    const document: unknown = response.json();
+    expect(document).toMatchObject({
+      paths: {
+        '/v1/orders/{orderId}': {
+          get: {
+            responses: {
+              200: {
+                content: {
+                  'application/json': {
+                    schema: {
+                      required: ['orderId', 'status', 'lineItems', 'totalInCents', 'currency'],
+                      properties: {
+                        rejectionReason: {
+                          enum: [
+                            'CONSUMER_NOT_FOUND',
+                            'CONSUMER_BLOCKED',
+                            'TICKET_REFUSED',
+                            'PAYMENT_DECLINED',
+                            'CONSUMER_VERIFICATION_TIMED_OUT',
+                            'TICKET_CREATION_TIMED_OUT',
+                            'PAYMENT_AUTHORIZATION_TIMED_OUT',
+                          ],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
   it('keeps operational routes out of the OpenAPI document', async () => {
     const response = await server.inject({ method: 'GET', url: '/openapi.json' });
 
     expect(Object.keys(response.json<{ paths: object }>().paths)).toEqual([
       '/v1/orders',
       '/v1/orders/{orderId}',
+      '/v1/consumers/me',
+      '/v1/restaurants',
+      '/v1/restaurants/{restaurantId}',
     ]);
   });
 });

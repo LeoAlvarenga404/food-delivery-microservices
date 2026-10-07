@@ -13,13 +13,37 @@ export class PostgresRestaurantMenuRepository implements RestaurantMenuRepositor
   }
 
   async findByRestaurantId(restaurantId: RestaurantId): Promise<RestaurantMenu | undefined> {
-    const rows = await this.#database
-      .selectFrom('menuItems')
+    const row = await this.#database
+      .selectFrom('restaurantMenus')
       .selectAll()
       .where('restaurantId', '=', restaurantId)
-      .orderBy('menuItemId')
-      .execute();
-    if (rows.length === 0) return undefined;
-    return restaurantMenuPersistenceMapper.toDomain(restaurantId, rows);
+      .executeTakeFirst();
+    return row === undefined ? undefined : restaurantMenuPersistenceMapper.toDomain(row);
+  }
+
+  async saveIfNewer(menu: RestaurantMenu): Promise<boolean> {
+    const row = restaurantMenuPersistenceMapper.toPersistence(menu);
+    const savedRow = await this.#database
+      .insertInto('restaurantMenus')
+      .values({
+        ...row,
+        openingHours: JSON.stringify(row.openingHours),
+        menuItems: JSON.stringify(row.menuItems),
+      })
+      .onConflict((conflict) =>
+        conflict
+          .column('restaurantId')
+          .doUpdateSet((update) => ({
+            version: update.ref('excluded.version'),
+            timeZone: update.ref('excluded.timeZone'),
+            openingHours: update.ref('excluded.openingHours'),
+            minimumOrderInCents: update.ref('excluded.minimumOrderInCents'),
+            menuItems: update.ref('excluded.menuItems'),
+          }))
+          .whereRef('restaurantMenus.version', '<', 'excluded.version'),
+      )
+      .returning('restaurantId')
+      .executeTakeFirst();
+    return savedRow !== undefined;
   }
 }

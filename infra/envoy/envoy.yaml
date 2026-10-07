@@ -9,8 +9,51 @@ static_resources:
               typed_config:
                 '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: edge
+                normalize_path: true
+                merge_slashes: true
+                path_with_escaped_slashes_action: REJECT_REQUEST
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      '@type': type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format:
+                          time: '%START_TIME%'
+                          method: '%REQ(:METHOD)%'
+                          path: '%REQ(:PATH)%'
+                          status: '%RESPONSE_CODE%'
+                          durationInMilliseconds: '%DURATION%'
+                          correlationId: '%RESP(X-CORRELATION-ID)%'
+                          traceparent: '%REQ(TRACEPARENT)%'
                 local_reply_config:
                   mappers:
+                    # ADR-0015: an unreachable key set is an outage, never an invalid token
+                    - filter:
+                        extension_filter:
+                          name: envoy.access_loggers.extension_filters.cel
+                          typed_config:
+                            '@type': type.googleapis.com/envoy.extensions.access_loggers.filters.cel.v3.ExpressionFilter
+                            expression: "response.code_details == 'jwt_authn_access_denied{Jwks_remote_fetch_is_failed}'"
+                      status_code: 503
+                      body_format_override:
+                        content_type: application/problem+json
+                        json_format:
+                          {
+                            type: about:blank,
+                            title: Service Unavailable,
+                            status: '%RESPONSE_CODE%',
+                          }
+                    - filter:
+                        status_code_filter:
+                          comparison:
+                            {
+                              op: EQ,
+                              value: { default_value: 401, runtime_key: edge.local_reply.401 },
+                            }
+                      body_format_override:
+                        content_type: application/problem+json
+                        json_format:
+                          { type: about:blank, title: Unauthorized, status: '%RESPONSE_CODE%' }
                     - filter:
                         status_code_filter:
                           comparison:
@@ -38,12 +81,50 @@ static_resources:
                         json_format:
                           { type: about:blank, title: Gateway Timeout, status: '%RESPONSE_CODE%' }
                 http_filters:
+                  # ADR-0015: Envoy authenticates (issuer, signature, exp); the BFF authorizes
+                  - name: envoy.filters.http.jwt_authn
+                    typed_config:
+                      '@type': type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+                      providers:
+                        keycloak:
+                          issuer: http://localhost:8180/realms/food-delivery
+                          forward: true
+                          remote_jwks:
+                            http_uri:
+                              uri: http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs
+                              cluster: keycloak
+                              timeout: 5s
+                            cache_duration: 300s
+                            async_fetch: {}
+                      rules:
+                        # ADR-0045: the restaurant catalogue is read without a token
+                        - match:
+                            path: /v1/restaurants
+                            headers:
+                              - name: ':method'
+                                string_match: { exact: GET }
+                        - match:
+                            safe_regex:
+                              regex: '/v1/restaurants/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+                            headers:
+                              - name: ':method'
+                                string_match: { exact: GET }
+                        - match: { prefix: /v1/, case_sensitive: false }
+                          requires: { provider_name: keycloak }
                   - name: envoy.filters.http.router
                     typed_config:
                       '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
                 route_config:
                   name: edge
                   virtual_hosts:
+                    # ADR-0045: the restaurant portal has its own origin, so its tokens never share one with the consumer site
+                    - name: restaurant-portal
+                      domains: ['portal.localhost:8080', 'portal.localhost']
+                      routes:
+                        - match: { prefix: /v1/restaurant/ }
+                          route: { cluster: restaurant-bff }
+                        - match: { prefix: / }
+                          route: { cluster: restaurant-portal }
                     - name: consumer-api
                       domains: ['*']
                       routes:
@@ -62,9 +143,29 @@ static_resources:
                           response_headers_to_add:
                             - header: { key: content-type, value: application/problem+json }
                               append_action: OVERWRITE_IF_EXISTS_OR_ADD
-                        - match: { prefix: / }
+                        # roadmap Q13: one path prefix per actor, each routed to its own BFF
+                        - match: { prefix: /v1/restaurant/ }
+                          route: { cluster: restaurant-bff }
+                        - match: { prefix: /v1/, case_sensitive: false }
                           route: { cluster: consumer-bff }
+                        - match: { path: /health }
+                          route: { cluster: consumer-bff }
+                        - match: { path: /openapi.json }
+                          route: { cluster: consumer-bff }
+                        # ADR-0045: every other path is the consumer site, so the browser talks to Envoy only
+                        - match: { prefix: / }
+                          route: { cluster: consumer-web }
   clusters:
+    - name: keycloak
+      type: STRICT_DNS
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: keycloak
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: keycloak, port_value: 8080 }
     - name: consumer-bff
       type: STRICT_DNS
       connect_timeout: 1s
@@ -80,3 +181,48 @@ static_resources:
               - endpoint:
                   address:
                     socket_address: { address: consumer-bff, port_value: 4000 }
+    - name: restaurant-bff
+      type: STRICT_DNS
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          common_http_protocol_options: { idle_timeout: 60s }
+          explicit_http_config: { http_protocol_options: {} }
+      load_assignment:
+        cluster_name: restaurant-bff
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: restaurant-bff, port_value: 4006 }
+    - name: consumer-web
+      type: STRICT_DNS
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          common_http_protocol_options: { idle_timeout: 60s }
+          explicit_http_config: { http_protocol_options: {} }
+      load_assignment:
+        cluster_name: consumer-web
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: consumer-web, port_value: 3000 }
+    - name: restaurant-portal
+      type: STRICT_DNS
+      connect_timeout: 1s
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          '@type': type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          common_http_protocol_options: { idle_timeout: 60s }
+          explicit_http_config: { http_protocol_options: {} }
+      load_assignment:
+        cluster_name: restaurant-portal
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: restaurant-portal, port_value: 8080 }

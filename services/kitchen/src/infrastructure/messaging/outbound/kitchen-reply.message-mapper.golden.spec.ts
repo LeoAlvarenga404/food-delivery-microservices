@@ -3,10 +3,17 @@ import { goldenSamplesDirectory } from '@fd/contracts';
 import {
   TicketApprovedSchema,
   TicketCreatedSchema,
+  TicketCreationFailedSchema,
+  TicketRejectedSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import { describe, it } from 'vitest';
 import { orderId, ticketId } from '../../../../test/support/ticket.builder.ts';
-import { toTicketApproved, toTicketCreated } from './kitchen-reply.message-mapper.ts';
+import {
+  toTicketApproved,
+  toTicketCreated,
+  toTicketCreationFailed,
+  toTicketRejected,
+} from './kitchen-reply.message-mapper.ts';
 
 const directory = goldenSamplesDirectory;
 const topic = 'order.place-order-saga.replies';
@@ -23,6 +30,20 @@ describe('kitchen reply golden samples', () => {
     await expectGoldenSample(
       { directory, topic, schema: TicketApprovedSchema },
       toTicketApproved({ type: 'TicketApproved', orderId, ticketId }),
+    );
+  });
+
+  it('produces the TicketCreationFailed sample', async () => {
+    await expectGoldenSample(
+      { directory, topic, schema: TicketCreationFailedSchema },
+      toTicketCreationFailed({ type: 'TicketCreationFailed', orderId, reason: 'InvalidQuantity' }),
+    );
+  });
+
+  it('produces the TicketRejected sample', async () => {
+    await expectGoldenSample(
+      { directory, topic, schema: TicketRejectedSchema },
+      toTicketRejected({ type: 'TicketRejected', orderId }),
     );
   });
 });

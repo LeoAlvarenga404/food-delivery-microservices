@@ -1,0 +1,26 @@
+{
+  "name": "@fd/chassis-auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration --no-file-parallelism"
+  },
+  "dependencies": {
+    "@connectrpc/connect": "2.2.0",
+    "@fd/domain": "workspace:*",
+    "jose": "6.2.12",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "@fd/contracts": "workspace:*",
+    "vitest": "5.0.3"
+  }
+}

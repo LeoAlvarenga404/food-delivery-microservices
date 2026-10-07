@@ -15,8 +15,9 @@
     "test:golden": "turbo run test:golden",
     "test:component": "turbo run test:component --concurrency=2",
     "test:e2e": "pnpm --filter @fd/e2e test:e2e",
+    "test:browser": "pnpm --filter @fd/e2e test:browser",
     "lint:files": "node tooling/src/file-names/check-file-names.cli.ts",
-    "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra services bffs e2e --config .dependency-cruiser.cjs",
+    "lint:architecture": "turbo run generate --output-logs=errors-only && depcruise packages tooling infra services bffs e2e frontends --config .dependency-cruiser.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
@@ -25,8 +26,9 @@
     "infra:topics": "node infra/kafka/create-topics.ts",
     "infra:smoke": "node infra/smoke/outbox-relay-smoke.ts",
     "infra:connectors": "node infra/debezium/register-outbox-connectors.ts",
-    "stack:up": "docker compose -f infra/compose.yaml --profile core --profile apps up -d --build --wait",
-    "stack:down": "docker compose -f infra/compose.yaml --profile core --profile apps down"
+    "stack:up": "docker compose -f infra/compose.yaml --profile core --profile auth --profile search --profile apps --profile observability up -d --build --wait",
+    "stack:down": "docker compose -f infra/compose.yaml --profile core --profile auth --profile search --profile apps --profile observability down",
+    "search:rebuild": "docker compose -f infra/compose.yaml --profile core --profile auth --profile search --profile apps exec restaurant-service node src/main.ts rebuild-search-index"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",

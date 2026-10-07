@@ -1,0 +1,25 @@
+{
+  "name": "@fd/chassis-rpc",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json",
+    "test:unit": "vitest run --project unit"
+  },
+  "dependencies": {
+    "@connectrpc/connect": "2.2.0",
+    "@fd/chassis-auth": "workspace:*",
+    "@fd/chassis-observability": "workspace:*",
+    "@fd/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@fd/chassis-testing": "workspace:*",
+    "@fd/contracts": "workspace:*",
+    "vitest": "5.0.3"
+  }
+}

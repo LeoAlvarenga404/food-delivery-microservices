@@ -7,6 +7,7 @@ export interface ParsedTypeScriptFileName {
 }
 
 const qualifiedTestKinds: readonly TestKind[] = ['integration', 'component', 'golden', 'e2e'];
+const typeScriptExtensions: readonly string[] = ['ts', 'tsx'];
 
 function detectTestKind(segments: readonly string[]): TestKind | undefined {
   if (segments.at(-2) !== 'spec') return undefined;
@@ -21,7 +22,7 @@ function countTestSuffixSegments(testKind: TestKind | undefined): number {
 
 export function parseTypeScriptFileName(fileName: string): ParsedTypeScriptFileName | undefined {
   const segments = fileName.split('.');
-  if (segments.at(-1) !== 'ts') return undefined;
+  if (!typeScriptExtensions.includes(segments.at(-1) ?? '')) return undefined;
 
   const testKind = detectTestKind(segments);
   const nameSegmentCount = segments.length - 1 - countTestSuffixSegments(testKind);

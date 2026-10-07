@@ -1,14 +1,47 @@
-import { fileURLToPath } from 'node:url';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { inboxMigrations } from '@fd/chassis-inbox';
+import { outboxMigrations } from '@fd/chassis-outbox';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
 import { startPostgresContainer, type StartedPostgres } from '@fd/chassis-testing';
+import { sql, type Kysely } from 'kysely';
 import { Cli, TypeScriptSerializer } from 'kysely-codegen';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { orderMigrationSources } from './order-migration-sources.config.ts';
 
+interface SagaDeadlineRow {
+  readonly sagaId: string;
+  readonly hasDeadline: boolean;
+  readonly isDue: boolean;
+}
+
 const generatedTypesFile = fileURLToPath(new URL('./generated/database.ts', import.meta.url));
+const orderMigrationsDirectory = fileURLToPath(new URL('./migrations/', import.meta.url));
 
 let postgres: StartedPostgres;
 let appliedMigrations: readonly string[];
+
+function openDatabase(databaseName: string): Kysely<unknown> {
+  const databaseUrl = new URL(postgres.connectionUri);
+  databaseUrl.pathname = `/${databaseName}`;
+  return createDatabase({
+    connectionString: databaseUrl.toString(),
+    maximumConnectionCount: 1,
+    onConnectionError: () => undefined,
+  });
+}
+
+async function copyOrderMigrationsWithout(excludedFileName: string): Promise<URL> {
+  const directory = await mkdtemp(join(tmpdir(), 'order-migrations-'));
+  onTestFinished(() => rm(directory, { recursive: true }));
+  await cp(orderMigrationsDirectory, directory, {
+    recursive: true,
+    filter: (source) => !source.endsWith(excludedFileName),
+  });
+  return pathToFileURL(`${directory}/`);
+}
 
 beforeAll(async () => {
   postgres = await startPostgresContainer();
@@ -34,6 +67,12 @@ describe('orderMigrationSources', () => {
       'order/0003-create-orders-table',
       'order/0004-create-idempotency-keys-table',
       'order/0005-create-saga-instances-table',
+      'order/0006-add-order-rejection',
+      'order/0007-add-compensated-saga-status',
+      'order/0008-move-payment-token-out-of-saga-order',
+      'order/0009-add-timeout-rejection-reasons',
+      'order/0010-require-deadlines-of-running-sagas',
+      'order/0011-replace-menu-items-with-restaurant-menus',
       'outbox/0001-create-outbox-table',
     ]);
   });
@@ -51,5 +90,43 @@ describe('orderMigrationSources', () => {
     });
 
     await expect(generation).resolves.toContain('export interface DB');
+  });
+
+  it('gives every running saga saved without a deadline one that is already due', async () => {
+    const administration = openDatabase('postgres');
+    onTestFinished(() => administration.destroy());
+    await sql`create database deadline_backfill`.execute(administration);
+    const database = openDatabase('deadline_backfill');
+    onTestFinished(() => database.destroy());
+    const migrationsBeforeDeadlines = await copyOrderMigrationsWithout(
+      '0010-require-deadlines-of-running-sagas.sql',
+    );
+    await migrateToLatest(database, [
+      outboxMigrations,
+      inboxMigrations,
+      { name: 'order', directory: migrationsBeforeDeadlines },
+    ]);
+    await sql`
+      insert into saga_instances (
+        saga_id, saga_type, order_id, step, state, version, status, deadline_at
+      ) values
+        ('0199a5d0-0000-7000-8000-0000000000b1', 'PlaceOrderSaga',
+          '0199a5d0-0000-7000-8000-0000000000a1', 'REJECTING_TICKET', '{}', 3, 'RUNNING', null),
+        ('0199a5d0-0000-7000-8000-0000000000b2', 'PlaceOrderSaga',
+          '0199a5d0-0000-7000-8000-0000000000a2', 'COMPLETED', '{}', 5, 'COMPLETED', null)
+    `.execute(database);
+
+    const backfill = await migrateToLatest(database, orderMigrationSources);
+
+    const rows = await sql<SagaDeadlineRow>`
+      select saga_id, deadline_at is not null as has_deadline,
+        coalesce(deadline_at <= now(), false) as is_due
+      from saga_instances order by saga_id
+    `.execute(database);
+    expect(backfill).toEqual(['order/0010-require-deadlines-of-running-sagas']);
+    expect(rows.rows).toEqual([
+      { sagaId: '0199a5d0-0000-7000-8000-0000000000b1', hasDeadline: true, isDue: true },
+      { sagaId: '0199a5d0-0000-7000-8000-0000000000b2', hasDeadline: false, isDue: false },
+    ]);
   });
 });

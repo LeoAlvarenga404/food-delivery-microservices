@@ -1,3 +1,4 @@
+import { ConcurrencyConflictError } from '@fd/chassis-postgres';
 import type { Kysely } from 'kysely';
 import type { OrderId } from '#domain/payment/order-id.value-object.ts';
 import type { Payment } from '#domain/payment/payment.aggregate.ts';
@@ -26,6 +27,12 @@ export class PostgresPaymentRepository implements PaymentRepository {
     await this.#database
       .insertInto('payments')
       .values({ ...row, version: row.version + 1 })
-      .execute();
+      .execute()
+      .catch((error: unknown) => {
+        throw ConcurrencyConflictError.fromUniqueViolation(
+          error,
+          `payment ${row.paymentId} or a payment for order ${row.orderId} already exists`,
+        );
+      });
   }
 }

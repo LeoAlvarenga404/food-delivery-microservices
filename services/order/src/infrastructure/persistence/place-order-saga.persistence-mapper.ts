@@ -1,5 +1,8 @@
 import type { Selectable } from 'kysely';
 import type {
+  AfterPivotSagaState,
+  BeforePivotSagaState,
+  CompensationSagaState,
   PlaceOrderSagaInstance,
   PlaceOrderSagaOrder,
   PlaceOrderSagaState,
@@ -9,6 +12,7 @@ import type { RestaurantId } from '#domain/menu/restaurant-id.value-object.ts';
 import type { Currency } from '#domain/money/money.value-object.ts';
 import type { ConsumerId } from '#domain/order/consumer-id.value-object.ts';
 import type { OrderId } from '#domain/order/order-id.value-object.ts';
+import type { OrderRejectionReason } from '#domain/order/order.state.ts';
 import type { JsonObject, SagaInstances } from './generated/database.ts';
 
 export type SagaInstanceRow = Selectable<SagaInstances>;
@@ -20,43 +24,45 @@ interface StoredLineItem {
   readonly quantity: number;
 }
 
+interface StoredSagaOrder {
+  readonly orderId: string;
+  readonly consumerId: string;
+  readonly restaurantId: string;
+  readonly lineItems: readonly StoredLineItem[];
+  readonly totalInCents: string;
+  readonly currency: string;
+}
+
 interface StoredSagaState {
   readonly step: string;
-  readonly order: {
-    readonly orderId: string;
-    readonly consumerId: string;
-    readonly restaurantId: string;
-    readonly lineItems: readonly StoredLineItem[];
-    readonly totalInCents: string;
-    readonly currency: string;
-    readonly paymentToken: string;
-  };
+  readonly order: StoredSagaOrder;
+  readonly paymentToken?: string;
+  readonly rejectionReason?: string;
 }
 
 const placeOrderSagaType = 'PlaceOrderSaga';
 
-function toStoredState(state: PlaceOrderSagaState): JsonObject {
-  const { order } = state;
+function toStoredOrder(order: PlaceOrderSagaOrder): JsonObject {
   return {
-    step: state.step,
-    order: {
-      orderId: order.orderId,
-      consumerId: order.consumerId,
-      restaurantId: order.restaurantId,
-      lineItems: order.lineItems.map((lineItem) => ({
-        menuItemId: lineItem.menuItemId,
-        name: lineItem.name,
-        unitPriceInCents: lineItem.unitPriceInCents.toString(),
-        quantity: lineItem.quantity,
-      })),
-      totalInCents: order.totalInCents.toString(),
-      currency: order.currency,
-      paymentToken: order.paymentToken,
-    },
+    orderId: order.orderId,
+    consumerId: order.consumerId,
+    restaurantId: order.restaurantId,
+    lineItems: order.lineItems.map((lineItem) => ({
+      menuItemId: lineItem.menuItemId,
+      name: lineItem.name,
+      unitPriceInCents: lineItem.unitPriceInCents.toString(),
+      quantity: lineItem.quantity,
+    })),
+    totalInCents: order.totalInCents.toString(),
+    currency: order.currency,
   };
 }
 
-function toSagaOrder(stored: StoredSagaState['order']): PlaceOrderSagaOrder {
+function toStoredState(state: PlaceOrderSagaState): JsonObject {
+  return { ...state, order: toStoredOrder(state.order) };
+}
+
+function toSagaOrder(stored: StoredSagaOrder): PlaceOrderSagaOrder {
   return {
     orderId: stored.orderId as OrderId,
     consumerId: stored.consumerId as ConsumerId,
@@ -69,17 +75,34 @@ function toSagaOrder(stored: StoredSagaState['order']): PlaceOrderSagaOrder {
     })),
     totalInCents: BigInt(stored.totalInCents),
     currency: stored.currency as Currency,
-    paymentToken: stored.paymentToken,
   };
+}
+
+function toSagaState(stored: StoredSagaState): PlaceOrderSagaState {
+  const order = toSagaOrder(stored.order);
+  if (stored.paymentToken !== undefined) {
+    const step = stored.step as BeforePivotSagaState['step'];
+    return { step, order, paymentToken: stored.paymentToken };
+  }
+  if (stored.rejectionReason !== undefined) {
+    const step = stored.step as CompensationSagaState['step'];
+    return { step, order, rejectionReason: stored.rejectionReason as OrderRejectionReason };
+  }
+  return { step: stored.step as AfterPivotSagaState['step'], order };
+}
+
+function toSagaStatus(state: PlaceOrderSagaState): string {
+  if (state.step === 'COMPLETED' || state.step === 'COMPENSATED') return state.step;
+  return 'RUNNING';
 }
 
 export const placeOrderSagaPersistenceMapper = {
   toDomain(row: SagaInstanceRow): PlaceOrderSagaInstance {
-    const stored = row.state as unknown as StoredSagaState;
     return {
       sagaId: row.sagaId,
-      state: { step: stored.step as PlaceOrderSagaState['step'], order: toSagaOrder(stored.order) },
+      state: toSagaState(row.state as unknown as StoredSagaState),
       version: row.version,
+      deadlineAt: row.deadlineAt ?? undefined,
     };
   },
 
@@ -91,8 +114,8 @@ export const placeOrderSagaPersistenceMapper = {
       orderId: state.order.orderId,
       step: state.step,
       state: toStoredState(state),
-      status: state.step === 'COMPLETED' ? 'COMPLETED' : 'RUNNING',
-      deadlineAt: null,
+      status: toSagaStatus(state),
+      deadlineAt: instance.deadlineAt ?? null,
       version: instance.version,
     };
   },

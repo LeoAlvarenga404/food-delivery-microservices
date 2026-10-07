@@ -39,7 +39,6 @@ function inboundMessage(messageId: string): InboundMessage {
       correlationId: '0192a1b2-0000-7000-8000-0000000000c1',
       causationId: undefined,
       sagaId: undefined,
-      traceparent: undefined,
       actorId: undefined,
       actorType: undefined,
     },
