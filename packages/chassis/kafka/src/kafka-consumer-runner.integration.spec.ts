@@ -141,6 +141,7 @@ describe('startConsumerRunner', () => {
       topics: [{ topic: 'orphan.commands', numPartitions: 1, replicationFactor: 1 }],
     });
 
+    const startedAtInMilliseconds = Date.now();
     const starting = startConsumerRunner({
       kafka,
       groupId: 'orphan-service',
@@ -152,6 +153,35 @@ describe('startConsumerRunner', () => {
     await expect(starting).rejects.toThrow(
       'missing dead letter topics: orphan.commands.orphan-service.dlq',
     );
+    const refusedAfterInMilliseconds = Date.now() - startedAtInMilliseconds;
+    expect(refusedAfterInMilliseconds).toBeGreaterThanOrEqual(4_000);
+    expect(refusedAfterInMilliseconds).toBeLessThan(15_000);
+  });
+
+  it('starts once a dead letter topic created right after the start shows up', async () => {
+    await admin.createTopics({
+      topics: [{ topic: 'late.commands', numPartitions: 1, replicationFactor: 1 }],
+    });
+
+    const [runner] = await Promise.all([
+      startConsumerRunner({
+        kafka,
+        groupId: 'late-service',
+        topics: ['late.commands'],
+        handle: () => Promise.resolve(),
+        logger: runnerLogger,
+      }),
+      setTimeout(1_000).then(() =>
+        admin.createTopics({
+          topics: [
+            { topic: 'late.commands.late-service.dlq', numPartitions: 1, replicationFactor: 1 },
+          ],
+        }),
+      ),
+    ]);
+    onTestFinished(() => runner.stop());
+
+    expect(runner.stop).toBeTypeOf('function');
   });
 
   it('handles messages in order and commits each offset after the handler resolves', async () => {
