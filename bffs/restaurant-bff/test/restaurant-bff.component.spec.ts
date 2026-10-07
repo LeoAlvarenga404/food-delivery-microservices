@@ -1,3 +1,4 @@
+import type { ConnectRouter } from '@connectrpc/connect';
 import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
 import { createAccessTokenVerifier, readBearerToken } from '@fd/chassis-auth';
 import {
@@ -18,9 +19,17 @@ const spans = recordSpans();
 
 let restaurantService: FakeRestaurantService;
 let kitchenService: FakeKitchenService;
-let servicesServer: FastifyInstance;
+let restaurantServiceServer: FastifyInstance;
+let kitchenServiceServer: FastifyInstance;
 let keycloak: StartedKeycloak;
 let restaurantBff: RunningRestaurantBff;
+
+async function serveFake(routes: (router: ConnectRouter) => void): Promise<FastifyInstance> {
+  const server = fastify();
+  await server.register(fastifyConnectPlugin, { routes });
+  await server.listen({ host: '127.0.0.1', port: 0 });
+  return server;
+}
 
 function bearer(accessToken: string): Record<string, string> {
   return { authorization: `Bearer ${accessToken}` };
@@ -51,18 +60,16 @@ beforeAll(async () => {
   keycloak = await startKeycloakContainer();
   restaurantService = new FakeRestaurantService();
   kitchenService = new FakeKitchenService();
-  servicesServer = fastify();
-  await servicesServer.register(fastifyConnectPlugin, {
-    routes: (router) => {
-      router.service(RestaurantService, restaurantService.implementation());
-      router.service(KitchenService, kitchenService.implementation());
-    },
-  });
-  const servicesUrl = await servicesServer.listen({ host: '127.0.0.1', port: 0 });
+  restaurantServiceServer = await serveFake((router) =>
+    router.service(RestaurantService, restaurantService.implementation()),
+  );
+  kitchenServiceServer = await serveFake((router) =>
+    router.service(KitchenService, kitchenService.implementation()),
+  );
   restaurantBff = await startRestaurantBff({
-    restaurantServiceUrl: servicesUrl,
+    restaurantServiceUrl: restaurantServiceServer.listeningOrigin,
     restaurantServiceTimeoutInMilliseconds: 5000,
-    kitchenServiceUrl: servicesUrl,
+    kitchenServiceUrl: kitchenServiceServer.listeningOrigin,
     kitchenServiceTimeoutInMilliseconds: 5000,
     host: '127.0.0.1',
     port: 0,
@@ -76,7 +83,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await restaurantBff.stop();
-  await servicesServer.close();
+  await restaurantServiceServer.close();
+  await kitchenServiceServer.close();
   await keycloak.stop();
 });
 
