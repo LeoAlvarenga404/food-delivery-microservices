@@ -16,6 +16,7 @@ import {
   type SignInSettings,
   type SignedIn,
 } from './session/keycloak-login.adapter.ts';
+import { TicketQueuePage } from './tickets/ticket-queue.component.tsx';
 
 function createDisplayRouter(
   api: RestaurantApi,
@@ -26,6 +27,11 @@ function createDisplayRouter(
   return createRouter({
     routeTree: rootRoute.addChildren([
       createRoute({ getParentRoute, path: '/', component: () => <RestaurantSelector api={api} /> }),
+      createRoute({
+        getParentRoute,
+        path: '/restaurants/$restaurantId',
+        component: () => <TicketQueuePage api={api} />,
+      }),
     ]),
   });
 }
