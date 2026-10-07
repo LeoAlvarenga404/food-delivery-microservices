@@ -95,6 +95,27 @@ describe('decideFailureHandling', () => {
     },
   );
 
+  it.each([
+    [1, 999],
+    [2, 1_998],
+    [4, 7_992],
+  ])(
+    'waits from one second for an external failure, a gateway blip, at attempt %i',
+    (attemptCount, delay) => {
+      expect(decideFailureHandling('external', attemptCount, almostOne)).toEqual({
+        kind: 'retry',
+        delayInMilliseconds: delay,
+      });
+    },
+  );
+
+  it('keeps the short base delay for an unknown failure', () => {
+    expect(decideFailureHandling('unknown', 1, almostOne)).toEqual({
+      kind: 'retry',
+      delayInMilliseconds: 99,
+    });
+  });
+
   it('can wait no time at all (full jitter)', () => {
     expect(decideFailureHandling('transient', 7, () => 0)).toEqual({
       kind: 'retry',
