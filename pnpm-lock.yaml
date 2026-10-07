@@ -616,9 +616,6 @@ importers:
       '@connectrpc/connect-fastify':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(fastify@5.12.5)
-      '@fd/chassis-auth':
-        specifier: workspace:*
-        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -665,6 +662,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing
@@ -686,9 +686,6 @@ importers:
       '@connectrpc/connect-fastify':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(fastify@5.12.5)
-      '@fd/chassis-auth':
-        specifier: workspace:*
-        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -735,6 +732,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing
@@ -759,9 +759,6 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
-      '@fd/chassis-auth':
-        specifier: workspace:*
-        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -805,6 +802,9 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing
@@ -826,9 +826,6 @@ importers:
       '@connectrpc/connect-fastify':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(fastify@5.12.5)
-      '@fd/chassis-auth':
-        specifier: workspace:*
-        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -875,6 +872,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing

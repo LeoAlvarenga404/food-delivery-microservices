@@ -20,7 +20,6 @@
     "@bufbuild/protobuf": "2.16.0",
     "@connectrpc/connect": "2.2.0",
     "@connectrpc/connect-fastify": "2.2.0",
-    "@fd/chassis-auth": "workspace:*",
     "@fd/chassis-config": "workspace:*",
     "@fd/chassis-inbox": "workspace:*",
     "@fd/chassis-kafka": "workspace:*",
@@ -38,6 +37,7 @@
   },
   "devDependencies": {
     "@connectrpc/connect-node": "2.2.0",
+    "@fd/chassis-auth": "workspace:*",
     "@fd/chassis-testing": "workspace:*",
     "kysely-codegen": "0.20.0",
     "vitest": "5.0.3"
