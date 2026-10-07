@@ -2,7 +2,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { ExternalDependencyFailure } from '@fd/chassis-kafka';
 import { left, right, type Either } from '@fd/domain';
 import type {
+  AuthorizationVoidRequest,
   GatewayAuthorization,
+  GatewayVoid,
   PaymentAuthorizationRequest,
   PaymentDeclined,
   PaymentGateway,
@@ -16,6 +18,7 @@ export class PaymentGatewayTimeoutError extends ExternalDependencyFailure {
 export interface SimulatedPaymentGatewaySettings {
   readonly slowResponseInMilliseconds: number;
   readonly generateAuthorizationId: () => string;
+  readonly generateVoidId: () => string;
 }
 
 const decliningCardSuffix = '0002';
@@ -25,6 +28,7 @@ const slowCardSuffix = '0009';
 export class SimulatedPaymentGateway implements PaymentGateway {
   readonly #settings: SimulatedPaymentGatewaySettings;
   readonly #authorizations = new Map<string, GatewayAuthorization>();
+  readonly #voids = new Map<string, GatewayVoid>();
 
   constructor(settings: SimulatedPaymentGatewaySettings) {
     this.#settings = settings;
@@ -48,5 +52,13 @@ export class SimulatedPaymentGateway implements PaymentGateway {
     const authorization = { authorizationId: this.#settings.generateAuthorizationId() };
     this.#authorizations.set(idempotencyKey, authorization);
     return right(authorization);
+  }
+
+  void(request: AuthorizationVoidRequest): Promise<GatewayVoid> {
+    const firstVoid = this.#voids.get(request.idempotencyKey);
+    if (firstVoid !== undefined) return Promise.resolve(firstVoid);
+    const gatewayVoid = { voidId: this.#settings.generateVoidId() };
+    this.#voids.set(request.idempotencyKey, gatewayVoid);
+    return Promise.resolve(gatewayVoid);
   }
 }

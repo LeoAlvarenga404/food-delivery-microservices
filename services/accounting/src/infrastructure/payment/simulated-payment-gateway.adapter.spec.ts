@@ -9,16 +9,28 @@ import {
 
 const slowResponseInMilliseconds = 50;
 
+let voidCount = 0;
+
 function simulatedGateway(): SimulatedPaymentGateway {
   let authorizationCount = 0;
+  voidCount = 0;
   return new SimulatedPaymentGateway({
     slowResponseInMilliseconds,
     generateAuthorizationId: () => {
       authorizationCount += 1;
       return `authorization-${String(authorizationCount)}`;
     },
+    generateVoidId: () => {
+      voidCount += 1;
+      return `void-${String(voidCount)}`;
+    },
   });
 }
+
+const voidRequest = {
+  idempotencyKey: '0199a5d0-0000-7000-8000-0000000000b1:VoidAuthorization',
+  authorizationId: 'authorization-1',
+};
 
 function request(
   overrides: Partial<PaymentAuthorizationRequest> = {},
@@ -76,6 +88,20 @@ describe('SimulatedPaymentGateway', () => {
       name: 'PaymentGatewayTimeoutError',
       code: 'ETIMEDOUT',
     });
+  });
+
+  it('voids an authorization with a reference of its own', async () => {
+    expect(await simulatedGateway().void(voidRequest)).toEqual({ voidId: 'void-1' });
+  });
+
+  it('answers a repeated void key with the first void, voiding once', async () => {
+    const gateway = simulatedGateway();
+
+    await gateway.void(voidRequest);
+    const repeated = await gateway.void({ ...voidRequest, authorizationId: 'authorization-2' });
+
+    expect(repeated).toEqual({ voidId: 'void-1' });
+    expect(voidCount).toBe(1);
   });
 
   it('answers slowly for a card ending in 0009', async () => {

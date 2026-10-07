@@ -1,12 +1,17 @@
 import { expectGoldenSample } from '@fd/chassis-testing';
 import { goldenSamplesDirectory } from '@fd/contracts';
 import {
+  AuthorizationVoidedSchema,
   PaymentAuthorizedSchema,
   PaymentFailedSchema,
 } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
 import { describe, it } from 'vitest';
 import { orderId, paymentId } from '../../../../test/support/payment.builder.ts';
-import { toPaymentAuthorized, toPaymentFailed } from './accounting-reply.message-mapper.ts';
+import {
+  toAuthorizationVoided,
+  toPaymentAuthorized,
+  toPaymentFailed,
+} from './accounting-reply.message-mapper.ts';
 
 const directory = goldenSamplesDirectory;
 const topic = 'order.place-order-saga.replies';
@@ -23,6 +28,13 @@ describe('accounting reply golden samples', () => {
     await expectGoldenSample(
       { directory, topic, schema: PaymentFailedSchema },
       toPaymentFailed({ type: 'PaymentFailed', orderId }),
+    );
+  });
+
+  it('produces the AuthorizationVoided sample', async () => {
+    await expectGoldenSample(
+      { directory, topic, schema: AuthorizationVoidedSchema },
+      toAuthorizationVoided({ type: 'AuthorizationVoided', orderId }),
     );
   });
 });

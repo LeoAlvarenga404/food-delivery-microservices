@@ -61,6 +61,7 @@ function createCommandHandler(parts: AccountingServiceParts): MessageHandler {
   const paymentGateway = new SimulatedPaymentGateway({
     slowResponseInMilliseconds: configuration.slowGatewayResponseInMilliseconds,
     generateAuthorizationId: generateUuidV7,
+    generateVoidId: generateUuidV7,
   });
   return withInbox(
     { database, handlerName: 'accounting-command', now },

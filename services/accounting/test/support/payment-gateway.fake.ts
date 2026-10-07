@@ -1,6 +1,8 @@
 import { left, right, type Either } from '@fd/domain';
 import type {
+  AuthorizationVoidRequest,
   GatewayAuthorization,
+  GatewayVoid,
   PaymentAuthorizationRequest,
   PaymentDeclined,
   PaymentGateway,
@@ -8,6 +10,7 @@ import type {
 
 export class FakePaymentGateway implements PaymentGateway {
   readonly requests: PaymentAuthorizationRequest[] = [];
+  readonly voidRequests: AuthorizationVoidRequest[] = [];
   readonly #isDeclining: boolean;
 
   constructor(isDeclining = false) {
@@ -24,5 +27,10 @@ export class FakePaymentGateway implements PaymentGateway {
       );
     }
     return Promise.resolve(right({ authorizationId: '0199a5d0-0000-7000-8000-000000000a99' }));
+  }
+
+  void(request: AuthorizationVoidRequest): Promise<GatewayVoid> {
+    this.voidRequests.push(request);
+    return Promise.resolve({ voidId: '0199a5d0-0000-7000-8000-000000000a97' });
   }
 }

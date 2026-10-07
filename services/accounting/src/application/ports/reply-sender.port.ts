@@ -12,7 +12,13 @@ export interface PaymentFailedReply {
   readonly orderId: OrderId;
 }
 
-export type AccountingReply = PaymentAuthorizedReply | PaymentFailedReply;
+export interface AuthorizationVoidedReply {
+  readonly type: 'AuthorizationVoided';
+  readonly orderId: OrderId;
+}
+
+export type AccountingReply =
+  PaymentAuthorizedReply | PaymentFailedReply | AuthorizationVoidedReply;
 
 export interface ReplySender {
   send(reply: AccountingReply, sagaId: string): void;

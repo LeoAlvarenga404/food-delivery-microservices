@@ -5,6 +5,7 @@ import { FakePaymentGateway } from '../../../../test/support/payment-gateway.fak
 import {
   authorizePaymentInput,
   buildPayment,
+  gatewayVoidId,
   orderId,
   paymentId,
   unwrap,
@@ -73,6 +74,7 @@ describe('AuthorizePaymentCommandHandler', () => {
     const unitOfWork = new InMemoryUnitOfWork();
     const blankReferenceGateway: PaymentGateway = {
       authorize: () => Promise.resolve(right({ authorizationId: ' ' })),
+      void: () => Promise.resolve({ voidId: 'void-1' }),
     };
 
     const execution = authorizePayment(unitOfWork, blankReferenceGateway).execute(command);
@@ -111,6 +113,29 @@ describe('AuthorizePaymentCommandHandler', () => {
     expect(outcome).toEqual(right(reply));
     expect(paymentGateway.requests).toEqual([]);
     expect(unitOfWork.payments.rows.size).toBe(1);
+    expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
+  });
+
+  it('answers a redriven AuthorizePayment for a voided payment with PaymentAuthorized, without charging again', async () => {
+    const unitOfWork = new InMemoryUnitOfWork();
+    const recordedPaymentId = unwrap(parsePaymentId('0199a5d0-0000-7000-8000-0000000000ea'));
+    const voided = buildPayment({ paymentId: recordedPaymentId });
+    unwrap(voided.void({ voidedAt: new Date('2026-10-02T12:01:30.000Z'), gatewayVoidId }));
+    await unitOfWork.payments.save(voided);
+    const paymentGateway = new FakePaymentGateway();
+    const reply: AccountingReply = {
+      type: 'PaymentAuthorized',
+      orderId,
+      paymentId: recordedPaymentId,
+    };
+
+    const outcome = await authorizePayment(unitOfWork, paymentGateway).execute(command);
+
+    expect(outcome).toEqual(right(reply));
+    expect(paymentGateway.requests).toEqual([]);
+    expect((await unitOfWork.payments.findByOrderId(orderId))?.toSnapshot().state.status).toBe(
+      'VOIDED',
+    );
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
   });
 });

@@ -6,8 +6,12 @@ import {
   type MessageHandler,
 } from '@fd/chassis-kafka';
 import { createLogger } from '@fd/chassis-observability';
-import { AuthorizePaymentSchema } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
 import {
+  AuthorizePaymentSchema,
+  VoidAuthorizationSchema,
+} from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
+import {
+  AuthorizationVoidedSchema,
   PaymentAuthorizedSchema,
   PaymentFailedSchema,
   PaymentFailureReason,
@@ -58,6 +62,7 @@ let handleCommand: MessageHandler;
 let consumeCommand: TransactionalMessageHandler<AccountingDatabase>;
 let inboxSettings: InboxSettings<AccountingDatabase>;
 let messageCount = 0;
+let voidCount = 0;
 
 async function countRows(table: 'payments' | 'inbox'): Promise<number> {
   const result = await sql`select 1 from ${sql.table(table)}`.execute(testDatabase.database);
@@ -69,6 +74,15 @@ function failingInboxTransaction(): MessageHandler {
     await consumeCommand(message, transaction);
     throw new Error('inbox transaction failed');
   });
+}
+
+async function readPaymentSnapshot() {
+  const payment = await new PostgresPaymentRepository(testDatabase.database).findByOrderId(orderId);
+  return payment?.toSnapshot();
+}
+
+async function readMessageTypes(): Promise<readonly string[]> {
+  return (await readOutbox()).map((row) => row.messageType);
 }
 
 async function readOutbox(): Promise<readonly OutboxRow[]> {
@@ -85,6 +99,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await testDatabase.clearWrittenRows();
+  voidCount = 0;
   const unitOfWork = createAccountingUnitOfWork({
     database: testDatabase.database,
     generateMessageId: () => {
@@ -98,6 +113,10 @@ beforeEach(async () => {
     paymentGateway: new SimulatedPaymentGateway({
       slowResponseInMilliseconds: 0,
       generateAuthorizationId: () => gatewayAuthorizationId,
+      generateVoidId: () => {
+        voidCount += 1;
+        return `void-${String(voidCount)}`;
+      },
     }),
     idGenerator: { generatePaymentId: () => paymentId },
     clock: { now: () => authorizedAt },
@@ -245,6 +264,92 @@ describe('accountingCommandConsumer', () => {
     expect(await readOutbox()).toEqual([]);
     expect(await countRows('inbox')).toBe(0);
     expect(await countRows('payments')).toBe(0);
+  });
+
+  it('voids the authorization of the order and replies AuthorizationVoided, keyed by saga id and caused by the command', async () => {
+    await handleCommand(buildCommandMessage(AuthorizePaymentSchema, authorizePayment));
+    const voidAuthorization = buildCommandMessage(VoidAuthorizationSchema, { orderId });
+
+    await handleCommand(voidAuthorization);
+
+    expect(await readPaymentSnapshot()).toMatchObject({
+      state: { status: 'VOIDED', voidedAt: authorizedAt, gatewayVoidId: 'void-1' },
+      version: 2,
+    });
+    const reply = (await readOutbox()).at(-1);
+    expect(reply).toMatchObject({
+      topic: 'order.place-order-saga.replies',
+      aggregateId: sagaId,
+      messageType: 'fooddelivery.accounting.v1.AuthorizationVoided',
+      sagaId,
+      correlationId: voidAuthorization.headers.correlationId,
+      causationId: voidAuthorization.headers.messageId,
+    });
+    expect(fromBinary(AuthorizationVoidedSchema, reply?.payload ?? new Uint8Array())).toMatchObject(
+      { orderId },
+    );
+  });
+
+  it('answers a repeated VoidAuthorization again without voiding twice', async () => {
+    await handleCommand(buildCommandMessage(AuthorizePaymentSchema, authorizePayment));
+    await handleCommand(buildCommandMessage(VoidAuthorizationSchema, { orderId }));
+
+    await handleCommand(buildCommandMessage(VoidAuthorizationSchema, { orderId }));
+
+    expect(await readMessageTypes()).toEqual([
+      'fooddelivery.accounting.v1.PaymentAuthorized',
+      'fooddelivery.accounting.v1.AuthorizationVoided',
+      'fooddelivery.accounting.v1.AuthorizationVoided',
+    ]);
+    expect(voidCount).toBe(1);
+    expect(await readPaymentSnapshot()).toMatchObject({ version: 2 });
+  });
+
+  it('answers a VoidAuthorization for an order without a payment and stores nothing', async () => {
+    await handleCommand(buildCommandMessage(VoidAuthorizationSchema, { orderId }));
+
+    expect(await readMessageTypes()).toEqual(['fooddelivery.accounting.v1.AuthorizationVoided']);
+    expect(await countRows('payments')).toBe(0);
+    expect(await countRows('inbox')).toBe(1);
+    expect(voidCount).toBe(0);
+  });
+
+  it('rolls back the void and its reply with the inbox row, and voids at the gateway once across the redelivery', async () => {
+    await handleCommand(buildCommandMessage(AuthorizePaymentSchema, authorizePayment));
+    const voidAuthorization = buildCommandMessage(VoidAuthorizationSchema, { orderId });
+
+    await expect(failingInboxTransaction()(voidAuthorization)).rejects.toThrow(
+      'inbox transaction failed',
+    );
+    expect(await readPaymentSnapshot()).toMatchObject({
+      state: { status: 'AUTHORIZED' },
+      version: 1,
+    });
+    expect(await readMessageTypes()).toEqual(['fooddelivery.accounting.v1.PaymentAuthorized']);
+
+    await handleCommand(voidAuthorization);
+
+    expect(await readPaymentSnapshot()).toMatchObject({
+      state: { status: 'VOIDED', gatewayVoidId: 'void-1' },
+    });
+    expect(await readMessageTypes()).toEqual([
+      'fooddelivery.accounting.v1.PaymentAuthorized',
+      'fooddelivery.accounting.v1.AuthorizationVoided',
+    ]);
+    expect(voidCount).toBe(1);
+  });
+
+  it('dead-letters a command type it does not handle and voids nothing', async () => {
+    await handleCommand(buildCommandMessage(AuthorizePaymentSchema, authorizePayment));
+    const unknownCommand = buildCommandMessage(
+      VoidAuthorizationSchema,
+      { orderId },
+      { messageType: 'fooddelivery.accounting.v1.CapturePayment' },
+    );
+
+    await expect(handleCommand(unknownCommand)).rejects.toThrow(PermanentMessageFailure);
+    expect(await readPaymentSnapshot()).toMatchObject({ state: { status: 'AUTHORIZED' } });
+    expect(voidCount).toBe(0);
   });
 
   it('dead-letters a command with an amount that is not positive', async () => {
