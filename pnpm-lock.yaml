@@ -492,6 +492,9 @@ importers:
       '@fd/domain':
         specifier: workspace:*
         version: link:../../domain
+      uuid:
+        specifier: 14.0.2
+        version: 14.0.2
     devDependencies:
       '@fd/chassis-testing':
         specifier: workspace:*

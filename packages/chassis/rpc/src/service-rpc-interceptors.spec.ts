@@ -3,8 +3,7 @@ import { Code, ConnectError, createClient, createRouterTransport } from '@connec
 import { createLogger } from '@fd/chassis-observability';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { sagaTimeoutsInMilliseconds } from '../../../test/support/place-order-saga.builder.ts';
-import { createOrderRpcInterceptors } from './order-rpc-interceptors.adapter.ts';
+import { createServiceRpcInterceptors } from './service-rpc-interceptors.ts';
 
 const unreachableKeySetUrl =
   'http://127.0.0.1:1/realms/food-delivery/protocol/openid-connect/certs';
@@ -30,15 +29,9 @@ function clientWithInterceptors(): ReturnType<typeof createClient<typeof OrderSe
       callback();
     },
   });
-  const interceptors = createOrderRpcInterceptors(
+  const interceptors = createServiceRpcInterceptors(
+    'order-service',
     {
-      databaseUrl: 'postgres://order-db:5432/order_service',
-      kafkaBootstrapServers: ['kafka-1:9092'],
-      host: '127.0.0.1',
-      port: 0,
-      logLevel: 'info',
-      sagaTimeoutsInMilliseconds,
-      housekeepingIntervalInMilliseconds: 3_600_000,
       accessTokenIssuer: 'http://localhost:8180/realms/food-delivery',
       accessTokenJwksUrl: unreachableKeySetUrl,
     },
@@ -66,7 +59,7 @@ beforeEach(() => {
   logEntries = [];
 });
 
-describe('createOrderRpcInterceptors', () => {
+describe('createServiceRpcInterceptors', () => {
   it('refuses a call without a token and still echoes the correlation id', async () => {
     const error = await rejectionOf(
       clientWithInterceptors().getOrder({}, { headers: { 'x-correlation-id': correlationId } }),
@@ -85,6 +78,9 @@ describe('createOrderRpcInterceptors', () => {
     );
 
     expect(error.code).toBe(Code.Internal);
+    expect(error.metadata.get('x-correlation-id')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(logEntries.map((entry) => entry['msg'])).toEqual(['rpc call failed']);
   });
 });
