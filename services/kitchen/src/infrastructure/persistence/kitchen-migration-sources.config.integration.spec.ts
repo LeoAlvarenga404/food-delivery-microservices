@@ -32,6 +32,7 @@ describe('kitchenMigrationSources', () => {
       'kitchen/0001-create-tickets-table',
       'kitchen/0002-add-rejected-ticket-status',
       'kitchen/0003-add-ticket-lifecycle-columns',
+      'kitchen/0004-create-restaurant-memberships-table',
       'outbox/0001-create-outbox-table',
     ]);
   });

@@ -1,4 +1,4 @@
-import { deleteExpiredInboxEntries, withInbox } from '@fd/chassis-inbox';
+import { deleteExpiredInboxEntries } from '@fd/chassis-inbox';
 import { createKafka, startConsumerRunner, type RunningConsumer } from '@fd/chassis-kafka';
 import {
   StartedParts,
@@ -16,7 +16,7 @@ import {
   readKitchenServiceConfiguration,
   type KitchenServiceConfiguration,
 } from '#infrastructure/kitchen-service.config.ts';
-import { kitchenCommandConsumer } from '#infrastructure/messaging/inbound/kitchen-command.consumer.ts';
+import { kitchenInboundConsumer } from '#infrastructure/messaging/inbound/kitchen-inbound.consumer.ts';
 import type { DB as KitchenDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { kitchenMigrationSources } from '#infrastructure/persistence/kitchen-migration-sources.config.ts';
 import { createKitchenUnitOfWork } from '#infrastructure/persistence/kitchen-unit-of-work.adapter.ts';
@@ -48,20 +48,23 @@ function openDatabase(
   });
 }
 
-function startCommandConsumer(parts: KitchenServiceParts): Promise<RunningConsumer> {
+function startMessageConsumer(parts: KitchenServiceParts): Promise<RunningConsumer> {
   const { configuration, logger, database } = parts;
   const unitOfWork = createKitchenUnitOfWork({ database, generateMessageId: generateUuidV7, now });
+  const subscription = kitchenInboundConsumer({
+    database,
+    unitOfWork,
+    idGenerator: new UuidV7IdGenerator(),
+    now,
+    logger,
+  });
   return startConsumerRunner({
     kafka: createKafka({
       clientId: 'kitchen-service',
       bootstrapServers: configuration.kafkaBootstrapServers,
     }),
     groupId: 'kitchen-service',
-    topics: ['kitchen.commands'],
-    handle: withInbox(
-      { database, handlerName: 'kitchen-command', now },
-      kitchenCommandConsumer({ unitOfWork, idGenerator: new UuidV7IdGenerator(), logger }),
-    ),
+    ...subscription,
     logger,
   });
 }
@@ -90,8 +93,8 @@ export async function startKitchenService(
   try {
     await migrateToLatest(database, kitchenMigrationSources);
     const parts = { configuration, logger, database };
-    const commandConsumer = await startCommandConsumer(parts);
-    started.add(() => commandConsumer.stop());
+    const messageConsumer = await startMessageConsumer(parts);
+    started.add(() => messageConsumer.stop());
     const housekeeping = startHousekeeping(parts);
     started.add(() => housekeeping.stop());
     const healthServer = await startHealthServer(configuration);

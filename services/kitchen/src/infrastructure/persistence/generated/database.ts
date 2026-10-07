@@ -14,6 +14,12 @@ export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface RestaurantMemberships {
+  restaurantId: string;
+  staffMemberIds: Json;
+  version: number;
+}
+
 export interface Tickets {
   acceptedAt: Timestamp | null;
   consumerId: string;
@@ -27,5 +33,6 @@ export interface Tickets {
 }
 
 export interface DB {
+  restaurantMemberships: RestaurantMemberships;
   tickets: Tickets;
 }

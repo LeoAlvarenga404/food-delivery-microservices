@@ -21,7 +21,7 @@ export async function startKitchenTestDatabase(): Promise<KitchenTestDatabase> {
   return {
     database,
     clearWrittenRows: async () => {
-      await sql`truncate tickets, outbox, inbox`.execute(database);
+      await sql`truncate tickets, restaurant_memberships, outbox, inbox`.execute(database);
     },
     stop: async () => {
       await database.destroy();

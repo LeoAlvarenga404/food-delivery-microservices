@@ -25,6 +25,7 @@ import {
   TicketApprovedSchema,
   TicketCreatedSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
+import { MenuRevisedSchema } from '@fd/contracts/fooddelivery/restaurant/v1/events_pb.js';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startKitchenService, type RunningKitchenService } from '../src/main.ts';
@@ -37,6 +38,7 @@ interface ReplyRow {
 }
 
 const commandsTopic = 'kitchen.commands';
+const restaurantStateTopic = 'restaurant.restaurant.state';
 const orderId = '0199a5d0-0000-7000-8000-0000000000a1';
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const waitLimitInMilliseconds = 30_000;
@@ -63,20 +65,48 @@ async function waitFor<Result>(
   throw new Error('condition not met in time');
 }
 
-async function createCommandTopics(): Promise<void> {
+async function createSubscribedTopics(): Promise<void> {
   const admin = createKafka({
     clientId: 'component-test',
     bootstrapServers: [kafka.bootstrapServer],
   }).admin();
   await admin.connect();
   await admin.createTopics({
-    topics: [commandsTopic, `${commandsTopic}.kitchen-service.dlq`].map((topic) => ({
-      topic,
-      numPartitions: 1,
-      replicationFactor: 1,
-    })),
+    topics: [commandsTopic, restaurantStateTopic]
+      .flatMap((topic) => [topic, `${topic}.kitchen-service.dlq`])
+      .map((topic) => ({ topic, numPartitions: 1, replicationFactor: 1 })),
   });
   await admin.disconnect();
+}
+
+async function publishMembers(
+  restaurantId: string,
+  staffMemberIds: readonly string[],
+): Promise<void> {
+  const producer = createKafka({
+    clientId: 'restaurant-double',
+    bootstrapServers: [kafka.bootstrapServer],
+  }).producer();
+  await producer.connect();
+  const menuRevised = create(MenuRevisedSchema, {
+    restaurant: { restaurantId, version: 1, currency: 'BRL' },
+    members: staffMemberIds.map((staffMemberId) => ({ staffMemberId })),
+  });
+  await producer.send({
+    topic: restaurantStateTopic,
+    messages: [
+      {
+        key: restaurantId,
+        value: Buffer.from(toBinary(MenuRevisedSchema, menuRevised)),
+        headers: {
+          'message-id': '0199a5d0-0000-7000-8000-000000000d09',
+          'message-type': MenuRevisedSchema.typeName,
+          'correlation-id': '0199a5d0-0000-7000-8000-0000000000e9',
+        },
+      },
+    ],
+  });
+  await producer.disconnect();
 }
 
 async function sendCommand<Schema extends DescMessage>(
@@ -149,7 +179,7 @@ beforeAll(async () => {
       return started;
     }),
   ]);
-  await createCommandTopics();
+  await createSubscribedTopics();
   kitchenService = await startKitchenService({
     databaseUrl: postgres.connectionUri,
     kafkaBootstrapServers: [kafka.bootstrapServer],
@@ -222,6 +252,21 @@ describe('kitchen service', () => {
         .spansNamed('process kitchen.commands')
         .map((span) => span.attributes['fooddelivery.order.id']),
     ).toEqual([orderId, orderId]);
+  });
+
+  it('keeps the members of each restaurant from the snapshots on the restaurant state topic', async () => {
+    const restaurantId = '0199a5d0-0000-7000-8000-0000000000b9';
+    const staffMemberIds = ['0199a5d0-0000-7000-8000-0000000000e1'];
+
+    await publishMembers(restaurantId, staffMemberIds);
+
+    const membership = await waitFor(async () => {
+      const result = await sql<{ readonly version: number; readonly staffMemberIds: unknown }>`
+        select version, staff_member_ids from restaurant_memberships where restaurant_id = ${restaurantId}
+      `.execute(outboxReader);
+      return result.rows[0];
+    });
+    expect(membership).toEqual({ version: 1, staffMemberIds });
   });
 
   it('answers its health endpoint', async () => {
