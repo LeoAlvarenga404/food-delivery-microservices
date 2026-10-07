@@ -193,6 +193,10 @@ describe('POST /v1/restaurant/restaurants/:restaurantId/tickets/:ticketId steps'
     { invalidPart: 'no preparation time', body: {} },
     { invalidPart: 'a preparation time in text', body: { preparationTimeInMinutes: '15' } },
     { invalidPart: 'a fractional preparation time', body: { preparationTimeInMinutes: 7.5 } },
+    {
+      invalidPart: 'a preparation time beyond a 32-bit integer',
+      body: { preparationTimeInMinutes: 3_000_000_000 },
+    },
   ])(
     'answers an acceptance with $invalidPart with a bad request without calling the kitchen service',
     async ({ body }) => {

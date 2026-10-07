@@ -31,7 +31,7 @@ const listTicketsSchema = {
 
 const acceptTicketSchema = {
   params: ticketParams,
-  body: z.object({ preparationTimeInMinutes: z.int() }),
+  body: z.object({ preparationTimeInMinutes: z.int32() }),
   response: { 200: ticketViewSchema, ...problemResponses },
 };
 
