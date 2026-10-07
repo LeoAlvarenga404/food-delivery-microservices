@@ -152,7 +152,14 @@ describe('consumer bff server', () => {
                 content: {
                   'application/json': {
                     schema: {
-                      required: ['orderId', 'status', 'lineItems', 'totalInCents', 'currency'],
+                      required: [
+                        'orderId',
+                        'status',
+                        'lineItems',
+                        'deliveryFeeInCents',
+                        'totalInCents',
+                        'currency',
+                      ],
                       properties: {
                         rejectionReason: {
                           enum: [

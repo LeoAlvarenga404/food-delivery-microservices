@@ -29,6 +29,7 @@ export const orderViewSchema = z.object({
       quantity: z.int(),
     }),
   ),
+  deliveryFeeInCents: amountInCentsSchema,
   totalInCents: amountInCentsSchema,
   currency: z.string(),
 });
@@ -81,6 +82,7 @@ export function toOrderView(order: GetOrderResponse): OrderView {
       unitPriceInCents: unitPriceInCents.toString(),
       quantity,
     })),
+    deliveryFeeInCents: order.deliveryFeeInCents.toString(),
     totalInCents: order.totalInCents.toString(),
     currency: order.currency,
   };

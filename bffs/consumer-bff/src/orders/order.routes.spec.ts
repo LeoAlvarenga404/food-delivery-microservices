@@ -294,7 +294,7 @@ describe('GET /v1/orders/:orderId', () => {
     { status: OrderStatus.APPROVAL_PENDING, publicStatus: 'APPROVAL_PENDING' },
     { status: OrderStatus.APPROVED, publicStatus: 'APPROVED' },
   ])(
-    'answers a $publicStatus order with its frozen line items and amounts in cents as strings',
+    'answers a $publicStatus order with its frozen line items, delivery fee and amounts in cents as strings',
     async ({ status, publicStatus }) => {
       orderService.orders.set(
         placedOrderId,
@@ -304,7 +304,8 @@ describe('GET /v1/orders/:orderId', () => {
           lineItems: [
             { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: 4500n, quantity: 2 },
           ],
-          totalInCents: 9000n,
+          deliveryFeeInCents: 800n,
+          totalInCents: 9800n,
           currency: 'BRL',
         }),
       );
@@ -322,7 +323,8 @@ describe('GET /v1/orders/:orderId', () => {
         lineItems: [
           { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: '4500', quantity: 2 },
         ],
-        totalInCents: '9000',
+        deliveryFeeInCents: '800',
+        totalInCents: '9800',
         currency: 'BRL',
       });
     },
