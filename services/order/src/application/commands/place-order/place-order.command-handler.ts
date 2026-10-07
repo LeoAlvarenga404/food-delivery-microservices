@@ -43,8 +43,24 @@ function replayPlacement(
 }
 
 function toSagaOrder(snapshot: OrderSnapshot): PlaceOrderSagaOrder {
-  const { orderId, consumerId, restaurantId, lineItems, totalInCents, currency } = snapshot;
-  return { orderId, consumerId, restaurantId, lineItems, totalInCents, currency };
+  const {
+    orderId,
+    consumerId,
+    restaurantId,
+    lineItems,
+    deliveryFeeInCents,
+    totalInCents,
+    currency,
+  } = snapshot;
+  return {
+    orderId,
+    consumerId,
+    restaurantId,
+    lineItems,
+    deliveryFeeInCents,
+    totalInCents,
+    currency,
+  };
 }
 
 export class PlaceOrderCommandHandler {

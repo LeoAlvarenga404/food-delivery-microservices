@@ -47,6 +47,8 @@ export function toAuthorizePayment(
     amountInCents: order.totalInCents,
     currency: order.currency,
     paymentToken,
+    restaurantId: order.restaurantId,
+    deliveryFeeInCents: order.deliveryFeeInCents,
   });
 }
 

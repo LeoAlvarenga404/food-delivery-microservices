@@ -10,6 +10,7 @@ export interface PlaceOrderSagaOrder {
   readonly consumerId: ConsumerId;
   readonly restaurantId: RestaurantId;
   readonly lineItems: readonly OrderLineItemSnapshot[];
+  readonly deliveryFeeInCents: bigint;
   readonly totalInCents: bigint;
   readonly currency: Currency;
 }

@@ -22,9 +22,24 @@ export const sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds = 
 const sagaStartedAt = new Date('2026-10-02T12:00:00.000Z');
 
 export function buildSagaOrder(): PlaceOrderSagaOrder {
-  const { orderId, consumerId, restaurantId, lineItems, totalInCents, currency } =
-    buildOrder().toSnapshot();
-  return { orderId, consumerId, restaurantId, lineItems, totalInCents, currency };
+  const {
+    orderId,
+    consumerId,
+    restaurantId,
+    lineItems,
+    deliveryFeeInCents,
+    totalInCents,
+    currency,
+  } = buildOrder().toSnapshot();
+  return {
+    orderId,
+    consumerId,
+    restaurantId,
+    lineItems,
+    deliveryFeeInCents,
+    totalInCents,
+    currency,
+  };
 }
 
 export function buildStartedSagaState(): PlaceOrderSagaState {

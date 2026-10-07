@@ -64,6 +64,19 @@ describe('toParticipantCommandMessage', () => {
     expect(fromBinary(CreateTicketSchema, message.payload).consumerId).toBe(order.consumerId);
   });
 
+  it('carries the restaurant and the delivery fee on AuthorizePayment, so Accounting can split the payment', () => {
+    const message = toParticipantCommandMessage(
+      { type: 'AuthorizePayment', order, paymentToken: sagaPaymentToken },
+      sagaId,
+    );
+
+    expect(fromBinary(AuthorizePaymentSchema, message.payload)).toMatchObject({
+      restaurantId: order.restaurantId,
+      deliveryFeeInCents: 800n,
+      amountInCents: 10600n,
+    });
+  });
+
   it('carries the Protobuf payload of the command with the payment token', () => {
     const message = toParticipantCommandMessage(
       { type: 'AuthorizePayment', order, paymentToken: sagaPaymentToken },
