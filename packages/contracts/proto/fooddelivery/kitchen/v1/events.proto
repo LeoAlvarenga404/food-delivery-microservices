@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package fooddelivery.kitchen.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message TicketAccepted {
+  string ticket_id = 1;
+  string order_id = 2;
+  string restaurant_id = 3;
+  google.protobuf.Timestamp accepted_at = 4;
+  google.protobuf.Timestamp ready_by = 5;
+}
+
+message TicketPreparationStarted {
+  string ticket_id = 1;
+  string order_id = 2;
+  string restaurant_id = 3;
+  google.protobuf.Timestamp started_at = 4;
+}
+
+message TicketReadyForPickup {
+  string ticket_id = 1;
+  string order_id = 2;
+  string restaurant_id = 3;
+  google.protobuf.Timestamp ready_at = 4;
+}

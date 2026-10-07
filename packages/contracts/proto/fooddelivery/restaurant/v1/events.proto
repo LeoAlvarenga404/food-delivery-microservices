@@ -54,7 +54,12 @@ message Restaurant {
   repeated MenuItem menu_items = 10;
 }
 
+message RestaurantMember {
+  string staff_member_id = 1;
+}
+
 message MenuRevised {
   Restaurant restaurant = 1;
   google.protobuf.Timestamp revised_at = 2;
+  repeated RestaurantMember members = 3;
 }
