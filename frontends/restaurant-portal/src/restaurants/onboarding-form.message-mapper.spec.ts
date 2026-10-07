@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   emptyOnboardingForm,
   onboardingFormSchema,
-  type OnboardingForm,
+  type OnboardingFormValues,
 } from './onboarding-form.message-mapper.ts';
 
-const filledForm: OnboardingForm = {
+const filledForm: OnboardingFormValues = {
   ...emptyOnboardingForm,
   name: 'Cantina Nonna',
   category: 'Italian',
@@ -15,15 +15,16 @@ const filledForm: OnboardingForm = {
   postalCode: '01304-001',
   latitude: '-23.5614',
   longitude: ' -46.6559 ',
+  timeZone: 'America/Fortaleza',
   openingDays: emptyOnboardingForm.openingDays.map((openingDay) =>
     openingDay.dayOfWeek === 'FRIDAY' || openingDay.dayOfWeek === 'SATURDAY'
       ? { ...openingDay, opensAt: '18:00', closesAt: '02:00' }
       : openingDay,
   ),
-  minimumOrder: '20.5',
+  minimumOrder: ' 20.1 ',
 };
 
-function issueMessages(form: OnboardingForm): readonly string[] {
+function issueMessages(form: OnboardingFormValues): readonly string[] {
   const parsed = onboardingFormSchema.safeParse(form);
   return parsed.success
     ? []
@@ -42,12 +43,12 @@ describe('the onboarding form', () => {
         postalCode: '01304-001',
         location: { latitude: -23.5614, longitude: -46.6559 },
       },
-      timeZone: 'America/Sao_Paulo',
+      timeZone: 'America/Fortaleza',
       openingHours: [
         { dayOfWeek: 'FRIDAY', opensAt: '18:00', closesAt: '02:00' },
         { dayOfWeek: 'SATURDAY', opensAt: '18:00', closesAt: '02:00' },
       ],
-      minimumOrderInCents: '2050',
+      minimumOrderInCents: '2010',
     });
   });
 

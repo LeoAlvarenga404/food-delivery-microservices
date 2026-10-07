@@ -59,7 +59,7 @@ function signIdToken(privateKey: KeyObject): string {
   return `${signingInput}.${signature}`;
 }
 
-function answerAsKeycloak(tokenRequests: Request[], privateKey = keycloakKeys.privateKey): void {
+function answerAsKeycloak(tokenRequests: Request[], privateKey = keycloakKeys.privateKey): string {
   const keySet = {
     keys: [
       {
@@ -70,12 +70,13 @@ function answerAsKeycloak(tokenRequests: Request[], privateKey = keycloakKeys.pr
       },
     ],
   };
+  const idToken = signIdToken(privateKey);
   const tokens = Object.fromEntries(
     new Map<string, string | number>([
       ['access_token', 'access-token-of-staff-a'],
       ['token_type', 'Bearer'],
       ['expires_in', 300],
-      ['id_token', signIdToken(privateKey)],
+      ['id_token', idToken],
     ]),
   );
   vi.stubGlobal('fetch', (input: Request | URL | string, init?: RequestInit) => {
@@ -84,6 +85,7 @@ function answerAsKeycloak(tokenRequests: Request[], privateKey = keycloakKeys.pr
     tokenRequests.push(request);
     return Promise.resolve(Response.json(tokens));
   });
+  return idToken;
 }
 
 function keycloakCallback(parameters: Readonly<Record<string, string>>): URL {
@@ -137,7 +139,7 @@ describe('completeSignIn', () => {
 
   it('trades the code for the tokens as a public client, sending the PKCE verifier', async () => {
     const tokenRequests: Request[] = [];
-    answerAsKeycloak(tokenRequests);
+    const idToken = answerAsKeycloak(tokenRequests);
 
     const signedIn = await completeSignIn(
       settings,
@@ -145,6 +147,7 @@ describe('completeSignIn', () => {
     );
 
     expect(signedIn?.accessToken).toBe('access-token-of-staff-a');
+    expect(signedIn?.idToken).toBe(idToken);
     expect(signedIn?.returnPath).toBe(pendingSignIn.returnPath);
     const [tokenRequest] = tokenRequests;
     expect(tokenRequest?.url).toBe(`${issuer}/protocol/openid-connect/token`);
@@ -196,6 +199,24 @@ describe('completeSignIn', () => {
 
   it('starts over when the page carries no code, and forgets the pending sign-in', async () => {
     await expect(completeSignIn(settings, new URL(portalUrl))).resolves.toBeUndefined();
+    expect(storage.items.size).toBe(0);
+  });
+
+  it('starts over when the pending sign-in would return outside the portal', async () => {
+    const tokenRequests: Request[] = [];
+    answerAsKeycloak(tokenRequests);
+    storage.setItem(
+      pendingSignInKey,
+      JSON.stringify({ ...pendingSignIn, returnPath: 'https://evil.test/' }),
+    );
+
+    await expect(
+      completeSignIn(
+        settings,
+        keycloakCallback({ code: 'code-of-the-sign-in', state: pendingSignIn.state, iss: issuer }),
+      ),
+    ).resolves.toBeUndefined();
+    expect(tokenRequests).toEqual([]);
     expect(storage.items.size).toBe(0);
   });
 

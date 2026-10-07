@@ -50,11 +50,11 @@ describe('the menu form', () => {
     const menuRows = [lasagna, tiramisu].flatMap((menuRow) =>
       menuRow === undefined
         ? []
-        : [menuRow.name === 'Lasagna' ? { ...menuRow, price: '42.5' } : menuRow],
+        : [menuRow.name === 'Lasagna' ? { ...menuRow, price: ' 19.9 ' } : menuRow],
     );
 
     expect(menuFormSchema.parse({ menuRows }).map(({ priceInCents }) => priceInCents)).toEqual([
-      '4250',
+      '1990',
       '1800',
     ]);
   });

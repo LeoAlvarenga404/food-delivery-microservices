@@ -18,7 +18,7 @@ import {
   menuFormSchema,
   newMenuRow,
   toMenuForm,
-  type MenuForm as MenuFormValues,
+  type MenuFormValues,
 } from './menu-form.message-mapper.ts';
 
 type MenuFormMethods = UseFormReturn<MenuFormValues, unknown, readonly MenuItem[]>;
@@ -98,22 +98,25 @@ function MenuForm({ restaurant, isSaving, onSave }: MenuFormProps): ReactNode {
 function MenuEditor({ api, restaurantId }: MenuEditorProps): ReactNode {
   const queryClient = useQueryClient();
   const queryKey = ['restaurant', restaurantId];
-  const restaurant = useQuery({ queryKey, queryFn: () => readRestaurant(api, restaurantId) });
+  const { data: restaurant } = useQuery({
+    queryKey,
+    queryFn: () => readRestaurant(api, restaurantId),
+  });
   const revision = useMutation({
     mutationFn: (menuItems: readonly MenuItem[]) => reviseMenu(api, restaurantId, menuItems),
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   });
-  if (restaurant.data === undefined) return <p>Loading the restaurant…</p>;
-  if ('problem' in restaurant.data) return <Alert message={problemOf(restaurant.data)} />;
+  if (restaurant === undefined) return <p>Loading the restaurant…</p>;
+  if ('problem' in restaurant) return <Alert message={problemOf(restaurant)} />;
   const save = (menuItems: readonly MenuItem[]): void => {
     revision.mutate(menuItems);
   };
   return (
     <main>
-      <h1>{restaurant.data.name}</h1>
+      <h1>{restaurant.name}</h1>
       <MenuForm
-        key={restaurant.data.version}
-        restaurant={restaurant.data}
+        key={restaurant.version}
+        restaurant={restaurant}
         isSaving={revision.isPending}
         onSave={save}
       />

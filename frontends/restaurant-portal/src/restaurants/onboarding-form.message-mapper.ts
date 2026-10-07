@@ -62,9 +62,9 @@ export const onboardingFormSchema = z
     minimumOrderInCents: toAmountInCents(form.minimumOrder),
   }));
 
-export type OnboardingForm = z.input<typeof onboardingFormSchema>;
+export type OnboardingFormValues = z.input<typeof onboardingFormSchema>;
 
-export const emptyOnboardingForm: OnboardingForm = {
+export const emptyOnboardingForm: OnboardingFormValues = {
   name: '',
   category: '',
   street: '',

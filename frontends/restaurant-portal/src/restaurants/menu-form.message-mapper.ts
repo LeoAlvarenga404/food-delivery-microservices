@@ -28,11 +28,11 @@ export const menuFormSchema = z
     })),
   );
 
-export type MenuForm = z.input<typeof menuFormSchema>;
+export type MenuFormValues = z.input<typeof menuFormSchema>;
 
-export type MenuRow = MenuForm['menuRows'][number];
+export type MenuRow = MenuFormValues['menuRows'][number];
 
-export function toMenuForm(restaurant: RestaurantView): MenuForm {
+export function toMenuForm(restaurant: RestaurantView): MenuFormValues {
   return {
     menuRows: restaurant.menuItems.map(({ menuItemId, name, priceInCents, isAvailable }) => ({
       menuItemId,

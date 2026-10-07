@@ -14,7 +14,7 @@ import {
   daysOfWeek,
   emptyOnboardingForm,
   onboardingFormSchema,
-  type OnboardingForm as OnboardingFormValues,
+  type OnboardingFormValues,
 } from './onboarding-form.message-mapper.ts';
 
 type OnboardingFormMethods = UseFormReturn<OnboardingFormValues, unknown, Onboarding>;

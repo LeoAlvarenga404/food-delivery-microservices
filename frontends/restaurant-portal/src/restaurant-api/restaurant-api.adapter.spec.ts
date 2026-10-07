@@ -8,6 +8,7 @@ import {
   reviseMenu,
   type Onboarding,
   type RestaurantApi,
+  type RestaurantView,
 } from './restaurant-api.adapter.ts';
 
 interface Answer {
@@ -35,6 +36,13 @@ const lasagna = {
   name: 'Lasagna',
   priceInCents: '3990',
   isAvailable: true,
+};
+const restaurant: RestaurantView = {
+  ...onboarding,
+  restaurantId,
+  version: 2,
+  currency: 'BRL',
+  menuItems: [lasagna],
 };
 
 class FakeEdge {
@@ -97,6 +105,15 @@ describe('the restaurant API adapter', () => {
     expect(request?.method).toBe('POST');
     expect(request?.url).toBe('http://portal.test/v1/restaurant/restaurants');
     expect(await request?.json()).toEqual(onboarding);
+  });
+
+  it('reads the restaurant the staff member opened', async () => {
+    const edge = new FakeEdge({ status: 200, body: restaurant });
+
+    await expect(readRestaurant(edge.api(), restaurantId)).resolves.toEqual(restaurant);
+    expect(edge.requests.map((request) => request.url)).toEqual([
+      `http://portal.test/v1/restaurant/restaurants/${restaurantId}`,
+    ]);
   });
 
   it('puts the whole menu of the restaurant and answers its new version', async () => {
