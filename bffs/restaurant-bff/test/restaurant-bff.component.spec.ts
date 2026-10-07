@@ -6,15 +6,18 @@ import {
   traceparentOf,
   type StartedKeycloak,
 } from '@fd/chassis-testing';
+import { KitchenService } from '@fd/contracts/fooddelivery/kitchen/v1/service_pb.js';
 import { RestaurantService } from '@fd/contracts/fooddelivery/restaurant/v1/service_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startRestaurantBff, type RunningRestaurantBff } from '../src/main.ts';
+import { FakeKitchenService, kitchenRestaurantId } from './support/kitchen-service.fake.ts';
 import { FakeRestaurantService, onboardedRestaurantId } from './support/restaurant-service.fake.ts';
 
 const spans = recordSpans();
 
 let restaurantService: FakeRestaurantService;
+let kitchenService: FakeKitchenService;
 let servicesServer: FastifyInstance;
 let keycloak: StartedKeycloak;
 let restaurantBff: RunningRestaurantBff;
@@ -47,16 +50,20 @@ function onboard(authorization: Record<string, string>): Promise<Response> {
 beforeAll(async () => {
   keycloak = await startKeycloakContainer();
   restaurantService = new FakeRestaurantService();
+  kitchenService = new FakeKitchenService();
   servicesServer = fastify();
   await servicesServer.register(fastifyConnectPlugin, {
     routes: (router) => {
       router.service(RestaurantService, restaurantService.implementation());
+      router.service(KitchenService, kitchenService.implementation());
     },
   });
   const servicesUrl = await servicesServer.listen({ host: '127.0.0.1', port: 0 });
   restaurantBff = await startRestaurantBff({
     restaurantServiceUrl: servicesUrl,
     restaurantServiceTimeoutInMilliseconds: 5000,
+    kitchenServiceUrl: servicesUrl,
+    kitchenServiceTimeoutInMilliseconds: 5000,
     host: '127.0.0.1',
     port: 0,
     logLevel: 'silent',
@@ -103,6 +110,25 @@ describe('restaurant bff', () => {
     expect(response.status).toBe(status);
     expect(response.headers.get('content-type')).toBe('application/problem+json; charset=utf-8');
     expect(restaurantService.onboardRestaurantRequests).toHaveLength(callsBefore);
+  });
+
+  it('lists tickets through the kitchen service with a token exchanged for its audience', async () => {
+    const response = await fetch(
+      `${restaurantBff.url}/v1/restaurant/restaurants/${kitchenRestaurantId}/tickets`,
+      { headers: bearer(await keycloak.signIn('staff-a')) },
+    );
+
+    expect(response.status).toBe(200);
+    const forwarded = readBearerToken(kitchenService.receivedAuthorizations.at(-1));
+    const verifier = createAccessTokenVerifier({
+      issuer: keycloak.issuer,
+      audience: 'kitchen-service',
+      jwksUrl: keycloak.jwksUrl,
+    });
+    const verified = await verifier(forwarded ?? '');
+    expect(verified.isRight() && verified.success.subject).toBe(
+      '0199a5d0-0000-7000-8000-0000000000e1',
+    );
   });
 
   it('sends the span of each restaurant service call as traceparent', async () => {

@@ -1,11 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { createClient, type Client } from '@connectrpc/connect';
+import { createClient, type Client, type Transport } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-node';
 import fastifySwagger from '@fastify/swagger';
 import { createAccessTokenVerifier, createTokenExchange } from '@fd/chassis-auth';
 import { stopOnSignals } from '@fd/chassis-lifecycle';
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { traceContextInterceptor } from '@fd/chassis-rpc';
+import { KitchenService } from '@fd/contracts/fooddelivery/kitchen/v1/service_pb.js';
 import { RestaurantService } from '@fd/contracts/fooddelivery/restaurant/v1/service_pb.js';
 import { fastify, LogController, type FastifyInstance, type RawServerDefault } from 'fastify';
 import {
@@ -23,9 +24,11 @@ import {
   type RestaurantBffConfiguration,
 } from './restaurant-bff.config.ts';
 import { restaurantRoutes } from './restaurants/restaurant.routes.ts';
+import { ticketRoutes } from './tickets/ticket.routes.ts';
 
 export interface RestaurantBffSettings {
   readonly restaurantService: Client<typeof RestaurantService>;
+  readonly kitchenService: Client<typeof KitchenService>;
   readonly serviceAccess: ServiceAccess;
   readonly logger: Logger;
   readonly generateCorrelationId: () => string;
@@ -93,6 +96,10 @@ export async function createRestaurantBffServer(
     restaurantService: settings.restaurantService,
     serviceAccess: settings.serviceAccess,
   });
+  await server.register(ticketRoutes, {
+    kitchenService: settings.kitchenService,
+    serviceAccess: settings.serviceAccess,
+  });
   server.get('/health', { schema: { hide: true } }, () => ({ status: 'ok' }));
   server.get('/openapi.json', { schema: { hide: true } }, () => server.swagger());
   return server;
@@ -113,19 +120,35 @@ function createConfiguredServiceAccess(configuration: RestaurantBffConfiguration
   });
 }
 
-function createRestaurantServiceClient(
+function createServiceTransport(baseUrl: string, timeoutInMilliseconds: number): Transport {
+  return createConnectTransport({
+    baseUrl,
+    httpVersion: '1.1',
+    useBinaryFormat: true,
+    defaultTimeoutMs: timeoutInMilliseconds,
+    interceptors: [traceContextInterceptor],
+  });
+}
+
+function createServiceClients(
   configuration: RestaurantBffConfiguration,
-): Client<typeof RestaurantService> {
-  return createClient(
-    RestaurantService,
-    createConnectTransport({
-      baseUrl: configuration.restaurantServiceUrl,
-      httpVersion: '1.1',
-      useBinaryFormat: true,
-      defaultTimeoutMs: configuration.restaurantServiceTimeoutInMilliseconds,
-      interceptors: [traceContextInterceptor],
-    }),
-  );
+): Pick<RestaurantBffSettings, 'restaurantService' | 'kitchenService'> {
+  const {
+    restaurantServiceUrl,
+    restaurantServiceTimeoutInMilliseconds,
+    kitchenServiceUrl,
+    kitchenServiceTimeoutInMilliseconds,
+  } = configuration;
+  return {
+    restaurantService: createClient(
+      RestaurantService,
+      createServiceTransport(restaurantServiceUrl, restaurantServiceTimeoutInMilliseconds),
+    ),
+    kitchenService: createClient(
+      KitchenService,
+      createServiceTransport(kitchenServiceUrl, kitchenServiceTimeoutInMilliseconds),
+    ),
+  };
 }
 
 export async function startRestaurantBff(
@@ -133,7 +156,7 @@ export async function startRestaurantBff(
 ): Promise<RunningRestaurantBff> {
   const logger = createLogger({ serviceName: 'restaurant-bff', level: configuration.logLevel });
   const server = await createRestaurantBffServer({
-    restaurantService: createRestaurantServiceClient(configuration),
+    ...createServiceClients(configuration),
     serviceAccess: createConfiguredServiceAccess(configuration),
     logger,
     generateCorrelationId: generateUuidV7,
