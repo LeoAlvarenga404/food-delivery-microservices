@@ -1,5 +1,6 @@
 import { fromBinary } from '@bufbuild/protobuf';
 import { AuthorizePaymentSchema } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
+import { CreateTicketSchema } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { describe, expect, it } from 'vitest';
 import {
   buildSagaOrder,
@@ -55,6 +56,12 @@ describe('toParticipantCommandMessage', () => {
       messageType,
       sagaId,
     });
+  });
+
+  it('carries the consumer of the order on CreateTicket, so Kitchen can authorize their reads', () => {
+    const message = toParticipantCommandMessage({ type: 'CreateTicket', order }, sagaId);
+
+    expect(fromBinary(CreateTicketSchema, message.payload).consumerId).toBe(order.consumerId);
   });
 
   it('carries the Protobuf payload of the command with the payment token', () => {

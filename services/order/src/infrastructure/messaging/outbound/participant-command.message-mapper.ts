@@ -33,6 +33,7 @@ export function toCreateTicket(order: PlaceOrderSagaOrder): CreateTicket {
       name,
       quantity,
     })),
+    consumerId: order.consumerId,
   });
 }
 
