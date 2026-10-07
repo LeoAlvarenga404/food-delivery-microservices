@@ -6,15 +6,27 @@ import {
   type DescMessage,
   type MessageInitShape,
 } from '@bufbuild/protobuf';
+import { timestampDate } from '@bufbuild/protobuf/wkt';
+import {
+  Code,
+  ConnectError,
+  createClient,
+  type Client,
+  type Interceptor,
+} from '@connectrpc/connect';
+import { createConnectTransport } from '@connectrpc/connect-node';
+import { createTokenExchange } from '@fd/chassis-auth';
 import { createKafka } from '@fd/chassis-kafka';
 import { createDatabase } from '@fd/chassis-postgres';
 import {
   recordSpans,
   SpanStatusCode,
   startKafkaContainer,
+  startKeycloakContainer,
   startPostgresContainer,
   traceparentOf,
   type StartedKafka,
+  type StartedKeycloak,
   type StartedPostgres,
 } from '@fd/chassis-testing';
 import {
@@ -25,9 +37,15 @@ import {
   TicketApprovedSchema,
   TicketCreatedSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
+import {
+  KitchenService,
+  TicketCommandFailureSchema,
+  TicketStatus,
+} from '@fd/contracts/fooddelivery/kitchen/v1/service_pb.js';
 import { MenuRevisedSchema } from '@fd/contracts/fooddelivery/restaurant/v1/events_pb.js';
 import { sql, type Kysely } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { KitchenServiceConfiguration } from '../src/infrastructure/kitchen-service.config.ts';
 import { startKitchenService, type RunningKitchenService } from '../src/main.ts';
 
 interface ReplyRow {
@@ -44,10 +62,12 @@ const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const waitLimitInMilliseconds = 30_000;
 const housekeepingIntervalInMilliseconds = 3_600_000;
 const commandTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+const staffAId = '0199a5d0-0000-7000-8000-0000000000e1';
 const spans = recordSpans();
 
 let postgres: StartedPostgres;
 let kafka: StartedKafka;
+let keycloak: StartedKeycloak;
 let kitchenService: RunningKitchenService;
 let outboxReader: Kysely<unknown>;
 const stoppers: (() => Promise<void>)[] = [];
@@ -63,6 +83,88 @@ async function waitFor<Result>(
     await delay(200);
   }
   throw new Error('condition not met in time');
+}
+
+function serviceConfiguration(
+  overrides: Partial<KitchenServiceConfiguration> = {},
+): KitchenServiceConfiguration {
+  return {
+    databaseUrl: postgres.connectionUri,
+    kafkaBootstrapServers: [kafka.bootstrapServer],
+    host: '127.0.0.1',
+    port: 0,
+    logLevel: 'silent',
+    housekeepingIntervalInMilliseconds,
+    accessTokenIssuer: keycloak.issuer,
+    accessTokenJwksUrl: keycloak.jwksUrl,
+    ...overrides,
+  };
+}
+
+function sendingAccessToken(accessToken: string): Interceptor {
+  return (next) => (request) => {
+    request.header.set('authorization', `Bearer ${accessToken}`);
+    return next(request);
+  };
+}
+
+async function kitchenClientFor(
+  username: string,
+  audience = 'kitchen-service',
+): Promise<Client<typeof KitchenService>> {
+  const exchange = createTokenExchange({
+    tokenUrl: keycloak.tokenUrl,
+    clientId: 'restaurant-bff',
+    clientSecret: keycloak.restaurantBffClientSecret,
+  });
+  const exchanged = await exchange(await keycloak.signIn(username), audience);
+  if (exchanged.isLeft()) throw new Error(`exchange refused: ${exchanged.failure.error}`);
+  return createClient(
+    KitchenService,
+    createConnectTransport({
+      baseUrl: kitchenService.url,
+      httpVersion: '1.1',
+      interceptors: [sendingAccessToken(exchanged.success)],
+    }),
+  );
+}
+
+async function rejectionOf(call: Promise<unknown>): Promise<ConnectError> {
+  return ConnectError.from(
+    await call.then(
+      () => undefined,
+      (rejection: unknown) => rejection,
+    ),
+  );
+}
+
+async function waitForMembers(restaurantId: string): Promise<unknown> {
+  return waitFor(async () => {
+    const result = await sql<{ readonly staffMemberIds: unknown }>`
+      select staff_member_ids from restaurant_memberships where restaurant_id = ${restaurantId}
+    `.execute(outboxReader);
+    return result.rows[0]?.staffMemberIds;
+  });
+}
+
+async function placeApprovedTicket(restaurantId: string, ticketOrderId: string): Promise<void> {
+  const createMessageId = '0199a5d0-0000-7000-8000-000000000c01';
+  const approveMessageId = '0199a5d0-0000-7000-8000-000000000c02';
+  await sendCommand(
+    CreateTicketSchema,
+    {
+      orderId: ticketOrderId,
+      restaurantId,
+      consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
+      lineItems: [
+        { menuItemId: '0199a5d0-0000-7000-8000-000000000101', name: 'Margherita', quantity: 1 },
+      ],
+    },
+    createMessageId,
+  );
+  await waitForReplyTo(createMessageId);
+  await sendCommand(ApproveTicketSchema, { orderId: ticketOrderId }, approveMessageId);
+  await waitForReplyTo(approveMessageId);
 }
 
 async function createSubscribedTopics(): Promise<void> {
@@ -169,7 +271,7 @@ async function createDatabaseThatFailsMigrations(databaseName: string): Promise<
 }
 
 beforeAll(async () => {
-  [postgres, kafka] = await Promise.all([
+  [postgres, kafka, keycloak] = await Promise.all([
     startPostgresContainer().then((started) => {
       stoppers.push(() => started.stop());
       return started;
@@ -178,16 +280,13 @@ beforeAll(async () => {
       stoppers.push(() => started.stop());
       return started;
     }),
+    startKeycloakContainer().then((started) => {
+      stoppers.push(() => started.stop());
+      return started;
+    }),
   ]);
   await createSubscribedTopics();
-  kitchenService = await startKitchenService({
-    databaseUrl: postgres.connectionUri,
-    kafkaBootstrapServers: [kafka.bootstrapServer],
-    host: '127.0.0.1',
-    port: 0,
-    logLevel: 'silent',
-    housekeepingIntervalInMilliseconds,
-  });
+  kitchenService = await startKitchenService(serviceConfiguration());
   stoppers.push(() => kitchenService.stop());
   outboxReader = createDatabase({
     connectionString: postgres.connectionUri,
@@ -269,6 +368,68 @@ describe('kitchen service', () => {
     expect(membership).toEqual({ version: 1, staffMemberIds });
   });
 
+  it('lets a member list, accept, prepare and ready a ticket, publishing each step', async () => {
+    const restaurantId = '0199a5d0-0000-7000-8000-0000000000b8';
+    await publishMembers(restaurantId, [staffAId]);
+    await placeApprovedTicket(restaurantId, '0199a5d0-0000-7000-8000-0000000000a8');
+    await waitForMembers(restaurantId);
+    const staffA = await kitchenClientFor('staff-a');
+
+    const [listed] = (await staffA.listTickets({ restaurantId })).tickets;
+    const ticketId = listed?.ticketId ?? '';
+    const accepted = await staffA.acceptTicket({
+      restaurantId,
+      ticketId,
+      preparationTimeInMinutes: 15,
+    });
+    await staffA.startPreparingTicket({ restaurantId, ticketId });
+    const ready = await staffA.markTicketReady({ restaurantId, ticketId });
+
+    expect([listed?.status, accepted.ticket?.status, ready.ticket?.status]).toEqual([
+      TicketStatus.AWAITING_ACCEPTANCE,
+      TicketStatus.ACCEPTED,
+      TicketStatus.READY_FOR_PICKUP,
+    ]);
+    const readyBy = accepted.ticket?.readyBy;
+    const minutesUntilReady =
+      readyBy === undefined ? 0 : (timestampDate(readyBy).getTime() - Date.now()) / 60_000;
+    expect(minutesUntilReady).toBeGreaterThan(14);
+    expect(minutesUntilReady).toBeLessThanOrEqual(15);
+    const events = await sql<{
+      readonly topic: string;
+      readonly messageType: string;
+      readonly actorId: string;
+    }>`
+      select topic, message_type, actor_id from outbox where aggregate_id = ${ticketId} order by id
+    `.execute(outboxReader);
+    expect(events.rows).toEqual(
+      [
+        'fooddelivery.kitchen.v1.TicketAccepted',
+        'fooddelivery.kitchen.v1.TicketPreparationStarted',
+        'fooddelivery.kitchen.v1.TicketReadyForPickup',
+      ].map((messageType) => ({ topic: 'kitchen.ticket.events', messageType, actorId: staffAId })),
+    );
+  });
+
+  it('refuses a staff member of another restaurant and a token meant for another service', async () => {
+    const restaurantId = '0199a5d0-0000-7000-8000-0000000000b7';
+    await publishMembers(restaurantId, [staffAId]);
+    await waitForMembers(restaurantId);
+
+    const staffB = await rejectionOf(
+      (await kitchenClientFor('staff-b')).listTickets({ restaurantId }),
+    );
+    const otherAudience = await rejectionOf(
+      (await kitchenClientFor('staff-a', 'restaurant-service')).listTickets({ restaurantId }),
+    );
+
+    expect([staffB.code, staffB.findDetails(TicketCommandFailureSchema)[0]?.reason]).toEqual([
+      Code.PermissionDenied,
+      'NotRestaurantMember',
+    ]);
+    expect(otherAudience.code).toBe(Code.Unauthenticated);
+  });
+
   it('answers its health endpoint', async () => {
     const response = await fetch(`${kitchenService.url}/health`);
 
@@ -279,14 +440,7 @@ describe('kitchen service', () => {
     const databaseName = 'kitchen_start_failure';
     const databaseUrl = await createDatabaseThatFailsMigrations(databaseName);
 
-    const failedStart = startKitchenService({
-      databaseUrl,
-      kafkaBootstrapServers: [kafka.bootstrapServer],
-      host: '127.0.0.1',
-      port: 0,
-      logLevel: 'silent',
-      housekeepingIntervalInMilliseconds,
-    });
+    const failedStart = startKitchenService(serviceConfiguration({ databaseUrl }));
 
     await expect(failedStart).rejects.toThrow();
     const openConnections = await waitFor(async () => {
@@ -302,14 +456,12 @@ describe('kitchen service', () => {
     const databaseUrl = new URL(postgres.connectionUri);
     databaseUrl.pathname = `/${databaseName}`;
 
-    const failedStart = startKitchenService({
-      databaseUrl: databaseUrl.toString(),
-      kafkaBootstrapServers: [kafka.bootstrapServer],
-      host: '127.0.0.1',
-      port: Number(new URL(kitchenService.url).port),
-      logLevel: 'silent',
-      housekeepingIntervalInMilliseconds,
-    });
+    const failedStart = startKitchenService(
+      serviceConfiguration({
+        databaseUrl: databaseUrl.toString(),
+        port: Number(new URL(kitchenService.url).port),
+      }),
+    );
 
     await expect(failedStart).rejects.toThrow('EADDRINUSE');
     const openConnections = await waitFor(async () => {
@@ -324,14 +476,12 @@ describe('kitchen service', () => {
     await sql`create database ${sql.id(databaseName)}`.execute(outboxReader);
     const databaseUrl = new URL(postgres.connectionUri);
     databaseUrl.pathname = `/${databaseName}`;
-    const stoppableService = await startKitchenService({
-      databaseUrl: databaseUrl.toString(),
-      kafkaBootstrapServers: [kafka.bootstrapServer],
-      host: '127.0.0.1',
-      port: 0,
-      logLevel: 'silent',
-      housekeepingIntervalInMilliseconds: 100,
-    });
+    const stoppableService = await startKitchenService(
+      serviceConfiguration({
+        databaseUrl: databaseUrl.toString(),
+        housekeepingIntervalInMilliseconds: 100,
+      }),
+    );
     const healthUrl = `${stoppableService.url}/health`;
     expect((await fetch(healthUrl)).status).toBe(200);
     await waitFor(() => Promise.resolve(spans.spansNamed('housekeeping').at(0)));

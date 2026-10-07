@@ -134,6 +134,16 @@
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
+        },
+        {
+          "name": "kitchen-service audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "kitchen-service",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
         }
       ]
     },
@@ -147,6 +157,10 @@
     },
     {
       "clientId": "restaurant-service",
+      "bearerOnly": true
+    },
+    {
+      "clientId": "kitchen-service",
       "bearerOnly": true
     }
   ],
