@@ -21,6 +21,7 @@ export interface PlaceOrderInput {
   readonly requestedLineItems: readonly RequestedLineItem[];
   readonly deliveryAddress: DeliveryAddress;
   readonly placedAt: Date;
+  readonly deliveryFeeInCents: bigint;
 }
 
 function priceLineItem(

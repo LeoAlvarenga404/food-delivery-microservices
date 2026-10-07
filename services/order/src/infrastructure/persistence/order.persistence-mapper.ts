@@ -44,6 +44,7 @@ function toOrderRow(snapshot: OrderSnapshot): OrderRow {
     consumerId: snapshot.consumerId,
     restaurantId: snapshot.restaurantId,
     status: state.status,
+    deliveryFeeInCents: snapshot.deliveryFeeInCents,
     totalInCents: snapshot.totalInCents,
     currency: snapshot.currency,
     deliveryStreet: deliveryAddress.street,
@@ -66,6 +67,7 @@ export const orderPersistenceMapper = {
       consumerId: order.consumerId as ConsumerId,
       restaurantId: order.restaurantId as RestaurantId,
       lineItems: rows.lineItems.map(toLineItemSnapshot),
+      deliveryFeeInCents: order.deliveryFeeInCents,
       totalInCents: order.totalInCents,
       currency: order.currency as Currency,
       deliveryAddress: {

@@ -36,6 +36,7 @@ export interface Orders {
   consumerId: string;
   currency: string;
   deliveryCity: string;
+  deliveryFeeInCents: bigint;
   deliveryNumber: string;
   deliveryPostalCode: string;
   deliveryStreet: string;

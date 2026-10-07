@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
-import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
+import { buildOrder, deliveryFeeInCents, unwrap } from '../../../../test/support/order.builder.ts';
 import {
   buildPlaceOrderCommand,
   requestMetadata,
@@ -30,6 +30,7 @@ beforeEach(() => {
     clock: new FakeClock(),
     idGenerator: new FakeIdGenerator(),
     sagaTimeoutsInMilliseconds,
+    deliveryFeeInCents,
   });
 });
 
@@ -53,6 +54,22 @@ describe('PlaceOrderCommandHandler', () => {
     expect(unitOfWork.executedMetadata).toEqual([requestMetadata]);
   });
 
+  it('prices the order with the delivery fee it was configured with', async () => {
+    const pricingPlaceOrder = new PlaceOrderCommandHandler({
+      unitOfWork,
+      clock: new FakeClock(),
+      idGenerator: new FakeIdGenerator(),
+      sagaTimeoutsInMilliseconds,
+      deliveryFeeInCents: 1500n,
+    });
+
+    unwrap(await pricingPlaceOrder.execute(buildPlaceOrderCommand()));
+
+    const { orderId } = buildOrder().toSnapshot();
+    const stored = (await unitOfWork.orders.findById(orderId))?.toSnapshot();
+    expect([stored?.deliveryFeeInCents, stored?.totalInCents]).toEqual([1500n, 11300n]);
+  });
+
   it('answers a repeated key carrying the same request with the original order', async () => {
     await placeOrder.execute(buildPlaceOrderCommand());
 
@@ -72,6 +89,7 @@ describe('PlaceOrderCommandHandler', () => {
         generateSagaId: () => firstSagaId,
       },
       sagaTimeoutsInMilliseconds,
+      deliveryFeeInCents,
     });
     await repeatingPlaceOrder.execute(buildPlaceOrderCommand());
 

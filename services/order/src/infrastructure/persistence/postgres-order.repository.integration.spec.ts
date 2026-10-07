@@ -29,6 +29,16 @@ describeOrderRepositoryContract(
 );
 
 describe('postgres order repository rows', () => {
+  it('stores the delivery fee beside the total that includes it', async () => {
+    await new PostgresOrderRepository(testDatabase.database).save(buildOrder());
+
+    const row = await testDatabase.database
+      .selectFrom('orders')
+      .select(['deliveryFeeInCents', 'totalInCents'])
+      .executeTakeFirstOrThrow();
+    expect(row).toEqual({ deliveryFeeInCents: 800n, totalInCents: 10600n });
+  });
+
   it('stores the approved status, the approval time and the next version', async () => {
     const repository = new PostgresOrderRepository(testDatabase.database);
     const placed = buildOrder();
@@ -108,16 +118,21 @@ describe('postgres order repository rows', () => {
       problem: 'a rejection reason outside the catalogue',
       rejection: `'REJECTED', now(), 'CARD_STOLEN'`,
     },
-  ])('refuses $problem', async ({ rejection }) => {
+    {
+      problem: 'a negative delivery fee',
+      rejection: `'APPROVAL_PENDING', null, null`,
+      deliveryFeeInCents: -1,
+    },
+  ])('refuses $problem', async ({ rejection, deliveryFeeInCents = 800 }) => {
     const insertion = sql`
       insert into orders (
-        order_id, consumer_id, restaurant_id, total_in_cents, currency, delivery_street,
-        delivery_number, delivery_city, delivery_postal_code, placed_at, version,
+        order_id, consumer_id, restaurant_id, delivery_fee_in_cents, total_in_cents, currency,
+        delivery_street, delivery_number, delivery_city, delivery_postal_code, placed_at, version,
         status, rejected_at, rejection_reason
       ) values (
         '0199a5d0-0000-7000-8000-0000000000a9', '0199a5d0-0000-7000-8000-0000000000c1',
-        '0199a5d0-0000-7000-8000-000000000001', 9800, 'BRL', 'Rua Augusta', '1500',
-        'Sao Paulo', '01304-001', now(), 1, ${sql.raw(rejection)}
+        '0199a5d0-0000-7000-8000-000000000001', ${deliveryFeeInCents}, 10600, 'BRL',
+        'Rua Augusta', '1500', 'Sao Paulo', '01304-001', now(), 1, ${sql.raw(rejection)}
       )
     `.execute(testDatabase.database);
 

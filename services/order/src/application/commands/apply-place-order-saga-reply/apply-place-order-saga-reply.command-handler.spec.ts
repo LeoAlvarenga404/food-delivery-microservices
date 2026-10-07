@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
-import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
+import { buildOrder, deliveryFeeInCents, unwrap } from '../../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../../test/support/place-order-command.builder.ts';
 import {
   buildSagaOrder,
@@ -58,6 +58,7 @@ beforeEach(async () => {
     clock: new FakeClock(),
     idGenerator: new FakeIdGenerator(),
     sagaTimeoutsInMilliseconds,
+    deliveryFeeInCents,
   });
   unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
   unitOfWork.commands.sentCommands.length = 0;

@@ -9,7 +9,7 @@ import {
   startOrderTestDatabase,
   type OrderTestDatabase,
 } from '../../../test/support/order-database.builder.ts';
-import { buildOrder, unwrap } from '../../../test/support/order.builder.ts';
+import { buildOrder, deliveryFeeInCents, unwrap } from '../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../test/support/place-order-command.builder.ts';
 import {
   buildSagaInstance,
@@ -143,6 +143,7 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
       clock: new FakeClock(),
       idGenerator: new FakeIdGenerator(),
       sagaTimeoutsInMilliseconds,
+      deliveryFeeInCents,
     });
     unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
     const timedOutAt = new Date(verificationDeadline.getTime() + 1);
@@ -183,6 +184,7 @@ describe('PlaceOrderSagaDeadlineWorker', () => {
       clock: new FakeClock(),
       idGenerator: new FakeIdGenerator(),
       sagaTimeoutsInMilliseconds,
+      deliveryFeeInCents,
     });
     unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
 

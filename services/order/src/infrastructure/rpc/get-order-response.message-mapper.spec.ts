@@ -5,8 +5,8 @@ import { buildOrder, unwrap } from '../../../test/support/order.builder.ts';
 import { toGetOrderResponse } from './get-order-response.message-mapper.ts';
 
 describe('toGetOrderResponse', () => {
-  it('maps an approved order with a total beyond the safe integer range', () => {
-    const order = buildOrder();
+  it('maps an approved order with a delivery fee and a total beyond the safe integer range', () => {
+    const order = buildOrder({ deliveryFeeInCents: 1200n });
     unwrap(order.approve(new Date('2026-10-02T12:00:05.000Z')));
     const snapshot = { ...order.toSnapshot(), totalInCents: 9007199254740993n };
 
@@ -14,6 +14,7 @@ describe('toGetOrderResponse', () => {
       orderId: snapshot.orderId,
       status: OrderStatus.APPROVED,
       rejectionReason: OrderRejectionReason.UNSPECIFIED,
+      deliveryFeeInCents: 1200n,
       totalInCents: 9007199254740993n,
       currency: 'BRL',
       lineItems: [

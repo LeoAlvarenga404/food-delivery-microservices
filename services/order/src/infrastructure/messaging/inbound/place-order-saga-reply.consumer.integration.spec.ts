@@ -25,7 +25,7 @@ import {
   startOrderTestDatabase,
   type OrderTestDatabase,
 } from '../../../../test/support/order-database.builder.ts';
-import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
+import { buildOrder, deliveryFeeInCents, unwrap } from '../../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../../test/support/place-order-command.builder.ts';
 import { sagaTimeoutsInMilliseconds } from '../../../../test/support/place-order-saga.builder.ts';
 import { buildReplyMessage } from '../../../../test/support/reply-message.builder.ts';
@@ -112,6 +112,7 @@ beforeEach(async () => {
     clock: new FakeClock(),
     idGenerator: new FakeIdGenerator(),
     sagaTimeoutsInMilliseconds,
+    deliveryFeeInCents,
   });
   unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
   inboxSettings = {

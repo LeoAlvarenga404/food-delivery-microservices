@@ -55,6 +55,16 @@ describe('toOrderEventMessages', () => {
     );
   });
 
+  it('publishes OrderPlaced with the delivery fee and the total that includes it', () => {
+    const [placed] = buildOrder({ deliveryFeeInCents: 1200n }).pullRecordedEvents();
+    if (placed?.eventType !== 'OrderPlaced') throw new Error('expected OrderPlaced');
+
+    expect(toOrderPlacedContract(placed)).toMatchObject({
+      deliveryFeeInCents: 1200n,
+      totalInCents: 11000n,
+    });
+  });
+
   it('publishes OrderRejected with its reason and rejection time', () => {
     const order = buildOrder();
     order.pullRecordedEvents();

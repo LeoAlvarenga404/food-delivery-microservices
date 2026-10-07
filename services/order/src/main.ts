@@ -64,6 +64,7 @@ async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpSer
       clock,
       idGenerator: new UuidV7IdGenerator(),
       sagaTimeoutsInMilliseconds: configuration.sagaTimeoutsInMilliseconds,
+      deliveryFeeInCents: configuration.deliveryFeeInCents,
     }),
     getOrder: new GetOrderQueryHandler(new PostgresOrderRepository(database)),
   });

@@ -18,6 +18,7 @@ export interface PlaceOrderDependencies {
   readonly clock: Clock;
   readonly idGenerator: IdGenerator;
   readonly sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds;
+  readonly deliveryFeeInCents: bigint;
 }
 
 interface Placement {
@@ -83,6 +84,7 @@ export class PlaceOrderCommandHandler {
       menu,
       requestedLineItems: command.requestedLineItems,
       deliveryAddress: command.deliveryAddress,
+      deliveryFeeInCents: this.#dependencies.deliveryFeeInCents,
     });
     if (order.isLeft()) return order;
     await scope.orders.save(order.success);
