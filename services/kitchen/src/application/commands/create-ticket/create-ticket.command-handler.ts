@@ -31,14 +31,14 @@ export class CreateTicketCommandHandler {
     scope: TransactionScope,
     command: CreateTicketCommand,
   ): Promise<Either<never, KitchenReply>> {
-    const { orderId, restaurantId, lineItems, sagaId } = command;
+    const { orderId, restaurantId, consumerId, lineItems, sagaId } = command;
     const existing = await scope.tickets.findByOrderId(orderId);
     if (existing !== undefined) {
       const { ticketId } = existing.toSnapshot();
       return answerSaga(scope, { type: 'TicketCreated', orderId, ticketId }, sagaId);
     }
     const ticketId = this.#idGenerator.generateTicketId();
-    const creation = Ticket.create({ ticketId, orderId, restaurantId, lineItems });
+    const creation = Ticket.create({ ticketId, orderId, restaurantId, consumerId, lineItems });
     if (creation.isLeft()) {
       const reason = creation.failure.type;
       return answerSaga(scope, { type: 'TicketCreationFailed', orderId, reason }, sagaId);

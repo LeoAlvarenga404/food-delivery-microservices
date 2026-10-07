@@ -45,15 +45,16 @@ export class PostgresTicketRepository implements TicketRepository {
   }
 
   async #update(row: TicketRow): Promise<void> {
+    const { ticketId, version, lineItems, ...columns } = row;
     const result = await this.#database
       .updateTable('tickets')
-      .set({ status: row.status, version: row.version + 1 })
-      .where('ticketId', '=', row.ticketId)
-      .where('version', '=', row.version)
+      .set({ ...columns, lineItems: JSON.stringify(lineItems), version: version + 1 })
+      .where('ticketId', '=', ticketId)
+      .where('version', '=', version)
       .executeTakeFirst();
     if (result.numUpdatedRows === 0n) {
       throw new ConcurrencyConflictError(
-        `ticket ${row.ticketId} changed after version ${String(row.version)}`,
+        `ticket ${ticketId} changed after version ${String(version)}`,
       );
     }
   }

@@ -19,10 +19,10 @@ describe('kitchen command golden samples', () => {
 
     const kitchenCommand = toKitchenCommand(buildCommandMessage(CreateTicketSchema, sample));
 
-    const { orderId, restaurantId, lineItems } = createTicketInput();
+    const { orderId, restaurantId, consumerId, lineItems } = createTicketInput();
     expect(kitchenCommand).toMatchObject({
       type: 'CreateTicket',
-      command: { orderId, restaurantId, lineItems },
+      command: { orderId, restaurantId, consumerId, lineItems },
     });
   });
 

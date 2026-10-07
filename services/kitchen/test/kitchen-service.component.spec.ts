@@ -189,6 +189,7 @@ describe('kitchen service', () => {
       {
         orderId,
         restaurantId: '0199a5d0-0000-7000-8000-000000000001',
+        consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
         lineItems: [
           { menuItemId: '0199a5d0-0000-7000-8000-000000000101', name: 'Margherita', quantity: 2 },
         ],

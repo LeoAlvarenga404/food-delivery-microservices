@@ -33,7 +33,7 @@ describe('ApproveTicketCommandHandler', () => {
 
     expect(outcome).toEqual(right(reply));
     expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot()).toMatchObject({
-      status: 'AWAITING_ACCEPTANCE',
+      state: { status: 'AWAITING_ACCEPTANCE' },
       version: 2,
     });
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);

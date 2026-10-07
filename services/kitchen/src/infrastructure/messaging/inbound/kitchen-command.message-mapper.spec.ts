@@ -9,8 +9,8 @@ import { buildCommandMessage } from '../../../../test/support/command-message.bu
 import { createTicketInput, orderId } from '../../../../test/support/ticket.builder.ts';
 import { toKitchenCommand } from './kitchen-command.message-mapper.ts';
 
-const { restaurantId, lineItems } = createTicketInput();
-const createTicket = { orderId, restaurantId, lineItems: [...lineItems] };
+const { restaurantId, consumerId, lineItems } = createTicketInput();
+const createTicket = { orderId, restaurantId, consumerId, lineItems: [...lineItems] };
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 
 describe('toKitchenCommand', () => {
@@ -22,6 +22,7 @@ describe('toKitchenCommand', () => {
       command: {
         orderId,
         restaurantId,
+        consumerId,
         lineItems,
         sagaId,
         metadata: {
@@ -61,10 +62,11 @@ describe('toKitchenCommand', () => {
     });
   });
 
-  it('reads the restaurant and menu item ids in canonical lowercase form', () => {
+  it('reads the restaurant, consumer and menu item ids in canonical lowercase form', () => {
     const message = buildCommandMessage(CreateTicketSchema, {
       ...createTicket,
       restaurantId: restaurantId.toUpperCase(),
+      consumerId: consumerId.toUpperCase(),
       lineItems: lineItems.map((lineItem) => ({
         ...lineItem,
         menuItemId: lineItem.menuItemId.toUpperCase(),
@@ -72,7 +74,7 @@ describe('toKitchenCommand', () => {
     });
 
     expect(toKitchenCommand(message)).toMatchObject({
-      command: { restaurantId, lineItems },
+      command: { restaurantId, consumerId, lineItems },
     });
   });
 
@@ -113,6 +115,17 @@ describe('toKitchenCommand', () => {
     {
       problem: 'a restaurant id that is not a uuid',
       message: buildCommandMessage(CreateTicketSchema, { ...createTicket, restaurantId: '' }),
+    },
+    {
+      problem: 'a CreateTicket without a consumer id, as Order sent before slice 3',
+      message: buildCommandMessage(CreateTicketSchema, { ...createTicket, consumerId: '' }),
+    },
+    {
+      problem: 'a consumer id that is not a uuid',
+      message: buildCommandMessage(CreateTicketSchema, {
+        ...createTicket,
+        consumerId: 'consumer-a',
+      }),
     },
     {
       problem: 'a menu item id that is not a uuid',

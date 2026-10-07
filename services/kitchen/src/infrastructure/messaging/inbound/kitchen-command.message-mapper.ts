@@ -6,11 +6,14 @@ import {
   CreateTicketSchema,
   RejectTicketSchema,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
-import { isUuid } from '@fd/domain';
+import type { Either } from '@fd/domain';
 import type { ApproveTicketCommand } from '#application/commands/approve-ticket/approve-ticket.command.ts';
 import type { CreateTicketCommand } from '#application/commands/create-ticket/create-ticket.command.ts';
 import type { RejectTicketCommand } from '#application/commands/reject-ticket/reject-ticket.command.ts';
+import { parseConsumerId } from '#domain/ticket/consumer-id.value-object.ts';
+import { parseMenuItemId } from '#domain/ticket/menu-item-id.value-object.ts';
 import { parseOrderId, type OrderId } from '#domain/ticket/order-id.value-object.ts';
+import { parseRestaurantId } from '#domain/ticket/restaurant-id.value-object.ts';
 
 export type KitchenCommand =
   | { readonly type: 'CreateTicket'; readonly command: CreateTicketCommand }
@@ -38,18 +41,20 @@ function requireOrderId(rawOrderId: string): OrderId {
   return orderId.success;
 }
 
-function requireUuid(rawId: string, field: string): string {
-  if (!isUuid(rawId)) throw new PermanentMessageFailure(`CreateTicket without a valid ${field}`);
-  return rawId.toLowerCase();
+function requireField<Field>(parsed: Either<unknown, Field>, fieldName: string): Field {
+  if (parsed.isLeft())
+    throw new PermanentMessageFailure(`CreateTicket without a valid ${fieldName}`);
+  return parsed.success;
 }
 
 function toCreateTicketCommand(message: InboundMessage, sagaId: string): CreateTicketCommand {
   const createTicket = decode(CreateTicketSchema, message);
   return {
     orderId: requireOrderId(createTicket.orderId),
-    restaurantId: requireUuid(createTicket.restaurantId, 'restaurant id'),
+    restaurantId: requireField(parseRestaurantId(createTicket.restaurantId), 'restaurant id'),
+    consumerId: requireField(parseConsumerId(createTicket.consumerId), 'consumer id'),
     lineItems: createTicket.lineItems.map(({ menuItemId, name, quantity }) => ({
-      menuItemId: requireUuid(menuItemId, 'menu item id'),
+      menuItemId: requireField(parseMenuItemId(menuItemId), 'menu item id'),
       name,
       quantity,
     })),

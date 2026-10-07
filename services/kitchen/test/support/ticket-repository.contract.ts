@@ -4,7 +4,17 @@ import { parseOrderId, type OrderId } from '#domain/ticket/order-id.value-object
 import { parseTicketId } from '#domain/ticket/ticket-id.value-object.ts';
 import type { Ticket } from '#domain/ticket/ticket.aggregate.ts';
 import type { TicketRepository } from '#domain/ticket/ticket.repository.ts';
-import { buildTicket, orderId, unwrap } from './ticket.builder.ts';
+import {
+  acceptedAt,
+  buildTicket,
+  fifteenMinutes,
+  orderId,
+  readyBy,
+  unwrap,
+} from './ticket.builder.ts';
+
+const preparationStartedAt = new Date('2026-10-06T18:02:00.000Z');
+const markedReadyAt = new Date('2026-10-06T18:14:00.000Z');
 
 async function findStoredTicket(
   tickets: TicketRepository,
@@ -13,6 +23,16 @@ async function findStoredTicket(
   const ticket = await tickets.findByOrderId(storedOrderId);
   if (ticket === undefined) throw new Error(`no ticket stored for order ${storedOrderId}`);
   return ticket;
+}
+
+async function saveChanged(
+  tickets: TicketRepository,
+  change: (ticket: Ticket) => unknown,
+): Promise<Ticket> {
+  const stored = await findStoredTicket(tickets, orderId);
+  change(stored);
+  await tickets.save(stored);
+  return findStoredTicket(tickets, orderId);
 }
 
 export function describeTicketRepositoryContract(
@@ -26,7 +46,7 @@ export function describeTicketRepositoryContract(
       tickets = createRepository();
     });
 
-    it('finds a saved ticket by its order with its line items', async () => {
+    it('finds a saved ticket by its order with its consumer and line items', async () => {
       const ticket = buildTicket();
 
       await tickets.save(ticket);
@@ -45,24 +65,56 @@ export function describeTicketRepositoryContract(
 
     it('saves the approval of a stored ticket and increments its version', async () => {
       await tickets.save(buildTicket());
-      const stored = await findStoredTicket(tickets, orderId);
-      unwrap(stored.approve());
 
-      await tickets.save(stored);
-      const { status, version } = (await findStoredTicket(tickets, orderId)).toSnapshot();
+      const { state, version } = (
+        await saveChanged(tickets, (stored) => stored.approve())
+      ).toSnapshot();
 
-      expect({ status, version }).toEqual({ status: 'AWAITING_ACCEPTANCE', version: 2 });
+      expect({ state, version }).toEqual({ state: { status: 'AWAITING_ACCEPTANCE' }, version: 2 });
     });
 
     it('saves the rejection of a stored ticket and increments its version', async () => {
       await tickets.save(buildTicket());
-      const stored = await findStoredTicket(tickets, orderId);
-      unwrap(stored.reject());
 
-      await tickets.save(stored);
-      const { status, version } = (await findStoredTicket(tickets, orderId)).toSnapshot();
+      const { state, version } = (
+        await saveChanged(tickets, (stored) => stored.reject())
+      ).toSnapshot();
 
-      expect({ status, version }).toEqual({ status: 'REJECTED', version: 2 });
+      expect({ state, version }).toEqual({ state: { status: 'REJECTED' }, version: 2 });
+    });
+
+    it('saves the acceptance with its acceptance and ready-by times', async () => {
+      await tickets.save(buildTicket());
+      await saveChanged(tickets, (stored) => stored.approve());
+
+      const { state, version } = (
+        await saveChanged(tickets, (stored) => stored.accept(fifteenMinutes, acceptedAt))
+      ).toSnapshot();
+
+      expect({ state, version }).toEqual({
+        state: { status: 'ACCEPTED', acceptedAt, readyBy },
+        version: 3,
+      });
+    });
+
+    it('saves the preparation and the readiness, keeping the times of the acceptance', async () => {
+      await tickets.save(buildTicket());
+      await saveChanged(tickets, (stored) => stored.approve());
+      await saveChanged(tickets, (stored) => stored.accept(fifteenMinutes, acceptedAt));
+      const preparing = await saveChanged(tickets, (stored) =>
+        stored.startPreparing(preparationStartedAt),
+      );
+
+      const ready = await saveChanged(tickets, (stored) => stored.markReady(markedReadyAt));
+
+      expect([preparing.toSnapshot().state, ready.toSnapshot()]).toEqual([
+        { status: 'PREPARING', acceptedAt, readyBy },
+        {
+          ...buildTicket().toSnapshot(),
+          state: { status: 'READY_FOR_PICKUP', acceptedAt, readyBy },
+          version: 5,
+        },
+      ]);
     });
 
     it('rejects a save based on a version another save already replaced', async () => {
