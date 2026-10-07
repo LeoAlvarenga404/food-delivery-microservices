@@ -70,4 +70,40 @@ describe('postgres payments table', () => {
 
     await expect(insertion).rejects.toMatchObject({ code: '23514' });
   });
+
+  it.each([
+    { problem: 'a voided payment without its void time', voidColumns: `'VOIDED', null, 'void-1'` },
+    {
+      problem: 'a voided payment without its gateway reference',
+      voidColumns: `'VOIDED', now(), null`,
+    },
+    {
+      problem: 'an authorized payment with a void time',
+      voidColumns: `'AUTHORIZED', now(), 'void-1'`,
+    },
+    { problem: 'a status outside the lifecycle', voidColumns: `'CAPTURED', null, null` },
+  ])('rejects $problem', async ({ voidColumns }) => {
+    const insertion = sql`
+      insert into payments (
+        payment_id, order_id, consumer_id, restaurant_id, amount_in_cents,
+        delivery_fee_in_cents, currency, gateway_authorization_id, authorized_at, version,
+        status, voided_at, gateway_void_id
+      )
+      values (
+        '0199a5d0-0000-7000-8000-0000000000a1',
+        '0199a5d0-0000-7000-8000-0000000000a2',
+        '0199a5d0-0000-7000-8000-0000000000a3',
+        '0199a5d0-0000-7000-8000-000000000001',
+        9800,
+        800,
+        'BRL',
+        'authorization-1',
+        now(),
+        1,
+        ${sql.raw(voidColumns)}
+      )
+    `.execute(testDatabase.database);
+
+    await expect(insertion).rejects.toMatchObject({ code: '23514' });
+  });
 });

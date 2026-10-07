@@ -30,6 +30,7 @@ describe('accountingMigrationSources', () => {
     expect(appliedMigrations).toEqual([
       'accounting/0001-create-payments-table',
       'accounting/0002-add-payment-restaurant-and-delivery-fee',
+      'accounting/0003-add-payment-void',
       'inbox/0001-create-inbox-table',
       'outbox/0001-create-outbox-table',
     ]);

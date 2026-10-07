@@ -1,6 +1,10 @@
 import type { Either } from '@fd/domain';
 import { parseConsumerId, type ConsumerId } from '#domain/payment/consumer-id.value-object.ts';
 import { parseGatewayAuthorizationId } from '#domain/payment/gateway-authorization-id.value-object.ts';
+import {
+  parseGatewayVoidId,
+  type GatewayVoidId,
+} from '#domain/payment/gateway-void-id.value-object.ts';
 import { parseOrderId, type OrderId } from '#domain/payment/order-id.value-object.ts';
 import { parsePaymentId, type PaymentId } from '#domain/payment/payment-id.value-object.ts';
 import { Payment, type AuthorizePaymentInput } from '#domain/payment/payment.aggregate.ts';
@@ -21,6 +25,9 @@ export const consumerId: ConsumerId = unwrap(
 );
 export const restaurantId: RestaurantId = unwrap(
   parseRestaurantId('0199a5d0-0000-7000-8000-000000000001'),
+);
+export const gatewayVoidId: GatewayVoidId = unwrap(
+  parseGatewayVoidId('0199a5d0-0000-7000-8000-000000000a97'),
 );
 
 export function authorizePaymentInput(

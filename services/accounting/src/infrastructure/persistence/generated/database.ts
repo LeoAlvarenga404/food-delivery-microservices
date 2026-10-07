@@ -9,11 +9,13 @@ export interface Payments {
   currency: string;
   deliveryFeeInCents: bigint;
   gatewayAuthorizationId: string;
+  gatewayVoidId: string | null;
   orderId: string;
   paymentId: string;
   restaurantId: string;
   status: string;
   version: number;
+  voidedAt: Timestamp | null;
 }
 
 export interface DB {

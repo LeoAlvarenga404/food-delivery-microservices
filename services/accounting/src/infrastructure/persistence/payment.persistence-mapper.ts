@@ -1,14 +1,27 @@
 import type { Selectable } from 'kysely';
 import type { ConsumerId } from '#domain/payment/consumer-id.value-object.ts';
 import type { GatewayAuthorizationId } from '#domain/payment/gateway-authorization-id.value-object.ts';
+import type { GatewayVoidId } from '#domain/payment/gateway-void-id.value-object.ts';
 import type { Currency } from '#domain/payment/money.value-object.ts';
 import type { OrderId } from '#domain/payment/order-id.value-object.ts';
 import type { PaymentId } from '#domain/payment/payment-id.value-object.ts';
-import { Payment, type PaymentStatus } from '#domain/payment/payment.aggregate.ts';
+import { Payment, type PaymentState } from '#domain/payment/payment.aggregate.ts';
 import type { RestaurantId } from '#domain/payment/restaurant-id.value-object.ts';
 import type { Payments } from './generated/database.ts';
 
 export type PaymentRow = Selectable<Payments>;
+
+function toPaymentState({ status, voidedAt, gatewayVoidId }: PaymentRow): PaymentState {
+  if (status !== 'VOIDED' || voidedAt === null || gatewayVoidId === null) {
+    return { status: 'AUTHORIZED' };
+  }
+  return { status, voidedAt, gatewayVoidId: gatewayVoidId as GatewayVoidId };
+}
+
+function toVoidColumns(state: PaymentState): Pick<PaymentRow, 'voidedAt' | 'gatewayVoidId'> {
+  if (state.status === 'AUTHORIZED') return { voidedAt: null, gatewayVoidId: null };
+  return { voidedAt: state.voidedAt, gatewayVoidId: state.gatewayVoidId };
+}
 
 export const paymentPersistenceMapper = {
   toDomain(row: PaymentRow): Payment {
@@ -22,7 +35,7 @@ export const paymentPersistenceMapper = {
       deliveryFee: { amountInCents: row.deliveryFeeInCents, currency },
       gatewayAuthorizationId: row.gatewayAuthorizationId as GatewayAuthorizationId,
       authorizedAt: row.authorizedAt,
-      status: row.status as PaymentStatus,
+      state: toPaymentState(row),
       version: row.version,
     });
   },
@@ -39,7 +52,8 @@ export const paymentPersistenceMapper = {
       currency: snapshot.amount.currency,
       gatewayAuthorizationId: snapshot.gatewayAuthorizationId,
       authorizedAt: snapshot.authorizedAt,
-      status: snapshot.status,
+      status: snapshot.state.status,
+      ...toVoidColumns(snapshot.state),
       version: snapshot.version,
     };
   },

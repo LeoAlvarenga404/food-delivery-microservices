@@ -62,7 +62,7 @@ describe('AuthorizePaymentCommandHandler', () => {
     ]);
     expect((await unitOfWork.payments.findByOrderId(orderId))?.toSnapshot()).toEqual({
       ...authorizePaymentInput(),
-      status: 'AUTHORIZED',
+      state: { status: 'AUTHORIZED' },
       version: 1,
     });
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);

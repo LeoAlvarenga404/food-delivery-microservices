@@ -17,6 +17,7 @@ export class InMemoryPaymentRepository implements PaymentRepository {
 
   save(payment: Payment): Promise<void> {
     const row = paymentPersistenceMapper.toPersistence(payment);
+    if (row.version > 0) return this.#update(row);
     if (this.rows.has(row.orderId)) {
       return Promise.reject(
         new ConcurrencyConflictError(`order ${row.orderId} already has a payment`),
@@ -25,6 +26,18 @@ export class InMemoryPaymentRepository implements PaymentRepository {
     if ([...this.rows.values()].some((stored) => stored.paymentId === row.paymentId)) {
       return Promise.reject(
         new ConcurrencyConflictError(`payment ${row.paymentId} already exists`),
+      );
+    }
+    this.rows.set(row.orderId, { ...row, version: row.version + 1 });
+    return Promise.resolve();
+  }
+
+  #update(row: PaymentRow): Promise<void> {
+    if (this.rows.get(row.orderId)?.version !== row.version) {
+      return Promise.reject(
+        new ConcurrencyConflictError(
+          `payment ${row.paymentId} changed after version ${String(row.version)}`,
+        ),
       );
     }
     this.rows.set(row.orderId, { ...row, version: row.version + 1 });

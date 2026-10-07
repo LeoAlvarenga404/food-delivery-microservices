@@ -126,7 +126,7 @@ describe('accountingCommandConsumer', () => {
     );
     expect(payment?.toSnapshot()).toEqual({
       ...authorizePaymentInput(),
-      status: 'AUTHORIZED',
+      state: { status: 'AUTHORIZED' },
       version: 1,
     });
     const [reply, ...others] = await readOutbox();
