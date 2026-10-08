@@ -15,8 +15,6 @@ export interface PaymentVoid {
 export type PaymentState =
   { readonly status: 'AUTHORIZED' } | ({ readonly status: 'VOIDED' } & PaymentVoid);
 
-export type PaymentStatus = PaymentState['status'];
-
 export interface PaymentAlreadyVoided {
   readonly type: 'PaymentAlreadyVoided';
   readonly paymentId: PaymentId;
