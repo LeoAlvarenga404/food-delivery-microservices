@@ -53,8 +53,8 @@ describe('placing orders against the menu replica in Order', () => {
     );
 
     expect([totalBeforeRevision, await approvedTotalInCents(pizzeriaOrder)]).toEqual([
-      '9800',
-      '10800',
+      '10600',
+      '11600',
     ]);
   });
 
@@ -88,6 +88,6 @@ describe('placing orders against the menu replica in Order', () => {
         ...pizzeriaOrder,
         lineItems: [{ menuItemId: guaranaId, quantity: 3 }],
       }),
-    ).toBe('2400');
+    ).toBe('3200');
   });
 });

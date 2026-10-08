@@ -28,7 +28,7 @@ async function placeApprovedOrder(): Promise<void> {
   const orderId = await consumerApi.readPlacedOrderId(response);
   await expect(consumerApi.waitForOrderStatus(orderId, 'APPROVED')).resolves.toMatchObject({
     status: 'APPROVED',
-    totalInCents: '9800',
+    totalInCents: '10600',
   });
 }
 

@@ -31,7 +31,7 @@ beforeAll(async () => {
 });
 
 describe('placing an order through the edge', () => {
-  it('approves the order once every participant answered the saga', async () => {
+  it('approves the order once every participant answered the saga, charging the delivery fee', async () => {
     const response = await consumerApi.placeOrder(pizzeriaOrder, placementHeaders(randomUUID()));
 
     expect(response.status).toBe(201);
@@ -39,7 +39,8 @@ describe('placing an order through the edge', () => {
     await expect(consumerApi.waitForOrderStatus(orderId, 'APPROVED')).resolves.toEqual({
       orderId,
       status: 'APPROVED',
-      totalInCents: '9800',
+      deliveryFeeInCents: '800',
+      totalInCents: '10600',
       currency: 'BRL',
     });
   });
