@@ -26,9 +26,9 @@ function decodeAuthorizePayment(message: InboundMessage): AuthorizePayment {
   }
 }
 
-function requireField<Value>(parsed: Either<unknown, Value>, field: string): Value {
+function requireField<Field>(parsed: Either<unknown, Field>, fieldName: string): Field {
   if (parsed.isLeft())
-    throw new PermanentMessageFailure(`AuthorizePayment without a valid ${field}`);
+    throw new PermanentMessageFailure(`AuthorizePayment without a valid ${fieldName}`);
   return parsed.success;
 }
 
