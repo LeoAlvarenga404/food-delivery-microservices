@@ -33,7 +33,8 @@ export class InMemoryPaymentRepository implements PaymentRepository {
   }
 
   #update(row: PaymentRow): Promise<void> {
-    if (this.rows.get(row.orderId)?.version !== row.version) {
+    const stored = this.rows.get(row.orderId);
+    if (stored?.paymentId !== row.paymentId || stored.version !== row.version) {
       return Promise.reject(
         new ConcurrencyConflictError(
           `payment ${row.paymentId} changed after version ${String(row.version)}`,

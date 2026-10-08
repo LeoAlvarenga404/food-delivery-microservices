@@ -85,6 +85,15 @@ export function describePaymentRepositoryContract(
       await expect(payments.save(restored)).rejects.toThrow(ConcurrencyConflictError);
     });
 
+    it('refuses to save a change to another payment over the stored payment of its order', async () => {
+      await payments.save(buildPayment());
+      const otherPaymentId = unwrap(parsePaymentId('0199a5d0-0000-7000-8000-0000000000ea'));
+      const otherPayment = buildPayment({ paymentId: otherPaymentId });
+      const restored = Payment.restore({ ...otherPayment.toSnapshot(), version: 1 });
+
+      await expect(payments.save(restored)).rejects.toThrow(ConcurrencyConflictError);
+    });
+
     it('refuses a second payment with the same payment id for another order as a concurrency conflict', async () => {
       await payments.save(buildPayment());
       const otherOrderId = unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000000af'));
