@@ -50,6 +50,8 @@ export const fridayEveningHours: OpeningHours = unwrap(
   }),
 );
 
+export const deliveryFeeInCents = 800n;
+
 export const pizzeriaMenu: RestaurantMenu = {
   restaurantId: unwrap(parseRestaurantId('0199a5d0-0000-7000-8000-000000000001')),
   version: 2,
@@ -78,6 +80,7 @@ export function orderInput(overrides: Partial<PlaceOrderInput> = {}): PlaceOrder
       postalCode: '01304-001',
     },
     placedAt: new Date('2026-10-02T12:00:00.000Z'),
+    deliveryFeeInCents,
     ...overrides,
   };
 }

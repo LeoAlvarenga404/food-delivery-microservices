@@ -1,14 +1,17 @@
 import { create, toBinary, type DescMessage, type MessageShape } from '@bufbuild/protobuf';
 import type { OutboxMessage } from '@fd/chassis-outbox';
 import {
+  AuthorizationVoidedSchema,
   PaymentAuthorizedSchema,
   PaymentFailedSchema,
   PaymentFailureReason,
+  type AuthorizationVoided,
   type PaymentAuthorized,
   type PaymentFailed,
 } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
 import type {
   AccountingReply,
+  AuthorizationVoidedReply,
   PaymentAuthorizedReply,
   PaymentFailedReply,
 } from '#application/ports/reply-sender.port.ts';
@@ -22,6 +25,10 @@ export function toPaymentFailed(reply: PaymentFailedReply): PaymentFailed {
     orderId: reply.orderId,
     reason: PaymentFailureReason.PAYMENT_DECLINED,
   });
+}
+
+export function toAuthorizationVoided(reply: AuthorizationVoidedReply): AuthorizationVoided {
+  return create(AuthorizationVoidedSchema, { orderId: reply.orderId });
 }
 
 function toReplyMessage<Schema extends DescMessage>(
@@ -45,5 +52,7 @@ export function toAccountingReplyMessage(reply: AccountingReply, sagaId: string)
       return toReplyMessage(PaymentAuthorizedSchema, toPaymentAuthorized(reply), sagaId);
     case 'PaymentFailed':
       return toReplyMessage(PaymentFailedSchema, toPaymentFailed(reply), sagaId);
+    case 'AuthorizationVoided':
+      return toReplyMessage(AuthorizationVoidedSchema, toAuthorizationVoided(reply), sagaId);
   }
 }

@@ -13,14 +13,15 @@ describe('accounting command golden samples', () => {
       schema: AuthorizePaymentSchema,
     });
 
-    const { orderId, consumerId, amountInCents, currency, paymentToken } =
+    const { orderId, consumerId, restaurantId, amount, deliveryFee, paymentToken } =
       toAuthorizePaymentCommand(buildCommandMessage(AuthorizePaymentSchema, sample));
 
-    expect({ orderId, consumerId, amountInCents, currency, paymentToken }).toEqual({
+    expect({ orderId, consumerId, restaurantId, amount, deliveryFee, paymentToken }).toEqual({
       orderId: '0199a5d0-0000-7000-8000-0000000000a1',
       consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
-      amountInCents: 9800n,
-      currency: 'BRL',
+      restaurantId: '0199a5d0-0000-7000-8000-000000000001',
+      amount: { amountInCents: 10600n, currency: 'BRL' },
+      deliveryFee: { amountInCents: 800n, currency: 'BRL' },
       paymentToken: 'tok_visa_4242',
     });
   });

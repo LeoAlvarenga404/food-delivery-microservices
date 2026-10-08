@@ -2,7 +2,9 @@ import { create } from '@bufbuild/protobuf';
 import type { OutboxMessage } from '@fd/chassis-outbox';
 import {
   AuthorizePaymentSchema,
+  VoidAuthorizationSchema,
   type AuthorizePayment,
+  type VoidAuthorization,
 } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
 import {
   VerifyConsumerSchema,
@@ -16,8 +18,10 @@ import {
   type CreateTicket,
   type RejectTicket,
 } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
-import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga.ts';
-import type { PlaceOrderSagaOrder } from '#application/sagas/place-order/place-order.saga-state.ts';
+import type {
+  ParticipantCommand,
+  PlaceOrderSagaOrder,
+} from '#application/sagas/place-order/place-order.saga-state.ts';
 import { toOutboxMessage } from './outbox-message.message-mapper.ts';
 
 export function toVerifyConsumer(order: PlaceOrderSagaOrder): VerifyConsumer {
@@ -33,6 +37,7 @@ export function toCreateTicket(order: PlaceOrderSagaOrder): CreateTicket {
       name,
       quantity,
     })),
+    consumerId: order.consumerId,
   });
 }
 
@@ -46,7 +51,13 @@ export function toAuthorizePayment(
     amountInCents: order.totalInCents,
     currency: order.currency,
     paymentToken,
+    restaurantId: order.restaurantId,
+    deliveryFeeInCents: order.deliveryFeeInCents,
   });
+}
+
+export function toVoidAuthorization(order: PlaceOrderSagaOrder): VoidAuthorization {
+  return create(VoidAuthorizationSchema, { orderId: order.orderId });
 }
 
 export function toApproveTicket(order: PlaceOrderSagaOrder): ApproveTicket {
@@ -62,6 +73,7 @@ function commandTopicOf(commandType: ParticipantCommand['type']): string {
     case 'VerifyConsumer':
       return 'consumer.commands';
     case 'AuthorizePayment':
+    case 'VoidAuthorization':
       return 'accounting.commands';
     case 'CreateTicket':
     case 'ApproveTicket':
@@ -87,6 +99,8 @@ export function toParticipantCommandMessage(
         toAuthorizePayment(order, command.paymentToken),
         routing,
       );
+    case 'VoidAuthorization':
+      return toOutboxMessage(VoidAuthorizationSchema, toVoidAuthorization(order), routing);
     case 'ApproveTicket':
       return toOutboxMessage(ApproveTicketSchema, toApproveTicket(order), routing);
     case 'RejectTicket':

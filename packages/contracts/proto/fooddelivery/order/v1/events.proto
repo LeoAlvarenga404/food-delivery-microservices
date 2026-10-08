@@ -19,6 +19,7 @@ message OrderPlaced {
   int64 total_in_cents = 5;
   string currency = 6;
   google.protobuf.Timestamp placed_at = 7;
+  int64 delivery_fee_in_cents = 8;
 }
 
 message OrderApproved {

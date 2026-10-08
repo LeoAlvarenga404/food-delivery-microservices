@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { createLogger } from '@fd/chassis-observability';
 import { describe, expect, it } from 'vitest';
 import { createRestaurantBffServer } from '../src/main.ts';
+import { FakeKitchenService } from './support/kitchen-service.fake.ts';
 import { FakeRestaurantService } from './support/restaurant-service.fake.ts';
 import { fakeServiceAccess } from './support/service-access.fake.ts';
 
@@ -10,6 +11,7 @@ const documentFile = new URL('../openapi.json', import.meta.url);
 async function readServedDocument(): Promise<unknown> {
   const server = await createRestaurantBffServer({
     restaurantService: new FakeRestaurantService().client(),
+    kitchenService: new FakeKitchenService().client(),
     serviceAccess: fakeServiceAccess,
     logger: createLogger({ serviceName: 'restaurant-bff', level: 'silent' }),
     generateCorrelationId: () => '0199a5d0-0000-7000-8000-0000000000e9',

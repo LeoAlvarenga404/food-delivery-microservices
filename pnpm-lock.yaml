@@ -234,6 +234,52 @@ importers:
         specifier: 5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
 
+  frontends/kitchen-display:
+    dependencies:
+      '@tanstack/react-query':
+        specifier: 5.104.1
+        version: 5.104.1(react@19.3.0)
+      '@tanstack/react-router':
+        specifier: 1.170.41
+        version: 1.170.41(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      openapi-fetch:
+        specifier: 0.17.0
+        version: 0.17.0
+      openid-client:
+        specifier: 6.8.8
+        version: 6.8.8
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      '@vitejs/plugin-react':
+        specifier: 6.1.2
+        version: 6.1.2(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
+      openapi-typescript:
+        specifier: 7.13.0
+        version: 7.13.0(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vite:
+        specifier: 8.3.1
+        version: 8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1)
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@24.19.0)(vite@8.3.1(@types/node@24.19.0)(jiti@2.6.1)(yaml@2.9.1))
+
   frontends/restaurant-portal:
     dependencies:
       '@hookform/resolvers':
@@ -492,6 +538,9 @@ importers:
       '@fd/domain':
         specifier: workspace:*
         version: link:../../domain
+      uuid:
+        specifier: 14.0.2
+        version: 14.0.2
     devDependencies:
       '@fd/chassis-testing':
         specifier: workspace:*
@@ -613,9 +662,6 @@ importers:
       '@connectrpc/connect-fastify':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(fastify@5.12.5)
-      '@fd/chassis-auth':
-        specifier: workspace:*
-        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -662,6 +708,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing
@@ -677,6 +726,12 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.16.0
         version: 2.16.0
+      '@connectrpc/connect':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.16.0)
+      '@connectrpc/connect-fastify':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(fastify@5.12.5)
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -698,12 +753,18 @@ importers:
       '@fd/chassis-postgres':
         specifier: workspace:*
         version: link:../../packages/chassis/postgres
+      '@fd/chassis-rpc':
+        specifier: workspace:*
+        version: link:../../packages/chassis/rpc
       '@fd/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@fd/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      fastify:
+        specifier: 5.12.5
+        version: 5.12.5
       kysely:
         specifier: 0.29.6
         version: 0.29.6
@@ -714,6 +775,12 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@connectrpc/connect-node':
+        specifier: 2.2.0
+        version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing
@@ -738,9 +805,6 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
-      '@fd/chassis-auth':
-        specifier: workspace:*
-        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -784,6 +848,9 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing
@@ -805,9 +872,6 @@ importers:
       '@connectrpc/connect-fastify':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect-node@2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0)))(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))(fastify@5.12.5)
-      '@fd/chassis-auth':
-        specifier: workspace:*
-        version: link:../../packages/chassis/auth
       '@fd/chassis-config':
         specifier: workspace:*
         version: link:../../packages/chassis/config
@@ -854,6 +918,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.2.0
         version: 2.2.0(@bufbuild/protobuf@2.16.0)(@connectrpc/connect@2.2.0(@bufbuild/protobuf@2.16.0))
+      '@fd/chassis-auth':
+        specifier: workspace:*
+        version: link:../../packages/chassis/auth
       '@fd/chassis-testing':
         specifier: workspace:*
         version: link:../../packages/chassis/testing

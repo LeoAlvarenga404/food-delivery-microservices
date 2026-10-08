@@ -56,4 +56,5 @@ message GetOrderResponse {
   int64 total_in_cents = 4;
   string currency = 5;
   OrderRejectionReason rejection_reason = 6;
+  int64 delivery_fee_in_cents = 7;
 }

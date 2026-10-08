@@ -1,6 +1,6 @@
 import type { OutboxMessage } from '@fd/chassis-outbox';
 import type { CommandSender } from '#application/ports/command-sender.port.ts';
-import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga.ts';
+import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga-state.ts';
 import { toParticipantCommandMessage } from './participant-command.message-mapper.ts';
 
 export class OutboxCommandSender implements CommandSender {

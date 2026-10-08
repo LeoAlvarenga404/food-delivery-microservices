@@ -4,12 +4,13 @@ import {
   buildSagaOrder,
   sagaPaymentToken,
 } from '../../../../test/support/place-order-saga.builder.ts';
-import {
-  placeOrderSaga,
-  type PlaceOrderSagaCommand,
-  type PlaceOrderSagaReply,
-} from './place-order.saga.ts';
-import type { PlaceOrderSagaState, PlaceOrderSagaStep } from './place-order.saga-state.ts';
+import { placeOrderSaga } from './place-order.saga.ts';
+import type {
+  PlaceOrderSagaCommand,
+  PlaceOrderSagaReply,
+  PlaceOrderSagaState,
+  PlaceOrderSagaStep,
+} from './place-order.saga-state.ts';
 
 const order = buildSagaOrder();
 const paymentToken = sagaPaymentToken;
@@ -33,6 +34,7 @@ const replies: readonly PlaceOrderSagaReply[] = [
   { type: 'PaymentFailed', rejectionReason: 'PAYMENT_DECLINED' },
   { type: 'TicketApproved' },
   { type: 'TicketRejected' },
+  { type: 'AuthorizationVoided' },
   { type: 'StepTimedOut' },
 ];
 
@@ -132,6 +134,46 @@ const transitions: readonly SagaTransition[] = [
     nextState: { step: 'REJECTING_TICKET', order, rejectionReason: 'TICKET_CREATION_TIMED_OUT' },
     commands: [{ type: 'RejectTicket', order }],
   },
+  {
+    state: {
+      step: 'REJECTING_TICKET',
+      order,
+      rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    },
+    reply: { type: 'PaymentAuthorized' },
+    nextState: {
+      step: 'REJECTING_TICKET',
+      order,
+      rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    },
+    commands: [{ type: 'VoidAuthorization', order }],
+  },
+  {
+    state: { step: 'COMPENSATED', order, rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT' },
+    reply: { type: 'PaymentAuthorized' },
+    nextState: { step: 'COMPENSATED', order, rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT' },
+    commands: [{ type: 'VoidAuthorization', order }],
+  },
+  {
+    state: {
+      step: 'REJECTING_TICKET',
+      order,
+      rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    },
+    reply: { type: 'AuthorizationVoided' },
+    nextState: {
+      step: 'REJECTING_TICKET',
+      order,
+      rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    },
+    commands: [],
+  },
+  {
+    state: { step: 'COMPENSATED', order, rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT' },
+    reply: { type: 'AuthorizationVoided' },
+    nextState: { step: 'COMPENSATED', order, rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT' },
+    commands: [],
+  },
 ];
 
 const unexpectedPairs = Object.values(sagaStates).flatMap((state) =>
@@ -196,9 +238,36 @@ describe('placeOrderSaga transitions', () => {
   });
 });
 
+describe('placeOrderSaga with a late payment authorization', () => {
+  it('voids the orphan authorization of an order rejected at the payment deadline', () => {
+    const rejected = placeOrderSaga.evolve(
+      placeOrderSaga.evolve(sagaStates.AUTHORIZING_PAYMENT, { type: 'StepTimedOut' }),
+      { type: 'TicketRejected' },
+    );
+
+    expect(rejected).toEqual({
+      step: 'COMPENSATED',
+      order,
+      rejectionReason: 'PAYMENT_AUTHORIZATION_TIMED_OUT',
+    });
+    expect(placeOrderSaga.decide(rejected, { type: 'PaymentAuthorized' })).toEqual(
+      right([{ type: 'VoidAuthorization', order }]),
+    );
+  });
+
+  it.each<PlaceOrderSagaStep>(['APPROVING_TICKET', 'COMPLETED'])(
+    'never voids the authorization a saga in %s accepted, even when it is answered again',
+    (step) => {
+      expect(placeOrderSaga.decide(sagaStates[step], { type: 'PaymentAuthorized' })).toEqual(
+        left({ type: 'UnexpectedSagaReply', step, replyType: 'PaymentAuthorized' }),
+      );
+    },
+  );
+});
+
 describe('placeOrderSaga with a reply it is not waiting for', () => {
   it('covers every pair outside the transitions', () => {
-    expect(unexpectedPairs).toHaveLength(50);
+    expect(unexpectedPairs).toHaveLength(53);
   });
 
   it.each(unexpectedPairs)('in %s, rejects %o and keeps its state', (step, reply) => {

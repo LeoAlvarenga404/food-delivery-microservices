@@ -40,8 +40,8 @@ interface OutboxRow {
 
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
 const processedAt = new Date('2026-10-02T12:00:02.000Z');
-const { restaurantId, lineItems } = createTicketInput();
-const createTicket = { orderId, restaurantId, lineItems: [...lineItems] };
+const { restaurantId, consumerId, lineItems } = createTicketInput();
+const createTicket = { orderId, restaurantId, consumerId, lineItems: [...lineItems] };
 
 let testDatabase: KitchenTestDatabase;
 let handleCommand: MessageHandler;
@@ -107,7 +107,12 @@ describe('kitchenCommandConsumer', () => {
     await handleCommand(command);
 
     const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
-    expect(ticket?.toSnapshot()).toMatchObject({ ticketId, status: 'CREATE_PENDING', lineItems });
+    expect(ticket?.toSnapshot()).toMatchObject({
+      ticketId,
+      consumerId,
+      state: { status: 'CREATE_PENDING' },
+      lineItems,
+    });
     const [reply, ...others] = await readOutbox();
     expect(others).toEqual([]);
     expect(reply).toMatchObject({
@@ -130,7 +135,7 @@ describe('kitchenCommandConsumer', () => {
     await handleCommand(buildCommandMessage(ApproveTicketSchema, { orderId }));
 
     const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
-    expect(ticket?.toSnapshot().status).toBe('AWAITING_ACCEPTANCE');
+    expect(ticket?.toSnapshot().state).toEqual({ status: 'AWAITING_ACCEPTANCE' });
     const replies = await readOutbox();
     expect(replies.map((row) => row.topic)).toEqual([
       'order.place-order-saga.replies',
@@ -236,7 +241,7 @@ describe('kitchenCommandConsumer', () => {
     expect(outbox.map((row) => row.messageType)).toEqual(['fooddelivery.kitchen.v1.TicketCreated']);
     expect(await countRows('inbox')).toBe(1);
     const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
-    expect(ticket?.toSnapshot()).toMatchObject({ status: 'CREATE_PENDING', version: 1 });
+    expect(ticket?.toSnapshot()).toMatchObject({ state: { status: 'CREATE_PENDING' }, version: 1 });
   });
 
   it('replies TicketCreationFailed for a ticket without line items together with its inbox row', async () => {
@@ -283,7 +288,7 @@ describe('kitchenCommandConsumer', () => {
     await handleCommand(command);
 
     const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
-    expect(ticket?.toSnapshot()).toMatchObject({ status: 'REJECTED', version: 2 });
+    expect(ticket?.toSnapshot()).toMatchObject({ state: { status: 'REJECTED' }, version: 2 });
     const [, reply, ...others] = await readOutbox();
     expect(others).toEqual([]);
     expect(reply).toMatchObject({
@@ -316,7 +321,7 @@ describe('kitchenCommandConsumer', () => {
     await handleCommand(buildCommandMessage(RejectTicketSchema, { orderId }));
 
     const ticket = await new PostgresTicketRepository(testDatabase.database).findByOrderId(orderId);
-    expect(ticket?.toSnapshot().status).toBe('AWAITING_ACCEPTANCE');
+    expect(ticket?.toSnapshot().state).toEqual({ status: 'AWAITING_ACCEPTANCE' });
     expect(await readOutbox()).toHaveLength(2);
     expect(await countRows('inbox')).toBe(3);
   });

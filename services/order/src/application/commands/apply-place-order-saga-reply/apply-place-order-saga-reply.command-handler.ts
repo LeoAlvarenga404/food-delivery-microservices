@@ -5,10 +5,8 @@ import {
   placeOrderSagaDeadline,
   type PlaceOrderSagaTimeoutsInMilliseconds,
 } from '#application/sagas/place-order/place-order-saga-deadline.saga.ts';
-import {
-  placeOrderSaga,
-  type PlaceOrderSagaCommand,
-} from '#application/sagas/place-order/place-order.saga.ts';
+import { placeOrderSaga } from '#application/sagas/place-order/place-order.saga.ts';
+import type { PlaceOrderSagaCommand } from '#application/sagas/place-order/place-order.saga-state.ts';
 import type { Order } from '#domain/order/order.aggregate.ts';
 import type { OrderId } from '#domain/order/order-id.value-object.ts';
 import type { InvalidOrderTransition } from '#domain/order/order.errors.ts';

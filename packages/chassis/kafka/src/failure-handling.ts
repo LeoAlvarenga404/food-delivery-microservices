@@ -27,8 +27,14 @@ const transientErrorCodes = new Set([
 ]);
 
 const connectionExceptionClass = '08';
-const baseDelayInMilliseconds = 100;
 const maximumDelayInMilliseconds = 30_000;
+
+const baseDelaysInMilliseconds: Readonly<Record<FailureClass, number>> = {
+  transient: 100,
+  external: 1_000,
+  unknown: 100,
+  permanent: 100,
+};
 
 const attemptLimits: Readonly<Record<FailureClass, number>> = {
   transient: Number.POSITIVE_INFINITY,
@@ -58,7 +64,8 @@ export function decideFailureHandling(
   random: () => number = Math.random,
 ): FailureHandling {
   if (attemptCount >= attemptLimits[failureClass]) return { kind: 'dead-letter' };
-  const exponentialDelayInMilliseconds = baseDelayInMilliseconds * 2 ** (attemptCount - 1);
+  const exponentialDelayInMilliseconds =
+    baseDelaysInMilliseconds[failureClass] * 2 ** (attemptCount - 1);
   const ceilingInMilliseconds = Math.min(
     maximumDelayInMilliseconds,
     exponentialDelayInMilliseconds,

@@ -44,6 +44,7 @@ export function toOrderPlacedContract(event: OrderPlaced): OrderPlacedContract {
       unitPriceInCents,
       quantity,
     })),
+    deliveryFeeInCents: event.deliveryFeeInCents,
     totalInCents: event.totalInCents,
     currency: event.currency,
     placedAt: timestampFromDate(event.occurredAt),

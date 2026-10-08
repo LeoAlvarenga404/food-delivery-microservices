@@ -60,6 +60,7 @@ describe('ReviseMenuCommandHandler', () => {
         restaurantId: pizzeriaId,
         ...pizzeriaProfile,
         menuItems: [margherita, guarana],
+        staffMemberIds: [staffAId],
         version: 2,
       },
     ]);

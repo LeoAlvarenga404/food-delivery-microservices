@@ -10,6 +10,7 @@ const orderViewSchema = z.object({
   orderId: z.uuid(),
   status: z.string(),
   rejectionReason: z.string().optional(),
+  deliveryFeeInCents: z.string(),
   totalInCents: z.string(),
   currency: z.string(),
 });

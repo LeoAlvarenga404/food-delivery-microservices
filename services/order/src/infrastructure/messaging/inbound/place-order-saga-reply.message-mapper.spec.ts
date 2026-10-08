@@ -1,5 +1,6 @@
 import { PermanentMessageFailure, type InboundMessage } from '@fd/chassis-kafka';
 import {
+  AuthorizationVoidedSchema,
   PaymentAuthorizedSchema,
   PaymentFailedSchema,
   PaymentFailureReason,
@@ -54,6 +55,10 @@ describe('toPlaceOrderSagaReply', () => {
     {
       replyType: 'TicketRejected',
       message: buildReplyMessage(TicketRejectedSchema, { orderId }),
+    },
+    {
+      replyType: 'AuthorizationVoided',
+      message: buildReplyMessage(AuthorizationVoidedSchema, { orderId }),
     },
   ])('reads $replyType with the order id it names', ({ replyType, message }) => {
     expect(toPlaceOrderSagaReply(message)).toEqual({ orderId, reply: { type: replyType } });

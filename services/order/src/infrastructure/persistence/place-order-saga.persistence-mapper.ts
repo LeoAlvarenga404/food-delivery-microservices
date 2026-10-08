@@ -29,6 +29,7 @@ interface StoredSagaOrder {
   readonly consumerId: string;
   readonly restaurantId: string;
   readonly lineItems: readonly StoredLineItem[];
+  readonly deliveryFeeInCents?: string;
   readonly totalInCents: string;
   readonly currency: string;
 }
@@ -53,6 +54,7 @@ function toStoredOrder(order: PlaceOrderSagaOrder): JsonObject {
       unitPriceInCents: lineItem.unitPriceInCents.toString(),
       quantity: lineItem.quantity,
     })),
+    deliveryFeeInCents: order.deliveryFeeInCents.toString(),
     totalInCents: order.totalInCents.toString(),
     currency: order.currency,
   };
@@ -73,6 +75,7 @@ function toSagaOrder(stored: StoredSagaOrder): PlaceOrderSagaOrder {
       unitPriceInCents: BigInt(lineItem.unitPriceInCents),
       quantity: lineItem.quantity,
     })),
+    deliveryFeeInCents: BigInt(stored.deliveryFeeInCents ?? '0'),
     totalInCents: BigInt(stored.totalInCents),
     currency: stored.currency as Currency,
   };

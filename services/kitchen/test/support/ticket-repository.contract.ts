@@ -1,10 +1,36 @@
 import { ConcurrencyConflictError } from '@fd/chassis-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseOrderId, type OrderId } from '#domain/ticket/order-id.value-object.ts';
+import { parseRestaurantId } from '#domain/ticket/restaurant-id.value-object.ts';
 import { parseTicketId } from '#domain/ticket/ticket-id.value-object.ts';
 import type { Ticket } from '#domain/ticket/ticket.aggregate.ts';
 import type { TicketRepository } from '#domain/ticket/ticket.repository.ts';
-import { buildTicket, orderId, unwrap } from './ticket.builder.ts';
+import type { TicketState } from '#domain/ticket/ticket.state.ts';
+import {
+  acceptedAt,
+  buildTicket,
+  buildTicketIn,
+  fifteenMinutes,
+  orderId,
+  readyBy,
+  restaurantId,
+  ticketId,
+  unwrap,
+} from './ticket.builder.ts';
+
+const preparationStartedAt = new Date('2026-10-06T18:02:00.000Z');
+const markedReadyAt = new Date('2026-10-06T18:14:00.000Z');
+const acceptance = { acceptedAt, readyBy };
+
+function ticketNumbered(sequence: number, state: TicketState, otherRestaurantId?: string): Ticket {
+  const hexadecimal = sequence.toString(16).padStart(2, '0');
+  return buildTicketIn(state, {
+    ticketId: unwrap(parseTicketId(`0199a5d0-0000-7000-8000-0000000005${hexadecimal}`)),
+    orderId: unwrap(parseOrderId(`0199a5d0-0000-7000-8000-0000000006${hexadecimal}`)),
+    restaurantId:
+      otherRestaurantId === undefined ? restaurantId : unwrap(parseRestaurantId(otherRestaurantId)),
+  });
+}
 
 async function findStoredTicket(
   tickets: TicketRepository,
@@ -13,6 +39,16 @@ async function findStoredTicket(
   const ticket = await tickets.findByOrderId(storedOrderId);
   if (ticket === undefined) throw new Error(`no ticket stored for order ${storedOrderId}`);
   return ticket;
+}
+
+async function saveChanged(
+  tickets: TicketRepository,
+  change: (ticket: Ticket) => unknown,
+): Promise<Ticket> {
+  const stored = await findStoredTicket(tickets, orderId);
+  change(stored);
+  await tickets.save(stored);
+  return findStoredTicket(tickets, orderId);
 }
 
 export function describeTicketRepositoryContract(
@@ -26,7 +62,7 @@ export function describeTicketRepositoryContract(
       tickets = createRepository();
     });
 
-    it('finds a saved ticket by its order with its line items', async () => {
+    it('finds a saved ticket by its order with its consumer and line items', async () => {
       const ticket = buildTicket();
 
       await tickets.save(ticket);
@@ -37,6 +73,43 @@ export function describeTicketRepositoryContract(
       });
     });
 
+    it('finds a saved ticket by its id and nothing for an unknown id', async () => {
+      await tickets.save(buildTicket());
+      const unknownTicketId = unwrap(parseTicketId('0199a5d0-0000-7000-8000-0000000000ff'));
+
+      expect((await tickets.findById(ticketId))?.toSnapshot().orderId).toBe(orderId);
+      expect(await tickets.findById(unknownTicketId)).toBeUndefined();
+    });
+
+    it('lists the active tickets of a restaurant in creation order', async () => {
+      const active = [
+        ticketNumbered(5, { status: 'READY_FOR_PICKUP', ...acceptance }),
+        ticketNumbered(2, { status: 'AWAITING_ACCEPTANCE' }),
+        ticketNumbered(4, { status: 'PREPARING', ...acceptance }),
+        ticketNumbered(3, { status: 'ACCEPTED', ...acceptance }),
+      ];
+      const inactive = [
+        ticketNumbered(1, { status: 'CREATE_PENDING' }),
+        ticketNumbered(6, { status: 'REJECTED' }),
+        ticketNumbered(
+          7,
+          { status: 'ACCEPTED', ...acceptance },
+          '0199a5d0-0000-7000-8000-0000000000b7',
+        ),
+      ];
+      for (const ticket of [...active, ...inactive]) await tickets.save(ticket);
+
+      const listed = await tickets.findActiveByRestaurantId(restaurantId);
+
+      expect(listed.map((ticket) => ticket.toSnapshot().state.status)).toEqual([
+        'AWAITING_ACCEPTANCE',
+        'ACCEPTED',
+        'PREPARING',
+        'READY_FOR_PICKUP',
+      ]);
+      expect(listed.map((ticket) => ticket.toSnapshot().version)).toEqual([1, 1, 1, 1]);
+    });
+
     it('returns undefined for an order without ticket', async () => {
       const otherOrderId = unwrap(parseOrderId('0199a5d0-0000-7000-8000-0000000000af'));
 
@@ -45,24 +118,56 @@ export function describeTicketRepositoryContract(
 
     it('saves the approval of a stored ticket and increments its version', async () => {
       await tickets.save(buildTicket());
-      const stored = await findStoredTicket(tickets, orderId);
-      unwrap(stored.approve());
 
-      await tickets.save(stored);
-      const { status, version } = (await findStoredTicket(tickets, orderId)).toSnapshot();
+      const { state, version } = (
+        await saveChanged(tickets, (stored) => stored.approve())
+      ).toSnapshot();
 
-      expect({ status, version }).toEqual({ status: 'AWAITING_ACCEPTANCE', version: 2 });
+      expect({ state, version }).toEqual({ state: { status: 'AWAITING_ACCEPTANCE' }, version: 2 });
     });
 
     it('saves the rejection of a stored ticket and increments its version', async () => {
       await tickets.save(buildTicket());
-      const stored = await findStoredTicket(tickets, orderId);
-      unwrap(stored.reject());
 
-      await tickets.save(stored);
-      const { status, version } = (await findStoredTicket(tickets, orderId)).toSnapshot();
+      const { state, version } = (
+        await saveChanged(tickets, (stored) => stored.reject())
+      ).toSnapshot();
 
-      expect({ status, version }).toEqual({ status: 'REJECTED', version: 2 });
+      expect({ state, version }).toEqual({ state: { status: 'REJECTED' }, version: 2 });
+    });
+
+    it('saves the acceptance with its acceptance and ready-by times', async () => {
+      await tickets.save(buildTicket());
+      await saveChanged(tickets, (stored) => stored.approve());
+
+      const { state, version } = (
+        await saveChanged(tickets, (stored) => stored.accept(fifteenMinutes, acceptedAt))
+      ).toSnapshot();
+
+      expect({ state, version }).toEqual({
+        state: { status: 'ACCEPTED', acceptedAt, readyBy },
+        version: 3,
+      });
+    });
+
+    it('saves the preparation and the readiness, keeping the times of the acceptance', async () => {
+      await tickets.save(buildTicket());
+      await saveChanged(tickets, (stored) => stored.approve());
+      await saveChanged(tickets, (stored) => stored.accept(fifteenMinutes, acceptedAt));
+      const preparing = await saveChanged(tickets, (stored) =>
+        stored.startPreparing(preparationStartedAt),
+      );
+
+      const ready = await saveChanged(tickets, (stored) => stored.markReady(markedReadyAt));
+
+      expect([preparing.toSnapshot().state, ready.toSnapshot()]).toEqual([
+        { status: 'PREPARING', acceptedAt, readyBy },
+        {
+          ...buildTicket().toSnapshot(),
+          state: { status: 'READY_FOR_PICKUP', acceptedAt, readyBy },
+          version: 5,
+        },
+      ]);
     });
 
     it('rejects a save based on a version another save already replaced', async () => {

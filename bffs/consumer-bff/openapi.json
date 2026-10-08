@@ -235,6 +235,10 @@
                         "additionalProperties": false
                       }
                     },
+                    "deliveryFeeInCents": {
+                      "type": "string",
+                      "pattern": "^\\d+$"
+                    },
                     "totalInCents": {
                       "type": "string",
                       "pattern": "^\\d+$"
@@ -243,7 +247,14 @@
                       "type": "string"
                     }
                   },
-                  "required": ["orderId", "status", "lineItems", "totalInCents", "currency"],
+                  "required": [
+                    "orderId",
+                    "status",
+                    "lineItems",
+                    "deliveryFeeInCents",
+                    "totalInCents",
+                    "currency"
+                  ],
                   "additionalProperties": false
                 }
               }

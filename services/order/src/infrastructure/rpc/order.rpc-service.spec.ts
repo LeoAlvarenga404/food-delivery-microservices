@@ -25,6 +25,7 @@ import { FakeClock } from '../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../test/support/in-memory-unit-of-work.adapter.ts';
 import {
+  deliveryFeeInCents,
   fridayEveningHours,
   guaranaId,
   margheritaId,
@@ -117,6 +118,7 @@ function clientOf(
             clock: new FakeClock(),
             idGenerator,
             sagaTimeoutsInMilliseconds,
+            deliveryFeeInCents,
           }),
           getOrder: new GetOrderQueryHandler(unitOfWork.orders),
         }),
@@ -472,7 +474,7 @@ describe('OrderService.PlaceOrder', () => {
 });
 
 describe('OrderService.GetOrder', () => {
-  it('returns a placed order with its status, frozen line items and total', async () => {
+  it('returns a placed order with its status, frozen line items, delivery fee and total', async () => {
     const { orderId } = await client.placeOrder(placeOrderRequest());
 
     const response = await client.getOrder({ orderId });
@@ -484,7 +486,8 @@ describe('OrderService.GetOrder', () => {
         { menuItemId: margheritaId, name: 'Margherita', unitPriceInCents: 4500n, quantity: 2 },
         { menuItemId: guaranaId, name: 'Guarana', unitPriceInCents: 800n, quantity: 1 },
       ],
-      totalInCents: 9800n,
+      deliveryFeeInCents: 800n,
+      totalInCents: 10600n,
       currency: 'BRL',
     });
   });

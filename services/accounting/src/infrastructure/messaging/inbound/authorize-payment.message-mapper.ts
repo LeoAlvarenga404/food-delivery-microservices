@@ -5,9 +5,14 @@ import {
   AuthorizePaymentSchema,
   type AuthorizePayment,
 } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
-import { isUuid } from '@fd/domain';
+import type { Either } from '@fd/domain';
 import type { AuthorizePaymentCommand } from '#application/commands/authorize-payment/authorize-payment.command.ts';
-import { parseOrderId, type OrderId } from '#domain/payment/order-id.value-object.ts';
+import { parseConsumerId } from '#domain/payment/consumer-id.value-object.ts';
+import { parseMoney } from '#domain/payment/money.value-object.ts';
+import { parseOrderId } from '#domain/payment/order-id.value-object.ts';
+import { parseRestaurantId } from '#domain/payment/restaurant-id.value-object.ts';
+
+type PaymentAmounts = Pick<AuthorizePaymentCommand, 'amount' | 'deliveryFee'>;
 
 function decodeAuthorizePayment(message: InboundMessage): AuthorizePayment {
   const { messageType } = message.headers;
@@ -21,32 +26,37 @@ function decodeAuthorizePayment(message: InboundMessage): AuthorizePayment {
   }
 }
 
-function requireOrderId(rawOrderId: string): OrderId {
-  const orderId = parseOrderId(rawOrderId);
-  if (orderId.isLeft()) {
-    throw new PermanentMessageFailure('AuthorizePayment without a valid order id');
+function requireField<Field>(parsed: Either<unknown, Field>, fieldName: string): Field {
+  if (parsed.isLeft())
+    throw new PermanentMessageFailure(`AuthorizePayment without a valid ${fieldName}`);
+  return parsed.success;
+}
+
+function requireAmounts(authorizePayment: AuthorizePayment): PaymentAmounts {
+  const { amountInCents, deliveryFeeInCents, currency } = authorizePayment;
+  if (amountInCents <= 0n) throw new PermanentMessageFailure('AuthorizePayment without an amount');
+  if (deliveryFeeInCents >= amountInCents) {
+    throw new PermanentMessageFailure('AuthorizePayment with a delivery fee that leaves no food');
   }
-  return orderId.success;
+  return {
+    amount: requireField(parseMoney(amountInCents, currency), 'amount'),
+    deliveryFee: requireField(parseMoney(deliveryFeeInCents, currency), 'delivery fee'),
+  };
 }
 
 export function toAuthorizePaymentCommand(message: InboundMessage): AuthorizePaymentCommand {
   const { sagaId } = message.headers;
   if (sagaId === undefined) throw new PermanentMessageFailure('command without saga-id header');
-  const { orderId, consumerId, amountInCents, currency, paymentToken } =
-    decodeAuthorizePayment(message);
-  if (!isUuid(consumerId)) {
-    throw new PermanentMessageFailure('AuthorizePayment without a valid consumer id');
-  }
-  if (amountInCents <= 0n) throw new PermanentMessageFailure('AuthorizePayment without an amount');
-  if (currency !== 'BRL') throw new PermanentMessageFailure(`unsupported currency ${currency}`);
+  const authorizePayment = decodeAuthorizePayment(message);
+  const { orderId, consumerId, restaurantId, paymentToken } = authorizePayment;
   if (paymentToken.length === 0) {
     throw new PermanentMessageFailure('AuthorizePayment without a payment token');
   }
   return {
-    orderId: requireOrderId(orderId),
-    consumerId: consumerId.toLowerCase(),
-    amountInCents,
-    currency,
+    orderId: requireField(parseOrderId(orderId), 'order id'),
+    consumerId: requireField(parseConsumerId(consumerId), 'consumer id'),
+    restaurantId: requireField(parseRestaurantId(restaurantId), 'restaurant id'),
+    ...requireAmounts(authorizePayment),
     paymentToken,
     sagaId,
     metadata: metadataCausedBy(message.headers),

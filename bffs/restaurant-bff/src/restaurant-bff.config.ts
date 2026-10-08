@@ -5,6 +5,8 @@ import { z } from 'zod';
 export interface RestaurantBffConfiguration {
   readonly restaurantServiceUrl: string;
   readonly restaurantServiceTimeoutInMilliseconds: number;
+  readonly kitchenServiceUrl: string;
+  readonly kitchenServiceTimeoutInMilliseconds: number;
   readonly accessTokenIssuer: string;
   readonly accessTokenJwksUrl: string;
   readonly tokenExchangeUrl: string;
@@ -14,14 +16,18 @@ export interface RestaurantBffConfiguration {
   readonly logLevel: LogLevel;
 }
 
+const serviceTimeoutInMilliseconds = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(2_147_483_647)
+  .default(5000);
+
 const restaurantBffEnvironmentSchema = z.object({
   RESTAURANT_SERVICE_URL: environmentVariables.httpUrl,
-  RESTAURANT_SERVICE_TIMEOUT_IN_MILLISECONDS: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(2_147_483_647)
-    .default(5000),
+  RESTAURANT_SERVICE_TIMEOUT_IN_MILLISECONDS: serviceTimeoutInMilliseconds,
+  KITCHEN_SERVICE_URL: environmentVariables.httpUrl,
+  KITCHEN_SERVICE_TIMEOUT_IN_MILLISECONDS: serviceTimeoutInMilliseconds,
   ACCESS_TOKEN_ISSUER: environmentVariables.httpUrl,
   ACCESS_TOKEN_JWKS_URL: environmentVariables.httpUrl,
   TOKEN_EXCHANGE_URL: environmentVariables.httpUrl,
@@ -38,6 +44,8 @@ export function readRestaurantBffConfiguration(
   return {
     restaurantServiceUrl: variables.RESTAURANT_SERVICE_URL,
     restaurantServiceTimeoutInMilliseconds: variables.RESTAURANT_SERVICE_TIMEOUT_IN_MILLISECONDS,
+    kitchenServiceUrl: variables.KITCHEN_SERVICE_URL,
+    kitchenServiceTimeoutInMilliseconds: variables.KITCHEN_SERVICE_TIMEOUT_IN_MILLISECONDS,
     accessTokenIssuer: variables.ACCESS_TOKEN_ISSUER,
     accessTokenJwksUrl: variables.ACCESS_TOKEN_JWKS_URL,
     tokenExchangeUrl: variables.TOKEN_EXCHANGE_URL,

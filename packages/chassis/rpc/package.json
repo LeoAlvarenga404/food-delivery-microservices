@@ -15,7 +15,8 @@
     "@connectrpc/connect": "2.2.0",
     "@fd/chassis-auth": "workspace:*",
     "@fd/chassis-observability": "workspace:*",
-    "@fd/domain": "workspace:*"
+    "@fd/domain": "workspace:*",
+    "uuid": "14.0.2"
   },
   "devDependencies": {
     "@fd/chassis-testing": "workspace:*",

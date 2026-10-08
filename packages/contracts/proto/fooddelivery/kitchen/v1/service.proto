@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package fooddelivery.kitchen.v1;
+
+import "fooddelivery/kitchen/v1/commands.proto";
+import "google/protobuf/timestamp.proto";
+
+service KitchenService {
+  rpc ListTickets(ListTicketsRequest) returns (ListTicketsResponse);
+  rpc AcceptTicket(AcceptTicketRequest) returns (AcceptTicketResponse);
+  rpc StartPreparingTicket(StartPreparingTicketRequest) returns (StartPreparingTicketResponse);
+  rpc MarkTicketReady(MarkTicketReadyRequest) returns (MarkTicketReadyResponse);
+}
+
+enum TicketStatus {
+  TICKET_STATUS_UNSPECIFIED = 0;
+  TICKET_STATUS_AWAITING_ACCEPTANCE = 1;
+  TICKET_STATUS_ACCEPTED = 2;
+  TICKET_STATUS_PREPARING = 3;
+  TICKET_STATUS_READY_FOR_PICKUP = 4;
+}
+
+message Ticket {
+  string ticket_id = 1;
+  string order_id = 2;
+  string restaurant_id = 3;
+  TicketStatus status = 4;
+  repeated TicketLineItem line_items = 5;
+  google.protobuf.Timestamp ready_by = 6;
+}
+
+message ListTicketsRequest {
+  string restaurant_id = 1;
+}
+
+message ListTicketsResponse {
+  repeated Ticket tickets = 1;
+}
+
+message AcceptTicketRequest {
+  string restaurant_id = 1;
+  string ticket_id = 2;
+  int32 preparation_time_in_minutes = 3;
+}
+
+message AcceptTicketResponse {
+  Ticket ticket = 1;
+}
+
+message StartPreparingTicketRequest {
+  string restaurant_id = 1;
+  string ticket_id = 2;
+}
+
+message StartPreparingTicketResponse {
+  Ticket ticket = 1;
+}
+
+message MarkTicketReadyRequest {
+  string restaurant_id = 1;
+  string ticket_id = 2;
+}
+
+message MarkTicketReadyResponse {
+  Ticket ticket = 1;
+}
+
+message TicketCommandFailure {
+  string reason = 1;
+}

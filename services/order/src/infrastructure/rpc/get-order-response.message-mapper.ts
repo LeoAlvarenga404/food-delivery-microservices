@@ -31,6 +31,7 @@ export function toGetOrderResponse(snapshot: OrderSnapshot): GetOrderResponse {
       unitPriceInCents,
       quantity,
     })),
+    deliveryFeeInCents: snapshot.deliveryFeeInCents,
     totalInCents: snapshot.totalInCents,
     currency: snapshot.currency,
   });

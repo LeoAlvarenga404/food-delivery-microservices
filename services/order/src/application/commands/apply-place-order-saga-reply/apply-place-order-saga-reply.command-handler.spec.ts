@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeClock } from '../../../../test/support/clock.fake.ts';
 import { FakeIdGenerator } from '../../../../test/support/id-generator.fake.ts';
 import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-work.adapter.ts';
-import { buildOrder, unwrap } from '../../../../test/support/order.builder.ts';
+import { buildOrder, deliveryFeeInCents, unwrap } from '../../../../test/support/order.builder.ts';
 import { buildPlaceOrderCommand } from '../../../../test/support/place-order-command.builder.ts';
 import {
   buildSagaOrder,
@@ -12,7 +12,7 @@ import {
 } from '../../../../test/support/place-order-saga.builder.ts';
 import { PlaceOrderCommandHandler } from '#application/commands/place-order/place-order.command-handler.ts';
 import type { MessageMetadata } from '#application/ports/unit-of-work.port.ts';
-import type { PlaceOrderSagaReply } from '#application/sagas/place-order/place-order.saga.ts';
+import type { PlaceOrderSagaReply } from '#application/sagas/place-order/place-order.saga-state.ts';
 import { ApplyPlaceOrderSagaReplyCommandHandler } from './apply-place-order-saga-reply.command-handler.ts';
 
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
@@ -58,6 +58,7 @@ beforeEach(async () => {
     clock: new FakeClock(),
     idGenerator: new FakeIdGenerator(),
     sagaTimeoutsInMilliseconds,
+    deliveryFeeInCents,
   });
   unwrap(await placeOrder.execute(buildPlaceOrderCommand()));
   unitOfWork.commands.sentCommands.length = 0;
@@ -214,6 +215,32 @@ describe('ApplyPlaceOrderSagaReplyCommandHandler', () => {
     ]);
     expect(await readSagaStep()).toBe('APPROVING_TICKET');
     expect(await readSagaDeadline()).toEqual(new Date('2026-10-02T12:02:00.000Z'));
+  });
+
+  it('voids a late authorization while the ticket is being rejected, with a fresh deadline for the rejection', async () => {
+    unwrap(await deliver({ type: 'ConsumerVerified' }));
+    unwrap(await deliver({ type: 'TicketCreated' }));
+    unwrap(await deliver({ type: 'StepTimedOut' }));
+    const lateAt = new Date('2026-10-02T12:00:45.000Z');
+    const applyLater = new ApplyPlaceOrderSagaReplyCommandHandler(
+      unitOfWork,
+      new FakeClock(lateAt),
+      sagaTimeoutsInMilliseconds,
+    );
+
+    const outcome = await applyLater.execute({
+      sagaId,
+      reply: { type: 'PaymentAuthorized' },
+      metadata: replyMetadata,
+    });
+
+    expect(outcome).toEqual(right(undefined));
+    expect(unitOfWork.commands.sentCommands.slice(-2)).toEqual([
+      { command: { type: 'RejectTicket', order: buildSagaOrder() }, sagaId },
+      { command: { type: 'VoidAuthorization', order: buildSagaOrder() }, sagaId },
+    ]);
+    expect(await readSagaStep()).toBe('REJECTING_TICKET');
+    expect(await readSagaDeadline()).toEqual(new Date('2026-10-02T12:01:25.000Z'));
   });
 
   it('leaves the saga waiting when the order was approved elsewhere', async () => {

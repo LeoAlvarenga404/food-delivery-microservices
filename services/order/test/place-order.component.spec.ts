@@ -264,6 +264,7 @@ function serviceConfiguration(
     logLevel: 'silent',
     housekeepingIntervalInMilliseconds,
     sagaTimeoutsInMilliseconds,
+    deliveryFeeInCents: 1200n,
     accessTokenIssuer: keycloak.issuer,
     accessTokenJwksUrl: keycloak.jwksUrl,
     ...overrides,
@@ -353,7 +354,7 @@ describe('order service', () => {
       const order = await client.getOrder({ orderId });
       return order.status === OrderStatus.APPROVED ? order : undefined;
     });
-    expect(approved.totalInCents).toBe(9800n);
+    expect([approved.deliveryFeeInCents, approved.totalInCents]).toEqual([1200n, 11000n]);
     expect(await waitForCommand('fooddelivery.consumer.v1.VerifyConsumer')).toMatchObject({
       actorId: consumerAId,
       actorType: 'consumer',

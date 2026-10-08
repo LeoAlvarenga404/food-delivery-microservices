@@ -10,6 +10,7 @@ import {
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { deleteExpiredOutboxMessages } from '@fd/chassis-outbox';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
+import { createServiceRpcInterceptors } from '@fd/chassis-rpc';
 import { ConsumerService } from '@fd/contracts/fooddelivery/consumer/v1/service_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
 import type { Kysely } from 'kysely';
@@ -28,7 +29,6 @@ import {
 } from '#infrastructure/persistence/consumer-unit-of-work.adapter.ts';
 import type { DB as ConsumerDatabase } from '#infrastructure/persistence/generated/database.ts';
 import { PostgresConsumerRepository } from '#infrastructure/persistence/postgres-consumer.repository.ts';
-import { createConsumerRpcInterceptors } from '#infrastructure/rpc/consumer-rpc-interceptors.adapter.ts';
 import { createConsumerRpcService } from '#infrastructure/rpc/consumer.rpc-service.ts';
 
 export interface RunningConsumerService {
@@ -103,7 +103,7 @@ async function startHttpServer(parts: ConsumerServiceParts): Promise<RunningHttp
   const server = fastify();
   await server.register(fastifyConnectPlugin, {
     routes: (router) => router.service(ConsumerService, rpcService),
-    interceptors: createConsumerRpcInterceptors(configuration, logger),
+    interceptors: createServiceRpcInterceptors('consumer-service', configuration, logger),
   });
   server.get('/health', () => ({ status: 'ok' }));
   try {

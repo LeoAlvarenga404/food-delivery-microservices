@@ -10,6 +10,7 @@ export interface OrderServiceConfiguration {
   readonly port: number;
   readonly logLevel: LogLevel;
   readonly sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds;
+  readonly deliveryFeeInCents: bigint;
   readonly housekeepingIntervalInMilliseconds: number;
   readonly accessTokenIssuer: string;
   readonly accessTokenJwksUrl: string;
@@ -25,6 +26,12 @@ const orderServiceEnvironmentSchema = z.object({
     environmentVariables.durationInMilliseconds.default(30_000),
   PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS:
     environmentVariables.durationInMilliseconds.default(60_000),
+  DELIVERY_FEE_IN_CENTS: z
+    .string()
+    .trim()
+    .regex(/^\d{1,9}$/)
+    .default('800')
+    .transform(BigInt),
   HOUSEKEEPING_INTERVAL_IN_MILLISECONDS:
     environmentVariables.durationInMilliseconds.default(3_600_000),
   ACCESS_TOKEN_ISSUER: environmentVariables.httpUrl,
@@ -58,6 +65,7 @@ export function readOrderServiceConfiguration(
       variables.PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS,
       variables.PLACE_ORDER_SAGA_PAYMENT_TIMEOUT_IN_MILLISECONDS,
     ),
+    deliveryFeeInCents: variables.DELIVERY_FEE_IN_CENTS,
     housekeepingIntervalInMilliseconds: variables.HOUSEKEEPING_INTERVAL_IN_MILLISECONDS,
     accessTokenIssuer: variables.ACCESS_TOKEN_ISSUER,
     accessTokenJwksUrl: variables.ACCESS_TOKEN_JWKS_URL,

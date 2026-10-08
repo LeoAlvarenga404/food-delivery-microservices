@@ -19,6 +19,7 @@ export interface OrderSnapshot {
   readonly consumerId: ConsumerId;
   readonly restaurantId: RestaurantId;
   readonly lineItems: readonly OrderLineItemSnapshot[];
+  readonly deliveryFeeInCents: bigint;
   readonly totalInCents: bigint;
   readonly currency: Currency;
   readonly deliveryAddress: DeliveryAddress;
@@ -32,6 +33,7 @@ export class Order extends AggregateRoot<OrderEvent> {
   readonly #consumerId: ConsumerId;
   readonly #restaurantId: RestaurantId;
   readonly #lineItems: readonly OrderLineItem[];
+  readonly #deliveryFee: Money;
   readonly #currency: Currency;
   readonly #deliveryAddress: DeliveryAddress;
   readonly #placedAt: Date;
@@ -46,6 +48,7 @@ export class Order extends AggregateRoot<OrderEvent> {
     this.#lineItems = snapshot.lineItems.map((lineItem) =>
       OrderLineItem.restore(lineItem, snapshot.currency),
     );
+    this.#deliveryFee = Money.of(snapshot.deliveryFeeInCents, snapshot.currency);
     this.#currency = snapshot.currency;
     this.#deliveryAddress = snapshot.deliveryAddress;
     this.#placedAt = snapshot.placedAt;
@@ -61,6 +64,7 @@ export class Order extends AggregateRoot<OrderEvent> {
       consumerId: input.consumerId,
       restaurantId: input.menu.restaurantId,
       lineItems: lineItems.success.map((lineItem) => lineItem.toSnapshot()),
+      deliveryFeeInCents: input.deliveryFeeInCents,
       currency: 'BRL',
       deliveryAddress: input.deliveryAddress,
       placedAt: input.placedAt,
@@ -106,13 +110,14 @@ export class Order extends AggregateRoot<OrderEvent> {
   toSnapshot(): OrderSnapshot {
     const total = this.#lineItems.reduce(
       (sum, lineItem) => sum.add(lineItem.total()),
-      Money.zero(this.#currency),
+      this.#deliveryFee,
     );
     return {
       orderId: this.#orderId,
       consumerId: this.#consumerId,
       restaurantId: this.#restaurantId,
       lineItems: this.#lineItems.map((lineItem) => lineItem.toSnapshot()),
+      deliveryFeeInCents: this.#deliveryFee.toSnapshot().amountInCents,
       totalInCents: total.toSnapshot().amountInCents,
       currency: this.#currency,
       deliveryAddress: this.#deliveryAddress,
@@ -128,7 +133,7 @@ export class Order extends AggregateRoot<OrderEvent> {
   }
 
   #recordPlacement(): void {
-    const { orderId, consumerId, restaurantId, lineItems, totalInCents, currency } =
+    const { orderId, consumerId, restaurantId, lineItems, deliveryFeeInCents, totalInCents } =
       this.toSnapshot();
     this.recordEvent({
       eventType: 'OrderPlaced',
@@ -137,8 +142,9 @@ export class Order extends AggregateRoot<OrderEvent> {
       consumerId,
       restaurantId,
       lineItems,
+      deliveryFeeInCents,
       totalInCents,
-      currency,
+      currency: this.#currency,
     });
   }
 }

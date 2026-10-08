@@ -4,6 +4,8 @@ import { readKitchenServiceConfiguration } from './kitchen-service.config.ts';
 const requiredVariables = {
   KITCHEN_DATABASE_URL: 'postgresql://kitchen_service:secret@127.0.0.1:5434/kitchen_service',
   KAFKA_BOOTSTRAP_SERVERS: ' localhost:9092, ,localhost:9093,localhost:9094 ',
+  ACCESS_TOKEN_ISSUER: 'http://localhost:8180/realms/food-delivery',
+  ACCESS_TOKEN_JWKS_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
 };
 
 describe('readKitchenServiceConfiguration', () => {
@@ -15,11 +17,14 @@ describe('readKitchenServiceConfiguration', () => {
       port: 4003,
       logLevel: 'info',
       housekeepingIntervalInMilliseconds: 3_600_000,
+      accessTokenIssuer: 'http://localhost:8180/realms/food-delivery',
+      accessTokenJwksUrl: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
     });
   });
 
   it('reads the postgres scheme, the log level and the explicit overrides', () => {
     const configuration = readKitchenServiceConfiguration({
+      ...requiredVariables,
       KITCHEN_DATABASE_URL: 'postgres://kitchen_service:secret@127.0.0.1:5434/kitchen_service',
       KAFKA_BOOTSTRAP_SERVERS: 'localhost:9092',
       KITCHEN_SERVICE_HOST: '0.0.0.0',
@@ -35,6 +40,8 @@ describe('readKitchenServiceConfiguration', () => {
       port: 5003,
       logLevel: 'debug',
       housekeepingIntervalInMilliseconds: 60_000,
+      accessTokenIssuer: 'http://localhost:8180/realms/food-delivery',
+      accessTokenJwksUrl: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
     });
   });
 
@@ -53,6 +60,14 @@ describe('readKitchenServiceConfiguration', () => {
       variables: { ...requiredVariables, KITCHEN_SERVICE_PORT: '70000' },
     },
     { problem: 'an unknown log level', variables: { ...requiredVariables, LOG_LEVEL: 'verbose' } },
+    {
+      problem: 'a missing access token issuer',
+      variables: { ...requiredVariables, ACCESS_TOKEN_ISSUER: undefined },
+    },
+    {
+      problem: 'a key set address that is not http',
+      variables: { ...requiredVariables, ACCESS_TOKEN_JWKS_URL: 'keycloak:8080/certs' },
+    },
     {
       problem: 'a housekeeping interval of zero',
       variables: { ...requiredVariables, HOUSEKEEPING_INTERVAL_IN_MILLISECONDS: '0' },

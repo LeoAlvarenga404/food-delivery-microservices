@@ -1,5 +1,5 @@
 import type { CommandSender } from '#application/ports/command-sender.port.ts';
-import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga.ts';
+import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga-state.ts';
 
 export interface SentCommand {
   readonly command: ParticipantCommand;

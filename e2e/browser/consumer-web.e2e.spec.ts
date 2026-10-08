@@ -187,7 +187,8 @@ test('registers, keeps a refused cart, orders with an approved card sent twice a
   await expect(page.locator('main strong')).toHaveText('APPROVED', {
     timeout: statusTimeoutInMilliseconds,
   });
-  await expect(page.getByText('Total R$52.00')).toBeVisible();
+  await expect(page.getByText('Delivery fee R$8.00')).toBeVisible();
+  await expect(page.getByText('Total R$60.00')).toBeVisible();
   await expectNoFurtherReload(page);
   const approvedOrderUrl = page.url();
   await placeStoredCartAgain(page, approvedCart, 'tok_visa_0001');

@@ -10,6 +10,7 @@ import {
   startOrderTestDatabase,
   type OrderTestDatabase,
 } from '../../../test/support/order-database.builder.ts';
+import { deliveryFeeInCents } from '../../../test/support/order.builder.ts';
 import {
   buildPlaceOrderCommand,
   requestMetadata,
@@ -73,6 +74,7 @@ function placeOrderWith(orderUnitOfWork: UnitOfWork): PlaceOrderCommandHandler {
     clock: new FakeClock(),
     idGenerator: new FakeIdGenerator(),
     sagaTimeoutsInMilliseconds,
+    deliveryFeeInCents,
   });
 }
 

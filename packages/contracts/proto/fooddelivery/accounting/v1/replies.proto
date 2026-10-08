@@ -16,3 +16,7 @@ message PaymentFailed {
   string order_id = 1;
   PaymentFailureReason reason = 2;
 }
+
+message AuthorizationVoided {
+  string order_id = 1;
+}

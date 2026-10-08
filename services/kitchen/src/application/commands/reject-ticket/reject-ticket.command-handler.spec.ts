@@ -28,7 +28,7 @@ describe('RejectTicketCommandHandler', () => {
 
     expect(outcome).toEqual(right(reply));
     expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot()).toMatchObject({
-      status: 'REJECTED',
+      state: { status: 'REJECTED' },
       version: 2,
     });
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
@@ -77,7 +77,7 @@ describe('RejectTicketCommandHandler', () => {
       }),
     );
     expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot()).toMatchObject({
-      status: 'AWAITING_ACCEPTANCE',
+      state: { status: 'AWAITING_ACCEPTANCE' },
       version: 1,
     });
     expect(unitOfWork.replies.sentReplies).toEqual([]);

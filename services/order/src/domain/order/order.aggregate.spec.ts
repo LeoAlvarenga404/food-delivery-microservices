@@ -23,7 +23,7 @@ const frozenLineItems = [
 ];
 
 describe('Order.place', () => {
-  it('freezes the name and unit price of each menu item and computes the total', () => {
+  it('freezes the name and unit price of each menu item and adds the delivery fee to the total', () => {
     const order = buildOrder();
 
     expect(order.toSnapshot()).toEqual({
@@ -31,7 +31,8 @@ describe('Order.place', () => {
       consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
       restaurantId: pizzeriaMenu.restaurantId,
       lineItems: frozenLineItems,
-      totalInCents: 9800n,
+      deliveryFeeInCents: 800n,
+      totalInCents: 10600n,
       currency: 'BRL',
       deliveryAddress: {
         street: 'Rua Augusta',
@@ -45,7 +46,7 @@ describe('Order.place', () => {
     });
   });
 
-  it('records OrderPlaced with the frozen line items and the total', () => {
+  it('records OrderPlaced with the frozen line items, the delivery fee and the total', () => {
     expect(buildOrder().pullRecordedEvents()).toEqual([
       {
         eventType: 'OrderPlaced',
@@ -54,10 +55,22 @@ describe('Order.place', () => {
         consumerId: '0199a5d0-0000-7000-8000-0000000000c1',
         restaurantId: pizzeriaMenu.restaurantId,
         lineItems: frozenLineItems,
-        totalInCents: 9800n,
+        deliveryFeeInCents: 800n,
+        totalInCents: 10600n,
         currency: 'BRL',
       },
     ]);
+  });
+
+  it('charges the items alone when the delivery is free', () => {
+    const { deliveryFeeInCents, totalInCents } = buildOrder({
+      deliveryFeeInCents: 0n,
+    }).toSnapshot();
+
+    expect({ deliveryFeeInCents, totalInCents }).toEqual({
+      deliveryFeeInCents: 0n,
+      totalInCents: 9800n,
+    });
   });
 
   it('rejects an order without line items', () => {
@@ -132,13 +145,13 @@ describe('Order.place', () => {
     expect(Order.place(orderInput({ menu, placedAt: openingMinute })).isRight()).toBe(true);
   });
 
-  it('places an order whose total reaches the minimum order exactly', () => {
+  it('places an order whose items reach the minimum order exactly', () => {
     const menu = { ...pizzeriaMenu, minimumOrderInCents: 9800n };
 
     expect(Order.place(orderInput({ menu })).isRight()).toBe(true);
   });
 
-  it('rejects an order one cent below the minimum order', () => {
+  it('rejects an order whose items are one cent below the minimum order, whatever the delivery fee adds', () => {
     const menu = { ...pizzeriaMenu, minimumOrderInCents: 9801n };
 
     expect(Order.place(orderInput({ menu }))).toEqual(left({ type: 'MinimumOrderNotReached' }));

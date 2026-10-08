@@ -33,6 +33,7 @@ function deadLetterTopic(sourceTopic: string, consumerGroup: string): TopicDefin
 
 export const topicCatalogue: readonly TopicDefinition[] = [
   messageTopic('order.order.events'),
+  messageTopic('kitchen.ticket.events'),
   messageTopic('consumer.commands'),
   messageTopic('kitchen.commands'),
   messageTopic('accounting.commands'),
@@ -44,6 +45,7 @@ export const topicCatalogue: readonly TopicDefinition[] = [
   deadLetterTopic('order.place-order-saga.replies', 'order-service'),
   deadLetterTopic('restaurant.restaurant.state', 'order-service'),
   deadLetterTopic('restaurant.restaurant.state', 'restaurant-service'),
+  deadLetterTopic('restaurant.restaurant.state', 'kitchen-service'),
 ];
 
 export function toTopicConfigEntries(

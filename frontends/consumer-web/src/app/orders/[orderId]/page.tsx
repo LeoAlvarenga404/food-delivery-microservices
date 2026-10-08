@@ -64,6 +64,7 @@ export default async function OrderPage({
           </li>
         ))}
       </ul>
+      <p>Delivery fee {formatAmount(order.deliveryFeeInCents, order.currency)}</p>
       <p>Total {formatAmount(order.totalInCents, order.currency)}</p>
     </main>
   );

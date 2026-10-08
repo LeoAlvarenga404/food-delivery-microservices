@@ -23,6 +23,7 @@ describe('readOrderServiceConfiguration', () => {
         APPROVING_TICKET: 30_000,
         REJECTING_TICKET: 30_000,
       },
+      deliveryFeeInCents: 800n,
       housekeepingIntervalInMilliseconds: 3_600_000,
       accessTokenIssuer: 'http://localhost:8180/realms/food-delivery',
       accessTokenJwksUrl: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
@@ -43,6 +44,18 @@ describe('readOrderServiceConfiguration', () => {
       APPROVING_TICKET: 10_000,
       REJECTING_TICKET: 10_000,
     });
+  });
+
+  it.each([
+    { rawFee: ' 999999999 ', deliveryFeeInCents: 999_999_999n },
+    { rawFee: '0', deliveryFeeInCents: 0n },
+  ])('reads a delivery fee of "$rawFee" in exact cents', ({ rawFee, deliveryFeeInCents }) => {
+    const configuration = readOrderServiceConfiguration({
+      ...requiredVariables,
+      DELIVERY_FEE_IN_CENTS: rawFee,
+    });
+
+    expect(configuration.deliveryFeeInCents).toBe(deliveryFeeInCents);
   });
 
   it('reads the housekeeping interval', () => {
@@ -103,6 +116,22 @@ describe('readOrderServiceConfiguration', () => {
     {
       problem: 'a step timeout that is not a whole number of milliseconds',
       variables: { ...requiredVariables, PLACE_ORDER_SAGA_STEP_TIMEOUT_IN_MILLISECONDS: '1.5' },
+    },
+    {
+      problem: 'a negative delivery fee',
+      variables: { ...requiredVariables, DELIVERY_FEE_IN_CENTS: '-1' },
+    },
+    {
+      problem: 'a delivery fee in fractions of a cent',
+      variables: { ...requiredVariables, DELIVERY_FEE_IN_CENTS: '8.5' },
+    },
+    {
+      problem: 'a blank delivery fee',
+      variables: { ...requiredVariables, DELIVERY_FEE_IN_CENTS: ' ' },
+    },
+    {
+      problem: 'a delivery fee beyond nine digits of cents',
+      variables: { ...requiredVariables, DELIVERY_FEE_IN_CENTS: '1000000000' },
     },
     {
       problem: 'a housekeeping interval of zero',

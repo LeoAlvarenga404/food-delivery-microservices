@@ -5,6 +5,7 @@ import { InMemoryUnitOfWork } from '../../../../test/support/in-memory-unit-of-w
 import {
   buildTicket,
   createTicketInput,
+  margheritaId,
   orderId,
   ticketId,
   unwrap,
@@ -18,10 +19,11 @@ import type { CreateTicketCommand } from './create-ticket.command.ts';
 import { CreateTicketCommandHandler } from './create-ticket.command-handler.ts';
 
 const sagaId = '0199a5d0-0000-7000-8000-0000000000b1';
-const { restaurantId, lineItems } = createTicketInput();
+const { restaurantId, consumerId, lineItems } = createTicketInput();
 const command: CreateTicketCommand = {
   orderId,
   restaurantId,
+  consumerId,
   lineItems,
   sagaId,
   metadata: {
@@ -44,10 +46,10 @@ describe('CreateTicketCommandHandler', () => {
     const outcome = await createTicket(unitOfWork).execute(command);
 
     expect(outcome).toEqual(right(reply));
-    expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot()).toMatchObject({
-      ticketId,
-      status: 'CREATE_PENDING',
-      lineItems,
+    expect((await unitOfWork.tickets.findByOrderId(orderId))?.toSnapshot()).toEqual({
+      ...createTicketInput(),
+      state: { status: 'CREATE_PENDING' },
+      version: 1,
     });
     expect(unitOfWork.replies.sentReplies).toEqual([{ reply, sagaId }]);
     expect(unitOfWork.executedMetadata).toEqual([command.metadata]);
@@ -95,9 +97,7 @@ describe('CreateTicketCommandHandler', () => {
     { problem: 'without line items', refusedLineItems: [], reason: 'EmptyTicket' },
     {
       problem: 'with a quantity of zero',
-      refusedLineItems: [
-        { menuItemId: '0199a5d0-0000-7000-8000-000000000101', name: 'Pizza', quantity: 0 },
-      ],
+      refusedLineItems: [{ menuItemId: margheritaId, name: 'Pizza', quantity: 0 }],
       reason: 'InvalidQuantity',
     },
   ])(

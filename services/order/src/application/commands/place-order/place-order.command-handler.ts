@@ -18,6 +18,7 @@ export interface PlaceOrderDependencies {
   readonly clock: Clock;
   readonly idGenerator: IdGenerator;
   readonly sagaTimeoutsInMilliseconds: PlaceOrderSagaTimeoutsInMilliseconds;
+  readonly deliveryFeeInCents: bigint;
 }
 
 interface Placement {
@@ -42,8 +43,24 @@ function replayPlacement(
 }
 
 function toSagaOrder(snapshot: OrderSnapshot): PlaceOrderSagaOrder {
-  const { orderId, consumerId, restaurantId, lineItems, totalInCents, currency } = snapshot;
-  return { orderId, consumerId, restaurantId, lineItems, totalInCents, currency };
+  const {
+    orderId,
+    consumerId,
+    restaurantId,
+    lineItems,
+    deliveryFeeInCents,
+    totalInCents,
+    currency,
+  } = snapshot;
+  return {
+    orderId,
+    consumerId,
+    restaurantId,
+    lineItems,
+    deliveryFeeInCents,
+    totalInCents,
+    currency,
+  };
 }
 
 export class PlaceOrderCommandHandler {
@@ -83,6 +100,7 @@ export class PlaceOrderCommandHandler {
       menu,
       requestedLineItems: command.requestedLineItems,
       deliveryAddress: command.deliveryAddress,
+      deliveryFeeInCents: this.#dependencies.deliveryFeeInCents,
     });
     if (order.isLeft()) return order;
     await scope.orders.save(order.success);

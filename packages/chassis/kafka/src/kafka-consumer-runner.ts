@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import type { KafkaJS } from '@confluentinc/kafka-javascript';
 import {
   annotateActiveSpan,
@@ -129,14 +130,37 @@ async function processDelivery(
   await commitDelivery(parts, delivery);
 }
 
+const deadLetterTopicCheckAttemptCount = 10;
+const deadLetterTopicCheckDelayInMilliseconds = 500;
+
+async function findMissingDeadLetterTopics(
+  admin: KafkaJS.Admin,
+  settings: ConsumerRunnerSettings,
+): Promise<readonly string[]> {
+  const existingTopicNames = new Set(await admin.listTopics());
+  return settings.topics
+    .map((topic) => deadLetterTopic(topic, settings.groupId))
+    .filter((topicName) => !existingTopicNames.has(topicName));
+}
+
+async function waitForDeadLetterTopics(
+  admin: KafkaJS.Admin,
+  settings: ConsumerRunnerSettings,
+): Promise<readonly string[]> {
+  let missingTopicNames = await findMissingDeadLetterTopics(admin, settings);
+  for (let attempt = 1; attempt < deadLetterTopicCheckAttemptCount; attempt += 1) {
+    if (missingTopicNames.length === 0) return missingTopicNames;
+    await delay(deadLetterTopicCheckDelayInMilliseconds);
+    missingTopicNames = await findMissingDeadLetterTopics(admin, settings);
+  }
+  return missingTopicNames;
+}
+
 async function ensureDeadLetterTopicsExist(settings: ConsumerRunnerSettings): Promise<void> {
   const admin = settings.kafka.admin();
   await admin.connect();
   try {
-    const existingTopicNames = new Set(await admin.listTopics());
-    const missingTopicNames = settings.topics
-      .map((topic) => deadLetterTopic(topic, settings.groupId))
-      .filter((topicName) => !existingTopicNames.has(topicName));
+    const missingTopicNames = await waitForDeadLetterTopics(admin, settings);
     if (missingTopicNames.length > 0) {
       throw new Error(`missing dead letter topics: ${missingTopicNames.join(', ')}`);
     }

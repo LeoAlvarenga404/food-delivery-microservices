@@ -16,7 +16,8 @@
       "quantity": 1
     }
   ],
-  "totalInCents": "9800",
+  "totalInCents": "10600",
   "currency": "BRL",
-  "placedAt": "2026-10-02T12:00:00Z"
+  "placedAt": "2026-10-02T12:00:00Z",
+  "deliveryFeeInCents": "800"
 }

@@ -2,6 +2,7 @@ import type { DescMessage } from '@bufbuild/protobuf';
 import { readGoldenSample } from '@fd/chassis-testing';
 import { goldenSamplesDirectory } from '@fd/contracts';
 import {
+  AuthorizationVoidedSchema,
   PaymentAuthorizedSchema,
   PaymentFailedSchema,
 } from '@fd/contracts/fooddelivery/accounting/v1/replies_pb.js';
@@ -17,7 +18,7 @@ import {
 } from '@fd/contracts/fooddelivery/kitchen/v1/replies_pb.js';
 import { describe, expect, it } from 'vitest';
 import { buildReplyMessage } from '../../../../test/support/reply-message.builder.ts';
-import type { PlaceOrderSagaReply } from '#application/sagas/place-order/place-order.saga.ts';
+import type { PlaceOrderSagaReply } from '#application/sagas/place-order/place-order.saga-state.ts';
 import { toPlaceOrderSagaReply } from './place-order-saga-reply.message-mapper.ts';
 
 const directory = goldenSamplesDirectory;
@@ -53,6 +54,11 @@ describe('place order saga reply golden samples', () => {
       producer: 'Accounting',
       schema: PaymentFailedSchema,
       reply: { type: 'PaymentFailed', rejectionReason: 'PAYMENT_DECLINED' },
+    },
+    {
+      producer: 'Accounting',
+      schema: AuthorizationVoidedSchema,
+      reply: { type: 'AuthorizationVoided' },
     },
   ])('reads the $reply.type sample the $producer service produces', async ({ schema, reply }) => {
     const sample = await readGoldenSample({ directory, topic, schema });

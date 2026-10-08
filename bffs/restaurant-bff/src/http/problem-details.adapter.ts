@@ -1,5 +1,6 @@
 import { STATUS_CODES } from 'node:http';
 import { Code, ConnectError } from '@connectrpc/connect';
+import { TicketCommandFailureSchema } from '@fd/contracts/fooddelivery/kitchen/v1/service_pb.js';
 import {
   OnboardRestaurantFailureSchema,
   ReviseMenuFailureSchema,
@@ -44,6 +45,7 @@ function fromConnectError(error: ConnectError): ProblemDetails {
   const [failure] = [
     ...error.findDetails(OnboardRestaurantFailureSchema),
     ...error.findDetails(ReviseMenuFailureSchema),
+    ...error.findDetails(TicketCommandFailureSchema),
   ];
   return problemDetails(status, failure === undefined ? {} : { reason: failure.reason });
 }

@@ -99,6 +99,19 @@ describe('postgres place order saga repository rows', () => {
     expect(await readStoredState()).not.toContain('tok_visa_4242');
   });
 
+  it('reads a saga stored before the delivery fee as an order without one', async () => {
+    const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
+    const started = buildSagaInstance();
+    await sagas.save(started);
+    await sql`update saga_instances set state = state #- '{order,deliveryFeeInCents}'`.execute(
+      testDatabase.database,
+    );
+
+    const stored = await sagas.findById(started.sagaId);
+
+    expect(stored?.state.order).toEqual({ ...buildSagaOrder(), deliveryFeeInCents: 0n });
+  });
+
   it('moves the payment token of slice 1 rows out of the stored order', async () => {
     const sagas = new PostgresPlaceOrderSagaRepository(testDatabase.database);
     const insertSlice1Row = async (sagaId: string, state: PlaceOrderSagaState) => {

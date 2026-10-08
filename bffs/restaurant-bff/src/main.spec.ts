@@ -1,5 +1,6 @@
 import { createLogger } from '@fd/chassis-observability';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FakeKitchenService } from '../test/support/kitchen-service.fake.ts';
 import { FakeRestaurantService } from '../test/support/restaurant-service.fake.ts';
 import { fakeServiceAccess } from '../test/support/service-access.fake.ts';
 import { createRestaurantBffServer, type RestaurantBffServer } from './main.ts';
@@ -11,6 +12,7 @@ let server: RestaurantBffServer;
 beforeEach(async () => {
   server = await createRestaurantBffServer({
     restaurantService: new FakeRestaurantService().client(),
+    kitchenService: new FakeKitchenService().client(),
     serviceAccess: fakeServiceAccess,
     logger: createLogger({ serviceName: 'restaurant-bff', level: 'silent' }),
     generateCorrelationId: () => generatedCorrelationId,
@@ -68,7 +70,7 @@ describe('restaurant bff server', () => {
     expect(response.headers['x-correlation-id']).toBe('0199a5d0-0000-7000-8000-0000000000f2');
   });
 
-  it('publishes an OpenAPI document with only the restaurant routes', async () => {
+  it('publishes an OpenAPI document with only the restaurant and ticket routes', async () => {
     const response = await server.inject({ method: 'GET', url: '/openapi.json' });
 
     const document = response.json<{ paths: object }>();
@@ -78,6 +80,10 @@ describe('restaurant bff server', () => {
       '/v1/restaurant/restaurants/{restaurantId}/menu',
       '/v1/restaurant/restaurants/{restaurantId}',
       '/v1/restaurant/memberships',
+      '/v1/restaurant/restaurants/{restaurantId}/tickets',
+      '/v1/restaurant/restaurants/{restaurantId}/tickets/{ticketId}/acceptance',
+      '/v1/restaurant/restaurants/{restaurantId}/tickets/{ticketId}/preparation',
+      '/v1/restaurant/restaurants/{restaurantId}/tickets/{ticketId}/readiness',
     ]);
   });
 });

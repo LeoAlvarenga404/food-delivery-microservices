@@ -20,7 +20,7 @@ export class RejectTicketCommandHandler {
   ): Promise<Either<RejectTicketError, KitchenReply>> {
     const { orderId, sagaId } = command;
     const ticket = await scope.tickets.findByOrderId(orderId);
-    if (ticket !== undefined && ticket.toSnapshot().status !== 'REJECTED') {
+    if (ticket !== undefined && ticket.toSnapshot().state.status !== 'REJECTED') {
       const rejection = ticket.reject();
       if (rejection.isLeft()) return rejection;
       await scope.tickets.save(ticket);

@@ -46,6 +46,16 @@ export class DockerComposeStack {
     return this.#queryDatabase('kitchen-db', 'kitchen_service', query);
   }
 
+  async readPaymentStatus(orderId: string): Promise<string> {
+    const query = `select status from payments where order_id = '${z.uuid().parse(orderId)}'`;
+    return this.#queryDatabase('accounting-db', 'accounting_service', query);
+  }
+
+  async readSagaId(orderId: string): Promise<string> {
+    const query = `select saga_id from saga_instances where order_id = '${z.uuid().parse(orderId)}'`;
+    return this.#queryDatabase('order-db', 'order_service', query);
+  }
+
   async waitForSagaStep(
     orderId: string,
     step: string,

@@ -1,13 +1,12 @@
 import type { ServiceImpl } from '@connectrpc/connect';
 import { fastifyConnectPlugin } from '@connectrpc/connect-fastify';
 import type { Logger } from '@fd/chassis-observability';
-import { createRpcCorrelation } from '@fd/chassis-rpc';
+import { createRpcCorrelation, createServiceRpcInterceptors } from '@fd/chassis-rpc';
 import { RestaurantCatalogueService } from '@fd/contracts/fooddelivery/restaurant/v1/catalogue_pb.js';
 import { RestaurantService } from '@fd/contracts/fooddelivery/restaurant/v1/service_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
 import { v7 as generateUuidV7 } from 'uuid';
 import type { RestaurantServiceConfiguration } from '#infrastructure/restaurant-service.config.ts';
-import { createRestaurantRpcInterceptors } from './restaurant-rpc-interceptors.adapter.ts';
 
 export interface RestaurantHttpServerSettings {
   readonly configuration: RestaurantServiceConfiguration;
@@ -26,7 +25,11 @@ async function registerRpcServices(
   settings: RestaurantHttpServerSettings,
 ): Promise<void> {
   const { configuration, logger, restaurantService, catalogueService } = settings;
-  const staffInterceptors = createRestaurantRpcInterceptors(configuration, logger);
+  const staffInterceptors = createServiceRpcInterceptors(
+    'restaurant-service',
+    configuration,
+    logger,
+  );
   const catalogueInterceptors = [
     createRpcCorrelation({ logger, generateCorrelationId: generateUuidV7 }),
   ];

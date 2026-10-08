@@ -10,6 +10,7 @@ import {
 import { createLogger, type Logger } from '@fd/chassis-observability';
 import { deleteExpiredOutboxMessages } from '@fd/chassis-outbox';
 import { createDatabase, migrateToLatest } from '@fd/chassis-postgres';
+import { createServiceRpcInterceptors } from '@fd/chassis-rpc';
 import { OrderService } from '@fd/contracts/fooddelivery/order/v1/service_pb.js';
 import { fastify, type FastifyInstance } from 'fastify';
 import type { Kysely } from 'kysely';
@@ -30,7 +31,6 @@ import {
 } from '#infrastructure/persistence/order-unit-of-work.adapter.ts';
 import { PostgresIdempotencyKeyStore } from '#infrastructure/persistence/postgres-idempotency-key-store.adapter.ts';
 import { PostgresOrderRepository } from '#infrastructure/persistence/postgres-order.repository.ts';
-import { createOrderRpcInterceptors } from '#infrastructure/rpc/order-rpc-interceptors.adapter.ts';
 import { createOrderRpcService } from '#infrastructure/rpc/order.rpc-service.ts';
 import { PlaceOrderSagaDeadlineWorker } from '#infrastructure/scheduling/place-order-saga-deadline-worker.adapter.ts';
 import { SystemClock } from '#infrastructure/system/system-clock.adapter.ts';
@@ -64,13 +64,14 @@ async function startHttpServer(parts: OrderServiceParts): Promise<RunningHttpSer
       clock,
       idGenerator: new UuidV7IdGenerator(),
       sagaTimeoutsInMilliseconds: configuration.sagaTimeoutsInMilliseconds,
+      deliveryFeeInCents: configuration.deliveryFeeInCents,
     }),
     getOrder: new GetOrderQueryHandler(new PostgresOrderRepository(database)),
   });
   const server = fastify();
   await server.register(fastifyConnectPlugin, {
     routes: (router) => router.service(OrderService, rpcService),
-    interceptors: createOrderRpcInterceptors(configuration, logger),
+    interceptors: createServiceRpcInterceptors('order-service', configuration, logger),
   });
   server.get('/health', () => ({ status: 'ok' }));
   try {

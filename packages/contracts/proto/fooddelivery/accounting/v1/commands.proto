@@ -8,4 +8,10 @@ message AuthorizePayment {
   int64 amount_in_cents = 3;
   string currency = 4;
   string payment_token = 5;
+  string restaurant_id = 6;
+  int64 delivery_fee_in_cents = 7;
+}
+
+message VoidAuthorization {
+  string order_id = 1;
 }

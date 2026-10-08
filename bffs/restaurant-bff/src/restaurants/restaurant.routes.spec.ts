@@ -11,6 +11,7 @@ import {
 } from '@fd/contracts/fooddelivery/restaurant/v1/service_pb.js';
 import type { LightMyRequestResponse } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { FakeKitchenService } from '../../test/support/kitchen-service.fake.ts';
 import {
   FakeRestaurantService,
   onboardedRestaurantId,
@@ -74,6 +75,7 @@ function readRestaurant(path = restaurantPath): Promise<LightMyRequestResponse> 
 function serverWith(serviceAccess: ServiceAccess): Promise<RestaurantBffServer> {
   return createRestaurantBffServer({
     restaurantService: restaurantService.client(),
+    kitchenService: new FakeKitchenService().client(),
     serviceAccess,
     logger: createLogger({ serviceName: 'restaurant-bff', level: 'silent' }),
     generateCorrelationId: () => '0199a5d0-0000-7000-8000-0000000000f9',

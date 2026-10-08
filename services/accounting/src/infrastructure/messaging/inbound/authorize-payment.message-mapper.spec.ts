@@ -2,24 +2,30 @@ import { PermanentMessageFailure } from '@fd/chassis-kafka';
 import { AuthorizePaymentSchema } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
 import { describe, expect, it } from 'vitest';
 import { buildCommandMessage } from '../../../../test/support/command-message.builder.ts';
-import { authorizePaymentInput, orderId } from '../../../../test/support/payment.builder.ts';
+import { consumerId, orderId, restaurantId } from '../../../../test/support/payment.builder.ts';
 import { toAuthorizePaymentCommand } from './authorize-payment.message-mapper.ts';
 
-const { consumerId } = authorizePaymentInput();
 const authorizePayment = {
   orderId,
   consumerId,
+  restaurantId,
   amountInCents: 9800n,
+  deliveryFeeInCents: 800n,
   currency: 'BRL',
   paymentToken: 'tok_visa_4242',
 };
 
 describe('toAuthorizePaymentCommand', () => {
-  it('reads the command and chains its replies to the command message', () => {
+  it('reads the command with its amounts as money and chains its replies to the command message', () => {
     const message = buildCommandMessage(AuthorizePaymentSchema, authorizePayment);
 
     expect(toAuthorizePaymentCommand(message)).toEqual({
-      ...authorizePayment,
+      orderId,
+      consumerId,
+      restaurantId,
+      amount: { amountInCents: 9800n, currency: 'BRL' },
+      deliveryFee: { amountInCents: 800n, currency: 'BRL' },
+      paymentToken: 'tok_visa_4242',
       sagaId: '0199a5d0-0000-7000-8000-0000000000b1',
       metadata: {
         correlationId: '0199a5d0-0000-7000-8000-0000000000e1',
@@ -35,9 +41,26 @@ describe('toAuthorizePaymentCommand', () => {
       ...authorizePayment,
       orderId: orderId.toUpperCase(),
       consumerId: consumerId.toUpperCase(),
+      restaurantId: restaurantId.toUpperCase(),
     });
 
-    expect(toAuthorizePaymentCommand(message)).toMatchObject({ orderId, consumerId });
+    expect(toAuthorizePaymentCommand(message)).toMatchObject({
+      orderId,
+      consumerId,
+      restaurantId,
+    });
+  });
+
+  it('reads a free delivery as a delivery fee of nothing', () => {
+    const message = buildCommandMessage(AuthorizePaymentSchema, {
+      ...authorizePayment,
+      deliveryFeeInCents: 0n,
+    });
+
+    expect(toAuthorizePaymentCommand(message).deliveryFee).toEqual({
+      amountInCents: 0n,
+      currency: 'BRL',
+    });
   });
 
   it.each([
@@ -69,6 +92,34 @@ describe('toAuthorizePaymentCommand', () => {
       message: buildCommandMessage(AuthorizePaymentSchema, {
         ...authorizePayment,
         consumerId: 'ana',
+      }),
+    },
+    {
+      problem: 'a command without a restaurant, as Order sent before slice 3c',
+      message: buildCommandMessage(AuthorizePaymentSchema, {
+        ...authorizePayment,
+        restaurantId: '',
+      }),
+    },
+    {
+      problem: 'a restaurant id that is not a uuid',
+      message: buildCommandMessage(AuthorizePaymentSchema, {
+        ...authorizePayment,
+        restaurantId: 'pizzeria',
+      }),
+    },
+    {
+      problem: 'a negative delivery fee',
+      message: buildCommandMessage(AuthorizePaymentSchema, {
+        ...authorizePayment,
+        deliveryFeeInCents: -1n,
+      }),
+    },
+    {
+      problem: 'a delivery fee that leaves nothing for the food',
+      message: buildCommandMessage(AuthorizePaymentSchema, {
+        ...authorizePayment,
+        deliveryFeeInCents: 9800n,
       }),
     },
     {

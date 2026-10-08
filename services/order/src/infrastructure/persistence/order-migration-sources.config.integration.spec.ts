@@ -17,6 +17,11 @@ interface SagaDeadlineRow {
   readonly isDue: boolean;
 }
 
+interface DeliveryFeeRow {
+  readonly deliveryFeeInCents: bigint;
+  readonly totalInCents: bigint;
+}
+
 const generatedTypesFile = fileURLToPath(new URL('./generated/database.ts', import.meta.url));
 const orderMigrationsDirectory = fileURLToPath(new URL('./migrations/', import.meta.url));
 
@@ -73,6 +78,7 @@ describe('orderMigrationSources', () => {
       'order/0009-add-timeout-rejection-reasons',
       'order/0010-require-deadlines-of-running-sagas',
       'order/0011-replace-menu-items-with-restaurant-menus',
+      'order/0012-add-order-delivery-fee',
       'outbox/0001-create-outbox-table',
     ]);
   });
@@ -128,5 +134,39 @@ describe('orderMigrationSources', () => {
       { sagaId: '0199a5d0-0000-7000-8000-0000000000b1', hasDeadline: true, isDue: true },
       { sagaId: '0199a5d0-0000-7000-8000-0000000000b2', hasDeadline: false, isDue: false },
     ]);
+  });
+
+  it('gives every order placed before the delivery fee a fee of zero, so its total stays its items', async () => {
+    const administration = openDatabase('postgres');
+    onTestFinished(() => administration.destroy());
+    await sql`create database delivery_fee_backfill`.execute(administration);
+    const database = openDatabase('delivery_fee_backfill');
+    onTestFinished(() => database.destroy());
+    const migrationsBeforeDeliveryFee = await copyOrderMigrationsWithout(
+      '0012-add-order-delivery-fee.sql',
+    );
+    await migrateToLatest(database, [
+      outboxMigrations,
+      inboxMigrations,
+      { name: 'order', directory: migrationsBeforeDeliveryFee },
+    ]);
+    await sql`
+      insert into orders (
+        order_id, consumer_id, restaurant_id, total_in_cents, currency, delivery_street,
+        delivery_number, delivery_city, delivery_postal_code, placed_at, version, status
+      ) values (
+        '0199a5d0-0000-7000-8000-0000000000a1', '0199a5d0-0000-7000-8000-0000000000c1',
+        '0199a5d0-0000-7000-8000-000000000001', 9800, 'BRL', 'Rua Augusta', '1500',
+        'Sao Paulo', '01304-001', now(), 1, 'APPROVAL_PENDING'
+      )
+    `.execute(database);
+
+    const backfill = await migrateToLatest(database, orderMigrationSources);
+
+    const rows = await sql<DeliveryFeeRow>`
+      select delivery_fee_in_cents, total_in_cents from orders
+    `.execute(database);
+    expect(backfill).toEqual(['order/0012-add-order-delivery-fee']);
+    expect(rows.rows).toEqual([{ deliveryFeeInCents: 0n, totalInCents: 9800n }]);
   });
 });

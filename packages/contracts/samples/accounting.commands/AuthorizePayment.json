@@ -1,7 +1,9 @@
 {
   "orderId": "0199a5d0-0000-7000-8000-0000000000a1",
   "consumerId": "0199a5d0-0000-7000-8000-0000000000c1",
-  "amountInCents": "9800",
+  "amountInCents": "10600",
   "currency": "BRL",
-  "paymentToken": "tok_visa_4242"
+  "paymentToken": "tok_visa_4242",
+  "restaurantId": "0199a5d0-0000-7000-8000-000000000001",
+  "deliveryFeeInCents": "800"
 }

@@ -1,20 +1,23 @@
 import type { Interceptor } from '@connectrpc/connect';
 import { createAccessTokenInterceptor, createAccessTokenVerifier } from '@fd/chassis-auth';
 import type { Logger } from '@fd/chassis-observability';
-import { createRpcCorrelation } from '@fd/chassis-rpc';
 import { v7 as generateUuidV7 } from 'uuid';
-import type { OrderServiceConfiguration } from '#infrastructure/order-service.config.ts';
+import { createRpcCorrelation } from './rpc-correlation.ts';
 
-const orderServiceAudience = 'order-service';
+export interface AccessTokenIssuerSettings {
+  readonly accessTokenIssuer: string;
+  readonly accessTokenJwksUrl: string;
+}
 
-export function createOrderRpcInterceptors(
-  configuration: OrderServiceConfiguration,
+export function createServiceRpcInterceptors(
+  audience: string,
+  issuer: AccessTokenIssuerSettings,
   logger: Logger,
 ): Interceptor[] {
   const verifier = createAccessTokenVerifier({
-    issuer: configuration.accessTokenIssuer,
-    audience: orderServiceAudience,
-    jwksUrl: configuration.accessTokenJwksUrl,
+    issuer: issuer.accessTokenIssuer,
+    audience,
+    jwksUrl: issuer.accessTokenJwksUrl,
   });
   return [
     createRpcCorrelation({ logger, generateCorrelationId: generateUuidV7 }),

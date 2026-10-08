@@ -1,11 +1,12 @@
 import { fromBinary } from '@bufbuild/protobuf';
 import { AuthorizePaymentSchema } from '@fd/contracts/fooddelivery/accounting/v1/commands_pb.js';
+import { CreateTicketSchema } from '@fd/contracts/fooddelivery/kitchen/v1/commands_pb.js';
 import { describe, expect, it } from 'vitest';
 import {
   buildSagaOrder,
   sagaPaymentToken,
 } from '../../../../test/support/place-order-saga.builder.ts';
-import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga.ts';
+import type { ParticipantCommand } from '#application/sagas/place-order/place-order.saga-state.ts';
 import {
   toAuthorizePayment,
   toParticipantCommandMessage,
@@ -45,6 +46,11 @@ describe('toParticipantCommandMessage', () => {
       topic: 'kitchen.commands',
       messageType: 'fooddelivery.kitchen.v1.RejectTicket',
     },
+    {
+      command: { type: 'VoidAuthorization', order },
+      topic: 'accounting.commands',
+      messageType: 'fooddelivery.accounting.v1.VoidAuthorization',
+    },
   ])('sends $command.type to $topic keyed by the order id', ({ command, topic, messageType }) => {
     const message = toParticipantCommandMessage(command, sagaId);
 
@@ -54,6 +60,25 @@ describe('toParticipantCommandMessage', () => {
       aggregateId: order.orderId,
       messageType,
       sagaId,
+    });
+  });
+
+  it('carries the consumer of the order on CreateTicket, so Kitchen can authorize their reads', () => {
+    const message = toParticipantCommandMessage({ type: 'CreateTicket', order }, sagaId);
+
+    expect(fromBinary(CreateTicketSchema, message.payload).consumerId).toBe(order.consumerId);
+  });
+
+  it('carries the restaurant and the delivery fee on AuthorizePayment, so Accounting can split the payment', () => {
+    const message = toParticipantCommandMessage(
+      { type: 'AuthorizePayment', order, paymentToken: sagaPaymentToken },
+      sagaId,
+    );
+
+    expect(fromBinary(AuthorizePaymentSchema, message.payload)).toMatchObject({
+      restaurantId: order.restaurantId,
+      deliveryFeeInCents: 800n,
+      amountInCents: 10600n,
     });
   });
 

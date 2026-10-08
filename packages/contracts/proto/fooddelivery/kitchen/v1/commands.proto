@@ -12,6 +12,7 @@ message CreateTicket {
   string order_id = 1;
   string restaurant_id = 2;
   repeated TicketLineItem line_items = 3;
+  string consumer_id = 4;
 }
 
 message ApproveTicket {

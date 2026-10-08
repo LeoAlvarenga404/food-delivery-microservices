@@ -9,24 +9,35 @@ import {
 
 const slowResponseInMilliseconds = 50;
 
+let voidCount = 0;
+
 function simulatedGateway(): SimulatedPaymentGateway {
   let authorizationCount = 0;
+  voidCount = 0;
   return new SimulatedPaymentGateway({
     slowResponseInMilliseconds,
     generateAuthorizationId: () => {
       authorizationCount += 1;
       return `authorization-${String(authorizationCount)}`;
     },
+    generateVoidId: () => {
+      voidCount += 1;
+      return `void-${String(voidCount)}`;
+    },
   });
 }
+
+const voidRequest = {
+  idempotencyKey: '0199a5d0-0000-7000-8000-0000000000b1:VoidAuthorization',
+  authorizationId: 'authorization-1',
+};
 
 function request(
   overrides: Partial<PaymentAuthorizationRequest> = {},
 ): PaymentAuthorizationRequest {
   return {
     idempotencyKey: '0199a5d0-0000-7000-8000-0000000000b1:AuthorizePayment',
-    amountInCents: 9800n,
-    currency: 'BRL',
+    amount: { amountInCents: 9800n, currency: 'BRL' },
     paymentToken: 'tok_visa_4242',
     ...overrides,
   };
@@ -54,7 +65,7 @@ describe('SimulatedPaymentGateway', () => {
 
     await gateway.authorize(request());
     const repeated = await gateway.authorize(
-      request({ paymentToken: 'tok_visa_0002', amountInCents: 1n }),
+      request({ paymentToken: 'tok_visa_0002', amount: { amountInCents: 1n, currency: 'BRL' } }),
     );
 
     expect(repeated).toEqual(right({ authorizationId: 'authorization-1' }));
@@ -77,6 +88,20 @@ describe('SimulatedPaymentGateway', () => {
       name: 'PaymentGatewayTimeoutError',
       code: 'ETIMEDOUT',
     });
+  });
+
+  it('voids an authorization with a reference of its own', async () => {
+    expect(await simulatedGateway().void(voidRequest)).toEqual({ voidId: 'void-1' });
+  });
+
+  it('answers a repeated void key with the first void, voiding once', async () => {
+    const gateway = simulatedGateway();
+
+    await gateway.void(voidRequest);
+    const repeated = await gateway.void({ ...voidRequest, authorizationId: 'authorization-2' });
+
+    expect(repeated).toEqual({ voidId: 'void-1' });
+    expect(voidCount).toBe(1);
   });
 
   it('answers slowly for a card ending in 0009', async () => {

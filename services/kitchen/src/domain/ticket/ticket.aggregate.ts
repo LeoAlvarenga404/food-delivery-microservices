@@ -1,11 +1,20 @@
-import { left, right, type Either } from '@fd/domain';
+import { AggregateRoot, left, right, type Either } from '@fd/domain';
+import type { ConsumerId } from './consumer-id.value-object.ts';
+import type { MenuItemId } from './menu-item-id.value-object.ts';
 import type { OrderId } from './order-id.value-object.ts';
+import type { PreparationTimeInMinutes } from './preparation-time.value-object.ts';
+import type { RestaurantId } from './restaurant-id.value-object.ts';
+import type { TicketAccepted } from './ticket-accepted.event.ts';
+import type { TicketPreparationStarted } from './ticket-preparation-started.event.ts';
+import type { TicketReadyForPickup } from './ticket-ready-for-pickup.event.ts';
 import type { InvalidTicketTransition, TicketCreationError } from './ticket.errors.ts';
 import type { TicketId } from './ticket-id.value-object.ts';
-import type { TicketStatus } from './ticket.state.ts';
+import type { TicketState, TicketStatus } from './ticket.state.ts';
+
+export type TicketEvent = TicketAccepted | TicketPreparationStarted | TicketReadyForPickup;
 
 export interface TicketLineItem {
-  readonly menuItemId: string;
+  readonly menuItemId: MenuItemId;
   readonly name: string;
   readonly quantity: number;
 }
@@ -13,34 +22,39 @@ export interface TicketLineItem {
 export interface CreateTicketInput {
   readonly ticketId: TicketId;
   readonly orderId: OrderId;
-  readonly restaurantId: string;
+  readonly restaurantId: RestaurantId;
+  readonly consumerId: ConsumerId;
   readonly lineItems: readonly TicketLineItem[];
 }
 
 export interface TicketSnapshot extends CreateTicketInput {
-  readonly status: TicketStatus;
+  readonly state: TicketState;
   readonly version: number;
 }
+
+interface TicketReferences {
+  readonly ticketId: TicketId;
+  readonly orderId: OrderId;
+  readonly restaurantId: RestaurantId;
+}
+
+const minuteInMilliseconds = 60_000;
 
 function findInvalidQuantity(lineItems: readonly TicketLineItem[]): TicketLineItem | undefined {
   return lineItems.find(({ quantity }) => !Number.isInteger(quantity) || quantity <= 0);
 }
 
-export class Ticket {
-  readonly #ticketId: TicketId;
-  readonly #orderId: OrderId;
-  readonly #restaurantId: string;
-  readonly #lineItems: readonly TicketLineItem[];
+export class Ticket extends AggregateRoot<TicketEvent> {
+  readonly #content: CreateTicketInput;
   readonly #version: number;
-  #status: TicketStatus;
+  #state: TicketState;
 
   private constructor(snapshot: TicketSnapshot) {
-    this.#ticketId = snapshot.ticketId;
-    this.#orderId = snapshot.orderId;
-    this.#restaurantId = snapshot.restaurantId;
-    this.#lineItems = snapshot.lineItems;
-    this.#status = snapshot.status;
-    this.#version = snapshot.version;
+    super();
+    const { state, version, ...content } = snapshot;
+    this.#content = content;
+    this.#state = state;
+    this.#version = version;
   }
 
   static create(input: CreateTicketInput): Either<TicketCreationError, Ticket> {
@@ -53,7 +67,7 @@ export class Ticket {
         quantity: invalid.quantity,
       });
     }
-    return right(new Ticket({ ...input, status: 'CREATE_PENDING', version: 0 }));
+    return right(new Ticket({ ...input, state: { status: 'CREATE_PENDING' }, version: 0 }));
   }
 
   static restore(snapshot: TicketSnapshot): Ticket {
@@ -61,34 +75,76 @@ export class Ticket {
   }
 
   approve(): Either<InvalidTicketTransition, undefined> {
-    return this.#leaveCreatePending('AWAITING_ACCEPTANCE');
+    if (this.#state.status !== 'CREATE_PENDING') {
+      return left(this.#invalidTransition('AWAITING_ACCEPTANCE'));
+    }
+    this.#state = { status: 'AWAITING_ACCEPTANCE' };
+    return right(undefined);
   }
 
   reject(): Either<InvalidTicketTransition, undefined> {
-    return this.#leaveCreatePending('REJECTED');
+    if (this.#state.status !== 'CREATE_PENDING') return left(this.#invalidTransition('REJECTED'));
+    this.#state = { status: 'REJECTED' };
+    return right(undefined);
+  }
+
+  accept(
+    preparationTime: PreparationTimeInMinutes,
+    acceptedAt: Date,
+  ): Either<InvalidTicketTransition, undefined> {
+    if (this.#state.status !== 'AWAITING_ACCEPTANCE') {
+      return left(this.#invalidTransition('ACCEPTED'));
+    }
+    const readyBy = new Date(acceptedAt.getTime() + preparationTime * minuteInMilliseconds);
+    this.#state = { status: 'ACCEPTED', acceptedAt, readyBy };
+    this.recordEvent({
+      eventType: 'TicketAccepted',
+      occurredAt: acceptedAt,
+      ...this.#references(),
+      readyBy,
+    });
+    return right(undefined);
+  }
+
+  startPreparing(startedAt: Date): Either<InvalidTicketTransition, undefined> {
+    const state = this.#state;
+    if (state.status !== 'ACCEPTED') return left(this.#invalidTransition('PREPARING'));
+    this.#state = { ...state, status: 'PREPARING' };
+    this.recordEvent({
+      eventType: 'TicketPreparationStarted',
+      occurredAt: startedAt,
+      ...this.#references(),
+    });
+    return right(undefined);
+  }
+
+  markReady(readyAt: Date): Either<InvalidTicketTransition, undefined> {
+    const state = this.#state;
+    if (state.status !== 'PREPARING') return left(this.#invalidTransition('READY_FOR_PICKUP'));
+    this.#state = { ...state, status: 'READY_FOR_PICKUP' };
+    this.recordEvent({
+      eventType: 'TicketReadyForPickup',
+      occurredAt: readyAt,
+      ...this.#references(),
+    });
+    return right(undefined);
   }
 
   toSnapshot(): TicketSnapshot {
-    return {
-      ticketId: this.#ticketId,
-      orderId: this.#orderId,
-      restaurantId: this.#restaurantId,
-      lineItems: this.#lineItems,
-      status: this.#status,
-      version: this.#version,
-    };
+    return { ...this.#content, state: this.#state, version: this.#version };
   }
 
-  #leaveCreatePending(to: TicketStatus): Either<InvalidTicketTransition, undefined> {
-    if (this.#status !== 'CREATE_PENDING') {
-      return left({
-        type: 'InvalidTicketTransition',
-        ticketId: this.#ticketId,
-        from: this.#status,
-        to,
-      });
-    }
-    this.#status = to;
-    return right(undefined);
+  #references(): TicketReferences {
+    const { ticketId, orderId, restaurantId } = this.#content;
+    return { ticketId, orderId, restaurantId };
+  }
+
+  #invalidTransition(to: TicketStatus): InvalidTicketTransition {
+    return {
+      type: 'InvalidTicketTransition',
+      ticketId: this.#content.ticketId,
+      from: this.#state.status,
+      to,
+    };
   }
 }

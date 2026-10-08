@@ -3,6 +3,7 @@ import { readRestaurantBffConfiguration } from './restaurant-bff.config.ts';
 
 const requiredVariables = {
   RESTAURANT_SERVICE_URL: 'http://127.0.0.1:4005',
+  KITCHEN_SERVICE_URL: 'http://127.0.0.1:4003',
   ACCESS_TOKEN_ISSUER: 'http://localhost:8180/realms/food-delivery',
   ACCESS_TOKEN_JWKS_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/certs',
   TOKEN_EXCHANGE_URL: 'http://keycloak:8080/realms/food-delivery/protocol/openid-connect/token',
@@ -21,6 +22,8 @@ describe('readRestaurantBffConfiguration', () => {
     expect(readRestaurantBffConfiguration(requiredVariables)).toEqual({
       restaurantServiceUrl: 'http://127.0.0.1:4005',
       restaurantServiceTimeoutInMilliseconds: 5000,
+      kitchenServiceUrl: 'http://127.0.0.1:4003',
+      kitchenServiceTimeoutInMilliseconds: 5000,
       ...accessSettings,
       host: '127.0.0.1',
       port: 4006,
@@ -34,6 +37,8 @@ describe('readRestaurantBffConfiguration', () => {
         ...requiredVariables,
         RESTAURANT_SERVICE_URL: 'http://restaurant-service:4005',
         RESTAURANT_SERVICE_TIMEOUT_IN_MILLISECONDS: '2500',
+        KITCHEN_SERVICE_URL: 'http://kitchen-service:4003',
+        KITCHEN_SERVICE_TIMEOUT_IN_MILLISECONDS: '3000',
         RESTAURANT_BFF_HOST: '0.0.0.0',
         RESTAURANT_BFF_PORT: '8006',
         LOG_LEVEL: 'warn',
@@ -41,6 +46,8 @@ describe('readRestaurantBffConfiguration', () => {
     ).toEqual({
       restaurantServiceUrl: 'http://restaurant-service:4005',
       restaurantServiceTimeoutInMilliseconds: 2500,
+      kitchenServiceUrl: 'http://kitchen-service:4003',
+      kitchenServiceTimeoutInMilliseconds: 3000,
       ...accessSettings,
       host: '0.0.0.0',
       port: 8006,
@@ -56,6 +63,14 @@ describe('readRestaurantBffConfiguration', () => {
     {
       problem: 'a restaurant service url of another kind',
       variables: { ...requiredVariables, RESTAURANT_SERVICE_URL: 'grpc://restaurant:4005' },
+    },
+    {
+      problem: 'a missing kitchen service url',
+      variables: { ...requiredVariables, KITCHEN_SERVICE_URL: undefined },
+    },
+    {
+      problem: 'a zero kitchen service timeout',
+      variables: { ...requiredVariables, KITCHEN_SERVICE_TIMEOUT_IN_MILLISECONDS: '0' },
     },
     {
       problem: 'a token exchange url that is not an http url',
