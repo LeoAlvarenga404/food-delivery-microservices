@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const runFile = promisify(execFile);
+const outputLimitInBytes = 64 * 1024 * 1024;
 const composeFilePath = fileURLToPath(new URL('../../../infra/compose.yaml', import.meta.url));
 const composeProjectName = process.env['COMPOSE_PROJECT_NAME'] ?? 'food-delivery';
 const profileArguments = ['core', 'auth', 'search', 'apps'].flatMap((profile) => [
@@ -18,7 +19,7 @@ async function runCompose(
   const { stdout } = await runFile(
     'docker',
     ['compose', '--file', composeFilePath, ...profileArguments, ...commandArguments],
-    { timeout: timeoutInMilliseconds },
+    { timeout: timeoutInMilliseconds, maxBuffer: outputLimitInBytes },
   );
   return stdout;
 }
